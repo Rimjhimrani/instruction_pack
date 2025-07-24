@@ -95,10 +95,10 @@ class EnhancedTemplateMapper:
                 'section_keywords': ['secondary packaging instruction', 'secondary', 'outer', 'external'],
                 'field_mappings': {
                     'packaging type': 'Secondary Packaging Type',
-                    'l-mm': 'Secondary L-mm',
-                    'w-mm': 'Secondary W-mm',
-                    'h-mm': 'Secondary H-mm', 
-                    'qty/pack': 'Secondary Qty/Pack'
+                    'L-mm': 'Secondary L-mm',
+                    'W-mm': 'Secondary W-mm',
+                    'H-mm': 'Secondary H-mm', 
+                    'Qty/Pack': 'Secondary Qty/Pack'
                 }
             },
             'part_dimensions': {
@@ -553,9 +553,9 @@ def show_enhanced_processor():
         - `Qty/Pack` → `Secondary Qty/Pack`
         
         **Part Dimensions:**
-        - `L-mm` → `Part L`
-        - `W-mm` → `Part W`
-        - `H-mm` → `Part H`
+        - `L` → `Part L`
+        - `W` → `Part W`
+        - `H` → `Part H`
         """)
     
     # Data file upload
