@@ -104,9 +104,9 @@ class EnhancedTemplateMapper:
             'part_dimensions': {
                 'section_keywords': ['part', 'component', 'item'],
                 'field_mappings': {
-                    'l-mm': 'Part L',
-                    'w-mm': 'Part W',
-                    'h-mm': 'Part H'
+                    'L': 'Part L',
+                    'W': 'Part W',
+                    'H': 'Part H'
                 }
             }
         }
