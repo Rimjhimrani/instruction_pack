@@ -713,7 +713,7 @@ def main():
         with col2:
             if st.button("Logout", type="secondary"):
                 st.session_state.authenticated = False
-                st.session_state.u ser_role = None
+                st.session_state.user_role = None
                 st.rerun()
         
         # Sidebar navigation
