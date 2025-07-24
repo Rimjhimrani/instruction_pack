@@ -623,8 +623,8 @@ def show_enhanced_processor():
                             section_groups[section]['unmapped'].append(mapping)
                     
                     # Display results by section
-                    for section, mappings in section_groups.items():
-                        with st.expander(f"📦 {section.replace('_', ' ').title()} Section", expanded=True):
+                    section_name = section.replace('_', ' ').title() if section else 'General'
+                    with st.expander(f"📦 {section_name} Section", expanded=True):
                             col1, col2 = st.columns(2)
                             
                             with col1:
