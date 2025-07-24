@@ -717,7 +717,7 @@ def show_enhanced_processor():
                                     confidence = mapping['similarity'] * 100
                                     st.write(f"• {mapping['template_field']} ← {mapping['data_column']} ({confidence:.1f}%)")
                             with col2:
-                                st.write(f"**❌ Unmapped ({len(group['unmapped']}):**"))
+                                st.write(f"**❌ Unmapped ({len(group['unmapped'])}):**")
                                 for mapping in group['unmapped']:
                                     st.write(f"• {mapping['template_field']} (no match found)")
                     
