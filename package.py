@@ -623,19 +623,18 @@ def show_enhanced_processor():
                             section_groups[section]['unmapped'].append(mapping)
                     
                     # Display results by section
-                    section_name = section.replace('_', ' ').title() if section else 'General'
-                    with st.expander(f"📦 {section_name} Section", expanded=True):
+                    for section, group in section_groups.items():
+                        section_name = section.replace('_', ' ').title() if section else 'General'
+                        with st.expander(f"📦 {section_name} Section", expanded=True):
                             col1, col2 = st.columns(2)
-                            
                             with col1:
-                                st.write(f"**✅ Mapped ({len(mappings['mapped'])}):**")
-                                for mapping in mappings['mapped']:
+                                st.write(f"**✅ Mapped ({len(group['mapped'])}):**")
+                                for mapping in group['mapped']:
                                     confidence = mapping['similarity'] * 100
                                     st.write(f"• {mapping['template_field']} ← {mapping['data_column']} ({confidence:.1f}%)")
-                            
                             with col2:
-                                st.write(f"**❌ Unmapped ({len(mappings['unmapped'])}):**")
-                                for mapping in mappings['unmapped']:
+                                st.write(f"**❌ Unmapped ({len(group['unmapped'])}):**")
+                                for mapping in group['unmapped']:
                                     st.write(f"• {mapping['template_field']}")
                     
                     # Download section
