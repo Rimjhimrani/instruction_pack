@@ -800,16 +800,7 @@ def show_main_app():
         data_file = st.file_uploader(
             "Upload Data File",
             type=['xlsx', 'xls', 'csv'],
-            help="Upload the data file to map to template"
-        )
-        
-        # Images upload
-        st.subheader("📷 Images")
-        uploaded_images = st.file_uploader(
-            "Upload Images",
-            type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
-            accept_multiple_files=True,
-            help="Upload images to be inserted into template"
+            help="Upload the data file to map to template (images will be extracted from Excel files)"
         )
         
         # Settings
@@ -828,27 +819,23 @@ def show_main_app():
     # Main content area
     if template_file and data_file:
         try:
-            # Process uploaded images
-            processed_images = {}
-            if uploaded_images:
-                for img_file in uploaded_images:
-                    try:
-                        # Read image
-                        image = Image.open(img_file)
-                        
-                        # Convert to base64
-                        buffered = io.BytesIO()
-                        image.save(buffered, format="PNG")
-                        img_str = base64.b64encode(buffered.getvalue()).decode()
-                        
-                        processed_images[img_file.name] = {
-                            'data': img_str,
-                            'format': 'PNG',
-                            'size': image.size,
-                            'filename': img_file.name
-                        }
-                    except Exception as e:
-                        st.error(f"Error processing image {img_file.name}: {e}")
+            # Extract images from data file (only if it's Excel)
+            extracted_images = {}
+            if data_file.name.endswith(('.xlsx', '.xls')):
+                # Create temporary file for data file
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
+                    tmp_data.write(data_file.getvalue())
+                    data_path = tmp_data.name
+                
+                st.info("🔍 Extracting images from data file...")
+                with st.spinner("Extracting images from Excel file..."):
+                    extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
+                
+                # Clean up data file copy
+                try:
+                    os.unlink(data_path)
+                except:
+                    pass
             
             # Read data file
             if data_file.name.endswith('.csv'):
@@ -886,22 +873,34 @@ def show_main_app():
                 
                 # Show image areas
                 if image_areas:
-                    st.info(f"Found {len(image_areas)} image upload areas")
+                    st.info(f"Found {len(image_areas)} image upload areas in template")
                     with st.expander("Image Upload Areas", expanded=False):
                         image_df = pd.DataFrame(image_areas)
                         st.dataframe(image_df, use_container_width=True)
                 
-                # Show uploaded images
-                if processed_images:
-                    st.info(f"Uploaded {len(processed_images)} images")
-                    with st.expander("Uploaded Images", expanded=False):
-                        cols = st.columns(min(3, len(processed_images)))
-                        for idx, (img_name, img_data) in enumerate(processed_images.items()):
-                            with cols[idx % 3]:
-                                st.write(f"**{img_name}**")
-                                # Display image thumbnail
-                                img_bytes = base64.b64decode(img_data['data'])
-                                st.image(img_bytes, width=150)
+                # Show extracted images from data file
+                if extracted_images:
+                    total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
+                    st.success(f"🖼️ Extracted {total_images} images from data file")
+                    
+                    with st.expander("Extracted Images from Data File", expanded=True):
+                        for sheet_name, sheet_images in extracted_images.items():
+                            if sheet_images:
+                                st.write(f"**Sheet: {sheet_name}**")
+                                cols = st.columns(min(3, len(sheet_images)))
+                                
+                                for idx, (position, img_data) in enumerate(sheet_images.items()):
+                                    with cols[idx % 3]:
+                                        st.write(f"Position: {position}")
+                                        # Display image thumbnail
+                                        img_bytes = base64.b64decode(img_data['data'])
+                                        st.image(img_bytes, width=150)
+                                        st.write(f"Size: {img_data['size']}")
+                else:
+                    if data_file.name.endswith(('.xlsx', '.xls')):
+                        st.info("No images found in the data file")
+                    else:
+                        st.info("CSV files don't contain images. Use Excel files to include images.")
                 
                 # Data mapping
                 st.subheader("🔗 Field Mapping")
@@ -930,20 +929,32 @@ def show_main_app():
                     mapped_count = sum(1 for m in mapping_results.values() if m['is_mappable'])
                     total_count = len(mapping_results)
                     
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Total Fields", total_count)
                     with col2:
                         st.metric("Mapped Fields", mapped_count)
                     with col3:
                         st.metric("Mapping Rate", f"{(mapped_count/total_count*100):.1f}%")
+                    with col4:
+                        images_count = sum(len(sheet_images) for sheet_images in extracted_images.values()) if extracted_images else 0
+                        st.metric("Images Found", images_count)
                     
                     # Fill template
                     st.subheader("📝 Fill Template")
                     
                     if st.button("Generate Filled Template", type="primary", use_container_width=True):
-                        with st.spinner("Filling template with data and images..."):
+                        with st.spinner("Filling template with data and extracted images..."):
                             try:
+                                # Convert extracted images to the format expected by fill_template_with_data_and_images
+                                processed_images = {}
+                                if extracted_images:
+                                    for sheet_name, sheet_images in extracted_images.items():
+                                        for position, img_data in sheet_images.items():
+                                            # Create a unique key for each image
+                                            image_key = f"{sheet_name}_{position}"
+                                            processed_images[image_key] = img_data
+                                
                                 workbook, filled_count, images_added = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
                                     template_path, mapping_results, data_df, processed_images
                                 )
@@ -958,7 +969,9 @@ def show_main_app():
                                     st.success(f"Template filled successfully!")
                                     st.info(f"📊 Filled {filled_count} data fields")
                                     if images_added > 0:
-                                        st.info(f"🖼️ Added {images_added} images")
+                                        st.info(f"🖼️ Added {images_added} images from data file")
+                                    elif processed_images:
+                                        st.warning("Images were found but could not be placed in template areas")
                                     
                                     # Download button
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -978,6 +991,7 @@ def show_main_app():
                                     
                             except Exception as e:
                                 st.error(f"Error filling template: {e}")
+                                st.exception(e)
                 
                 else:
                     st.warning("No mapping results generated")
@@ -1014,11 +1028,11 @@ def show_main_app():
             
         with col2:
             st.markdown("""
-            **Image Support:**
-            - 🖼️ Multiple image upload
-            - 📍 Auto image placement
-            - 🎨 Format conversion
-            - 📦 Packaging image areas
+            **Image Processing:**
+            - 🖼️ Auto image extraction from Excel data files
+            - 📍 Smart image placement in templates
+            - 🎨 Format conversion and optimization
+            - 📦 Packaging image area detection
             """)
         
         st.markdown("""
@@ -1026,8 +1040,14 @@ def show_main_app():
         - **Primary Packaging**: Internal packaging dimensions and specifications
         - **Secondary Packaging**: Outer packaging details
         - **Part Information**: Component specifications and measurements
+        
+        ### 🖼️ Image Processing
+        - Images are automatically extracted from Excel data files
+        - Supports multiple image formats (PNG, JPG, GIF, BMP)
+        - Images are intelligently placed in designated template areas
+        - No manual image upload required - everything is automated!
         """)
-
+        
 # Main application logic
 def main():
     if not st.session_state.authenticated:
