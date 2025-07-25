@@ -607,25 +607,22 @@ class EnhancedTemplateMapperWithImages:
         """Add uploaded images to template in designated areas"""
         try:
             added_images = 0
-            
+            temp_image_paths = []  # Store paths to delete later
             for area in image_areas:
                 area_type = area['type']
-                
                 # Find matching uploaded image
                 matching_image = None
                 for img_name, img_data in uploaded_images.items():
-                    # Match by area type or filename
-                    if (area_type in img_name.lower() or 
-                        'current' in img_name.lower() and area_type == 'current_packaging' or
-                        'primary' in img_name.lower() and area_type == 'primary_packaging' or
-                        'secondary' in img_name.lower() and area_type == 'secondary_packaging'):
+                    if (area_type in img_name.lower() or
+                        ('current' in img_name.lower() and area_type == 'current_packaging') or
+                        ('primary' in img_name.lower() and area_type == 'primary_packaging') or
+                        ('secondary' in img_name.lower() and area_type == 'secondary_packaging')):
                         matching_image = img_data
                         break
-                
                 # If no specific match, use first available image
                 if not matching_image and uploaded_images:
                     matching_image = list(uploaded_images.values())[0]
-                
+
                 if matching_image:
                     try:
                         # Create temporary image file
@@ -633,31 +630,23 @@ class EnhancedTemplateMapperWithImages:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
-                        
-                        # Create openpyxl Image object
                         img = OpenpyxlImage(tmp_img_path)
-                        
-                        # Resize image to fit cell area (approximate)
                         img.width = 100
                         img.height = 100
-                        
-                        # Add image to worksheet
+
                         cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
                         worksheet.add_image(img, cell_coord)
-                        
-                        # Clean up temporary file
-                        os.unlink(tmp_img_path)
+
+                        # Store for later cleanup
+                        temp_image_paths.append(tmp_img_path)
                         added_images += 1
-                        
                     except Exception as e:
                         st.warning(f"Could not add image to {area['position']}: {e}")
                         continue
-            
-            return added_images
-            
+                return added_images, temp_image_paths
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
-            return 0
+            return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
         """Fill template with mapped data and images"""
@@ -667,6 +656,7 @@ class EnhancedTemplateMapperWithImages:
             
             filled_count = 0
             images_added = 0
+            temp_image_paths = []
             
             # Fill data fields
             for coord, mapping in mapping_results.items():
@@ -698,13 +688,13 @@ class EnhancedTemplateMapperWithImages:
             if uploaded_images:
                 # First, identify image upload areas
                 _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added = self.add_images_to_template(worksheet, uploaded_images, image_areas)
-            
-            return workbook, filled_count, images_added
+                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
+                
+            return workbook, filled_count, images_added, temp_image_paths
             
         except Exception as e:
             st.error(f"Error filling template: {e}")
-            return None, 0, 0
+            return None, 0, 0, []
 
 # Initialize session state
 if 'authenticated' not in st.session_state:
