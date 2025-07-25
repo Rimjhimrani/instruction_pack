@@ -665,7 +665,6 @@ class EnhancedTemplateMapper:
             st.error(f"Error filling template: {e}")
             return None, 0
 
-# Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_role' not in st.session_state:
