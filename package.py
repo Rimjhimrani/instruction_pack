@@ -945,7 +945,7 @@ def show_main_app():
                                             image_key = f"{sheet_name}_{position}"
                                             processed_images[image_key] = img_data
                                 
-                                workbook, filled_count, images_added = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
+                                workbook, filled_count, images_added, temp_image_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
                                     template_path, mapping_results, data_df, processed_images
                                 )
                                 
@@ -953,6 +953,11 @@ def show_main_app():
                                     # Save filled template
                                     output_buffer = io.BytesIO()
                                     workbook.save(output_buffer)
+                                    for path in temp_image_paths:
+                                        try:
+                                            os.unlink(path)
+                                        except Exception as e:
+                                            st.warning(f"Failed to delete temp file {path}: {e}")
                                     output_buffer.seek(0)
                                     
                                     # Success message
