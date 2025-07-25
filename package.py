@@ -834,21 +834,21 @@ def show_data_processing():
     if not st.session_state.templates:
         st.warning("Please upload templates first in Template Management")
         return
-    
+
     # Template selection
     selected_template = st.selectbox(
         "Select Template",
         options=list(st.session_state.templates.keys()),
         help="Choose the template to map data to"
     )
-    
+
     # Data file upload
     uploaded_data = st.file_uploader(
         "Upload Data File",
         type=['xlsx', 'xls', 'csv'],
         help="Upload your data file with values to map to the template"
     )
-    
+
     if uploaded_data and selected_template:
         try:
             # Load data
@@ -856,38 +856,37 @@ def show_data_processing():
                 data_df = pd.read_csv(uploaded_data)
             else:
                 data_df = pd.read_excel(uploaded_data)
-            
+
             st.success(f"Data loaded: {len(data_df)} rows, {len(data_df.columns)} columns")
-            
+
             # Show data preview
             with st.expander("📊 Data Preview"):
                 st.dataframe(data_df.head())
-            
+
             # Process mapping
             if st.button("🔍 Analyze Template Fields"):
                 with st.spinner("Analyzing template fields..."):
-                    # Create temporary template file
                     template_info = st.session_state.templates[selected_template]
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                         tmp_file.write(template_info['file_data'])
                         template_path = tmp_file.name
-                    
+
                     try:
-                        # Find template fields
                         mapper = st.session_state.enhanced_mapper
                         template_fields = mapper.find_template_fields_with_context(template_path)
-                        
+                        mapping_results = mapper.map_data_with_section_context(template_fields, data_df)
+
+                        st.session_state.template_path = template_path
+                        st.session_state.mapping_results = mapping_results
+                        st.session_state.data_df = data_df  # Save data for later use
+
                         st.success(f"Found {len(template_fields)} template fields")
-                        
-                        # Perform mapping
+
+                        st.subheader("🎯 Field Mapping Results")
                         st.write("✅ Mapped fields:")
                         for k, m in mapping_results.items():
                             st.write(f"{k}: {m['template_field']} → {m['data_column']} (Mapped: {m['is_mappable']})")
-                        
-                        # Display mapping results
-                        st.subheader("🎯 Field Mapping Results")
-                        
-                        # Create mapping summary
+
                         mapping_summary = []
                         for coord, mapping in mapping_results.items():
                             mapping_summary.append({
@@ -898,15 +897,14 @@ def show_data_processing():
                                 'Position': coord,
                                 'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ Not Mapped'
                             })
-                        
+
                         mapping_df = pd.DataFrame(mapping_summary)
                         st.dataframe(mapping_df, use_container_width=True)
-                        
-                        # Statistics
+
                         mapped_count = sum(1 for m in mapping_results.values() if m['is_mappable'])
                         total_count = len(mapping_results)
                         mapping_rate = (mapped_count / total_count * 100) if total_count > 0 else 0
-                        
+
                         col1, col2, col3 = st.columns(3)
                         with col1:
                             st.metric("Total Fields", total_count)
@@ -914,45 +912,52 @@ def show_data_processing():
                             st.metric("Mapped Fields", mapped_count)
                         with col3:
                             st.metric("Mapping Rate", f"{mapping_rate:.1f}%")
-                        
-                        # Generate filled template
-                        if st.button("📝 Generate Filled Template"):
-                            with st.spinner("Generating filled template..."):
-                                try:
-                                    filled_workbook, filled_count = mapper.fill_template_with_data(
-                                        template_path, mapping_results, data_df
-                                    )
-                                    st.write("DEBUG: Filled workbook object:", filled_workbook)
-                                    st.write("DEBUG: Number of fields filled:", filled_count)
-                                    
-                                    if filled_workbook:
-                                        # Save filled template
-                                        output_buffer = io.BytesIO()
-                                        filled_workbook.save(output_buffer)
-                                        output_buffer.seek(0)
-                                        
-                                        st.success(f"Template filled! {filled_count} fields populated.")
-                                        
-                                        # Download button
-                                        st.download_button(
-                                            label="📥 Download Filled Template",
-                                            data=output_buffer.getvalue(),
-                                            file_name=f"filled_{selected_template}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                        )
-                                    else:
-                                        st.error("Failed to generate filled template")
-                                        
-                                except Exception as e:
-                                    st.error(f"Error generating filled template: {e}")
-                    
-                    finally:
-                        # Clean up temporary file
-                        os.unlink(template_path)
-                        
+
+                    except Exception as e:
+                        st.error(f"Error analyzing template: {e}")
+
+            # Generate filled template
+            if st.button("📝 Generate Filled Template"):
+                with st.spinner("Generating filled template..."):
+                    try:
+                        if 'mapping_results' not in st.session_state or 'template_path' not in st.session_state:
+                            st.error("Please analyze the template first.")
+                            return
+
+                        mapper = st.session_state.enhanced_mapper
+                        mapping_results = st.session_state.mapping_results
+                        template_path = st.session_state.template_path
+                        data_df = st.session_state.data_df
+
+                        filled_workbook, filled_count = mapper.fill_template_with_data(
+                            template_path, mapping_results, data_df
+                        )
+
+                        st.write("DEBUG: Filled workbook object:", filled_workbook)
+                        st.write("DEBUG: Number of fields filled:", filled_count)
+
+                        if filled_workbook:
+                            output_buffer = io.BytesIO()
+                            filled_workbook.save(output_buffer)
+                            output_buffer.seek(0)
+
+                            st.success(f"Template filled! {filled_count} fields populated.")
+                            st.download_button(
+                                label="📥 Download Filled Template",
+                                data=output_buffer.getvalue(),
+                                file_name=f"filled_{selected_template}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        else:
+                            st.error("Failed to generate filled template")
+
+                    except Exception as e:
+                        st.error(f"Error generating filled template: {e}")
+
         except Exception as e:
             st.error(f"Error processing data: {e}")
 
+        
 def show_analytics():
     """Analytics and reporting interface"""
     st.header("📊 Analytics & Reports")
