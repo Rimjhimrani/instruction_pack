@@ -880,7 +880,9 @@ def show_data_processing():
                         st.success(f"Found {len(template_fields)} template fields")
                         
                         # Perform mapping
-                        mapping_results = mapper.map_data_with_section_context(template_fields, data_df)
+                        st.write("✅ Mapped fields:")
+                        for k, m in mapping_results.items():
+                            st.write(f"{k}: {m['template_field']} → {m['data_column']} (Mapped: {m['is_mappable']})")
                         
                         # Display mapping results
                         st.subheader("🎯 Field Mapping Results")
