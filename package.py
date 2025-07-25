@@ -608,36 +608,51 @@ class EnhancedTemplateMapperWithImages:
         try:
             added_images = 0
             temp_image_paths = []  # Store paths to delete later
+            used_images = set()
+            
             for area in image_areas:
                 area_type = area['type']
                 # Find matching uploaded image
                 matching_image = None
-                for img_name, img_data in uploaded_images.items():
-                    if (area_type in img_name.lower() or
-                        ('current' in img_name.lower() and area_type == 'current_packaging') or
-                        ('primary' in img_name.lower() and area_type == 'primary_packaging') or
-                        ('secondary' in img_name.lower() and area_type == 'secondary_packaging')):
+                # Try to find an unused image
+                for label, img_data in uploaded_images.items():
+                    if label in used_images:
+                        continue
+                    label_lower = label.lower()
+                    if (
+                        area_type in label_lower
+                        or area_type.replace('_', ' ') in label_lower
+                        or 'primary' in label_lower and area_type == 'primary_packaging'
+                        or 'secondary' in label_lower and area_type == 'secondary_packaging'
+                        or 'current' in label_lower and area_type == 'current_packaging'
+                        or label_lower in label_text
+                        or label_text in label_lower
+                    ):
                         matching_image = img_data
+                        used_images.add(label)  # 🚀 Mark as used
                         break
-                # If no specific match, use first available image
-                if not matching_image and uploaded_images:
-                    matching_image = list(uploaded_images.values())[0]
-
+                # Fallback if none matched and any unused left
+                if not matching_image:
+                    for label, img_data in uploaded_images.items():
+                        if label not in used_images:
+                            matching_image = img_data
+                            used_images.add(label)
+                            break
                 if matching_image:
                     try:
-                        # Create temporary image file
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
                         img = OpenpyxlImage(tmp_img_path)
-                        img.width = 100
-                        img.height = 100
+
+                        # ✅ Resize slightly larger
+                        img.width = 250
+                        img.height = 150
 
                         cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
                         worksheet.add_image(img, cell_coord)
 
-                        # Store for later cleanup
                         temp_image_paths.append(tmp_img_path)
                         added_images += 1
                     except Exception as e:
