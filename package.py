@@ -607,14 +607,14 @@ class EnhancedTemplateMapperWithImages:
         """Add uploaded images to template in designated areas"""
         try:
             added_images = 0
-            temp_image_paths = []  # Store paths to delete later
+            temp_image_paths = []
             used_images = set()
-            
             for area in image_areas:
                 area_type = area['type']
-                # Find matching uploaded image
+                label_text = area.get('text', '').lower()  # ✅ Define label_text here
+
                 matching_image = None
-                # Try to find an unused image
+
                 for label, img_data in uploaded_images.items():
                     if label in used_images:
                         continue
@@ -625,13 +625,13 @@ class EnhancedTemplateMapperWithImages:
                         or 'primary' in label_lower and area_type == 'primary_packaging'
                         or 'secondary' in label_lower and area_type == 'secondary_packaging'
                         or 'current' in label_lower and area_type == 'current_packaging'
-                        or label_lower in label_text
+                        or label_lower in label_tex
                         or label_text in label_lower
                     ):
                         matching_image = img_data
-                        used_images.add(label)  # 🚀 Mark as used
+                        used_images.add(label)
                         break
-                # Fallback if none matched and any unused left
+                        
                 if not matching_image:
                     for label, img_data in uploaded_images.items():
                         if label not in used_images:
@@ -645,8 +645,6 @@ class EnhancedTemplateMapperWithImages:
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
                         img = OpenpyxlImage(tmp_img_path)
-
-                        # ✅ Resize slightly larger
                         img.width = 250
                         img.height = 150
 
@@ -658,7 +656,7 @@ class EnhancedTemplateMapperWithImages:
                     except Exception as e:
                         st.warning(f"Could not add image to {area['position']}: {e}")
                         continue
-                return added_images, temp_image_paths
+            return added_images, temp_image_paths
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             return 0, []
