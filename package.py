@@ -694,7 +694,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error filling template: {e}")
             return None, 0, 0
 
-# Initialize session state
+# Initialize session state - THIS IS THE KEY FIX
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 if 'user_role' not in st.session_state:
@@ -702,6 +702,7 @@ if 'user_role' not in st.session_state:
 if 'templates' not in st.session_state:
     st.session_state.templates = {}
 if 'enhanced_mapper' not in st.session_state:
+    # Fixed: Use the correct class name
     st.session_state.enhanced_mapper = EnhancedTemplateMapperWithImages()
 
 # User management functions
@@ -757,233 +758,161 @@ def show_login():
         st.info("**Demo Credentials:**\n- Admin: admin / admin123\n- User: user1 / user123")
 
 def show_enhanced_processor():
-    st.header("🚀 Enhanced AI Data Processor with Image Support")
-    st.info("Upload your packaging data with images and template. AI will intelligently map fields and insert images!")
+    st.header("🚀 Enhanced Template Processor with Images")
     
-    # Show enhanced features
-    with st.expander("🎯 New Image Features", expanded=True):
-        st.markdown("""
-        **🖼️ Automatic Image Processing:**
-        - Extracts images from Excel files automatically
-        - Detects image placeholder text patterns
-        - Supports up to 4 images per template
-        - Maintains aspect ratios and optimal sizing
-        
-        **📋 Supported Image Placeholders:**
-        - "Upload Image", "Insert Image", "Add Image"
-        - "Image Here", "Photo Here", "Picture Here"
-        - "Primary Packaging", "Secondary Packaging"
-        - "Current Packaging", "Reference Image"
-        """)
-    
+    # File upload section
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📊 Upload Data File")
-        data_file = st.file_uploader(
-            "Choose Excel file with data and images",
-            type=['xlsx', 'xls'],
-            help="Excel file containing your packaging data. Images will be automatically extracted."
-        )
-        
-        if data_file:
-            st.success(f"✅ Data file uploaded: {data_file.name}")
-            
-            # Show file preview
-            try:
-                data_df = pd.read_excel(data_file)
-                st.write("**Data Preview:**")
-                st.dataframe(data_df.head(3), use_container_width=True)
-                st.info(f"📈 Found {len(data_df)} rows and {len(data_df.columns)} columns")
-                
-                # Save file temporarily for image extraction
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                    tmp_file.write(data_file.getvalue())
-                    temp_data_path = tmp_file.name
-                
-                # Extract images
-                with st.spinner("🔍 Extracting images from data file..."):
-                    extracted_images = st.session_state.enhanced_mapper.extract_images_from_excel(temp_data_path)
-                
-                if extracted_images:
-                    st.success(f"🖼️ Found {len(extracted_images)} images in data file")
-                    
-                    # Show image preview
-                    with st.expander("Preview Extracted Images", expanded=False):
-                        cols = st.columns(min(len(extracted_images), 4))
-                        for i, img_data in enumerate(extracted_images[:4]):
-                            with cols[i % 4]:
-                                try:
-                                    image = PILImage.open(io.BytesIO(img_data['data']))
-                                    st.image(image, caption=f"Image {i+1}: {img_data['filename']}", use_column_width=True)
-                                    st.caption(f"Size: {img_data['size']}, Format: {img_data['format']}")
-                                except Exception as e:
-                                    st.error(f"Error displaying image {i+1}: {e}")
-                else:
-                    st.info("ℹ️ No images found in data file")
-                    extracted_images = None
-                
-                # Clean up temp file
-                try:
-                    os.unlink(temp_data_path)
-                except:
-                    pass
-                    
-            except Exception as e:
-                st.error(f"Error reading data file: {e}")
-                data_df = None
-                extracted_images = None
-        else:
-            data_df = None
-            extracted_images = None
-    
-    with col2:
-        st.subheader("📄 Upload Template File")
+        st.subheader("📄 Upload Template")
         template_file = st.file_uploader(
-            "Choose template Excel file",
-            type=['xlsx', 'xls'],
-            help="Template file with fields to be filled and image placeholders"
+            "Choose Excel template file",
+            type=['xlsx', 'xlsm'],
+            key="template_upload"
         )
         
         if template_file:
             st.success(f"✅ Template uploaded: {template_file.name}")
             
-            # Show template preview
+            # Save template temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                tmp_file.write(template_file.getvalue())
+                template_path = tmp_file.name
+            
+            # Extract images from template
             try:
-                template_df = pd.read_excel(template_file, header=None)
-                st.write("**Template Preview:**")
-                st.dataframe(template_df.head(10), use_container_width=True)
-                
-                # Analyze template fields
-                with st.spinner("🔍 Analyzing template fields..."):
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                        tmp_file.write(template_file.getvalue())
-                        temp_template_path = tmp_file.name
+                template_images = st.session_state.enhanced_mapper.extract_images_from_excel(template_path)
+                if template_images:
+                    st.info(f"🖼️ Found {len(template_images)} images in template")
                     
-                    template_fields = st.session_state.enhanced_mapper.find_template_fields_with_context(temp_template_path)
-                    
-                    # Find image placeholders
-                    workbook = openpyxl.load_workbook(temp_template_path)
-                    worksheet = workbook.active
-                    image_placeholders = st.session_state.enhanced_mapper.find_image_placeholders(worksheet)
-                    workbook.close()
-                    
-                    # Clean up temp file
-                    try:
-                        os.unlink(temp_template_path)
-                    except:
-                        pass
-                
-                st.info(f"📋 Found {len(template_fields)} mappable fields")
-                if image_placeholders:
-                    st.info(f"🖼️ Found {len(image_placeholders)} image placeholders")
-                
-                # Show field analysis
-                with st.expander("Template Field Analysis", expanded=False):
-                    for coord, field in list(template_fields.items())[:10]:
-                        section = field.get('section_context', 'Unknown')
-                        st.write(f"**{coord}**: {field['value']} (Section: {section})")
-                        
+                    # Show image preview
+                    with st.expander("Preview Template Images"):
+                        for i, img_info in enumerate(template_images[:4]):  # Show first 4
+                            col_img1, col_img2 = st.columns([1, 3])
+                            with col_img1:
+                                st.write(f"**Image {i+1}:**")
+                                st.write(f"Size: {img_info['size']}")
+                                st.write(f"Format: {img_info['format']}")
+                            with col_img2:
+                                try:
+                                    pil_image = PILImage.open(io.BytesIO(img_info['data']))
+                                    st.image(pil_image, width=200, caption=img_info['filename'])
+                                except:
+                                    st.write("Could not display image")
+                else:
+                    st.info("No images found in template")
             except Exception as e:
-                st.error(f"Error reading template: {e}")
-                template_fields = None
-                image_placeholders = None
-        else:
-            template_fields = None
-            image_placeholders = None
+                st.warning(f"Could not extract images: {e}")
+                template_images = []
+    
+    with col2:
+        st.subheader("📊 Upload Data")
+        data_file = st.file_uploader(
+            "Choose Excel data file",
+            type=['xlsx', 'xlsm', 'csv'],
+            key="data_upload"
+        )
+        
+        if data_file:
+            st.success(f"✅ Data uploaded: {data_file.name}")
+            
+            # Load data
+            try:
+                if data_file.name.endswith('.csv'):
+                    data_df = pd.read_csv(data_file)
+                else:
+                    data_df = pd.read_excel(data_file)
+                
+                st.write(f"**Data Shape:** {data_df.shape}")
+                st.write("**Columns:**", list(data_df.columns))
+                
+                # Show data preview
+                with st.expander("Preview Data"):
+                    st.dataframe(data_df.head())
+                    
+            except Exception as e:
+                st.error(f"Error loading data: {e}")
+                data_df = None
     
     # Processing section
-    if data_file and template_file and data_df is not None:
-        st.divider()
+    if template_file and data_file and 'data_df' in locals() and data_df is not None:
+        st.subheader("⚙️ Processing Options")
         
-        # Configuration options
-        col1, col2, col3 = st.columns(3)
+        col_opt1, col_opt2 = st.columns(2)
         
-        with col1:
+        with col_opt1:
             similarity_threshold = st.slider(
-                "🎯 Similarity Threshold",
+                "Similarity Threshold",
                 min_value=0.1,
                 max_value=1.0,
                 value=0.3,
                 step=0.1,
-                help="Lower values allow more flexible matching"
+                help="Lower values = more flexible matching"
             )
             st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
         
-        with col2:
-            include_images = st.checkbox(
-                "🖼️ Include Images",
+        with col_opt2:
+            process_images = st.checkbox(
+                "Include Image Processing",
                 value=True,
-                help="Insert extracted images into template"
-            )
-        
-        with col3:
-            max_images = st.number_input(
-                "📊 Max Images",
-                min_value=1,
-                max_value=10,
-                value=4,
-                help="Maximum number of images to insert"
+                help="Extract and insert images into template"
             )
         
         # Process button
-        if st.button("🚀 Process Template with Images", type="primary", use_container_width=True):
-            with st.spinner("🤖 AI is processing your template with images..."):
+        if st.button("🚀 Process Template", type="primary", use_container_width=True):
+            with st.spinner("Processing template..."):
                 try:
-                    # Save files temporarily
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
-                        tmp_data.write(data_file.getvalue())
-                        temp_data_path = tmp_data.name
+                    # Find template fields
+                    template_fields = st.session_state.enhanced_mapper.find_template_fields_with_context(template_path)
                     
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
-                        tmp_template.write(template_file.getvalue())
-                        temp_template_path = tmp_template.name
+                    if not template_fields:
+                        st.error("No mappable fields found in template")
+                        return
                     
-                    # Get template fields and mapping
-                    template_fields = st.session_state.enhanced_mapper.find_template_fields_with_context(temp_template_path)
-                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(template_fields, data_df)
+                    st.success(f"Found {len(template_fields)} template fields")
                     
-                    # Prepare images for insertion
-                    images_to_insert = None
-                    if include_images and extracted_images:
-                        images_to_insert = extracted_images[:max_images]
+                    # Map data to template
+                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(
+                        template_fields, data_df
+                    )
+                    
+                    # Show mapping results
+                    st.subheader("📋 Mapping Results")
+                    
+                    mapped_count = sum(1 for m in mapping_results.values() if m['is_mappable'])
+                    st.info(f"Successfully mapped {mapped_count} out of {len(mapping_results)} fields")
+                    
+                    # Display mapping table
+                    mapping_display = []
+                    for coord, mapping in mapping_results.items():
+                        mapping_display.append({
+                            'Cell': coord,
+                            'Template Field': mapping['template_field'],
+                            'Data Column': mapping['data_column'] or 'No match',
+                            'Section': mapping['section_context'] or 'General',
+                            'Similarity': f"{mapping['similarity']:.2%}",
+                            'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ Not mapped'
+                        })
+                    
+                    mapping_df = pd.DataFrame(mapping_display)
+                    st.dataframe(mapping_df, use_container_width=True)
                     
                     # Fill template
+                    images_to_use = template_images if process_images else None
+                    
                     filled_workbook, filled_count, images_inserted = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                        temp_template_path, mapping_results, data_df, images_to_insert
+                        template_path, mapping_results, data_df, images_to_use
                     )
                     
                     if filled_workbook:
+                        st.success(f"✅ Filled {filled_count} fields")
+                        if process_images and images_inserted > 0:
+                            st.success(f"✅ Inserted {images_inserted} images")
+                        
                         # Save filled template
                         output_buffer = io.BytesIO()
                         filled_workbook.save(output_buffer)
                         output_buffer.seek(0)
-                        filled_workbook.close()
-                        
-                        # Show results
-                        st.success(f"✅ Template processed successfully!")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("📊 Fields Filled", filled_count)
-                        with col2:
-                            st.metric("🖼️ Images Inserted", images_inserted)
-                        with col3:
-                            st.metric("🎯 Success Rate", f"{(filled_count/len(template_fields)*100):.1f}%")
-                        
-                        # Show mapping results
-                        with st.expander("📋 Field Mapping Results", expanded=True):
-                            mapping_df = []
-                            for coord, mapping in mapping_results.items():
-                                mapping_df.append({
-                                    'Template Field': mapping['template_field'],
-                                    'Data Column': mapping['data_column'] or 'No Match',
-                                    'Section': mapping.get('section_context', 'Unknown'),
-                                    'Similarity': f"{mapping['similarity']:.2f}",
-                                    'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ Not Mapped'
-                                })
-                            
-                            st.dataframe(pd.DataFrame(mapping_df), use_container_width=True)
                         
                         # Download button
                         st.download_button(
@@ -993,167 +922,106 @@ def show_enhanced_processor():
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True
                         )
+                        
+                        # Cleanup
+                        filled_workbook.close()
                     
-                    # Clean up temp files
+                except Exception as e:
+                    st.error(f"Processing failed: {e}")
+                    import traceback
+                    st.error(traceback.format_exc())
+                
+                finally:
+                    # Cleanup temporary files
                     try:
-                        os.unlink(temp_data_path)
-                        os.unlink(temp_template_path)
+                        if 'template_path' in locals():
+                            os.unlink(template_path)
                     except:
                         pass
-                        
-                except Exception as e:
-                    st.error(f"❌ Error processing template: {e}")
-                    st.exception(e)
 
-def show_template_manager():
-    st.header("📚 Template Manager")
+def show_mapping_rules():
+    st.header("📋 Mapping Rules & Configuration")
     
-    # Only show for admin users
-    if st.session_state.user_role != 'admin':
-        st.warning("⚠️ Template management is only available for administrators")
-        return
+    st.subheader("📦 Section-Based Mapping Rules")
     
-    st.info("Manage your packaging templates and view usage statistics")
-    
-    # Template upload section
-    with st.expander("➕ Add New Template", expanded=False):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            template_name = st.text_input("Template Name")
-            template_category = st.selectbox(
-                "Category",
-                ["Primary Packaging", "Secondary Packaging", "Combined", "Custom"]
-            )
-        
-        with col2:
-            template_description = st.text_area("Description")
-            template_file = st.file_uploader("Upload Template", type=['xlsx', 'xls'])
-        
-        if st.button("💾 Save Template") and template_name and template_file:
-            template_id = hashlib.md5(f"{template_name}_{datetime.now()}".encode()).hexdigest()[:8]
+    for section_name, section_info in st.session_state.enhanced_mapper.section_mappings.items():
+        with st.expander(f"{section_name.replace('_', ' ').title()} Section"):
+            st.write("**Section Keywords:**")
+            for keyword in section_info['section_keywords']:
+                st.write(f"- {keyword}")
             
-            st.session_state.templates[template_id] = {
-                'name': template_name,
-                'category': template_category,
-                'description': template_description,
-                'uploaded_by': st.session_state.username,
-                'upload_date': datetime.now().isoformat(),
-                'usage_count': 0,
-                'file_data': template_file.getvalue()
-            }
-            
-            st.success(f"✅ Template '{template_name}' saved successfully!")
+            st.write("**Field Mappings:**")
+            for template_field, data_column in section_info['field_mappings'].items():
+                st.write(f"- `{template_field}` → `{data_column}`")
     
-    # Template list
-    if st.session_state.templates:
-        st.subheader("📋 Available Templates")
-        
-        for template_id, template in st.session_state.templates.items():
-            with st.container():
-                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
-                
-                with col1:
-                    st.write(f"**{template['name']}**")
-                    st.caption(template['description'])
-                
-                with col2:
-                    st.write(f"Category: {template['category']}")
-                    st.caption(f"By: {template['uploaded_by']}")
-                
-                with col3:
-                    st.write(f"Usage: {template['usage_count']} times")
-                    st.caption(f"Added: {template['upload_date'][:10]}")
-                
-                with col4:
-                    if st.button("🗑️", key=f"delete_{template_id}", help="Delete Template"):
-                        del st.session_state.templates[template_id]
-                        st.rerun()
-                
-                st.divider()
-    else:
-        st.info("📭 No templates available. Add your first template above!")
+    st.subheader("🖼️ Image Processing Patterns")
+    st.write("The system automatically detects these image placeholder patterns:")
+    for pattern in st.session_state.enhanced_mapper.image_patterns:
+        st.code(pattern)
 
-def show_analytics():
-    st.header("📊 Analytics Dashboard")
-    
-    if not hasattr(st.session_state, 'processing_history'):
-        st.session_state.processing_history = []
-    
-    if not st.session_state.processing_history:
-        st.info("📈 No processing history available yet. Process some templates to see analytics!")
-        return
-    
-    # Mock analytics data for demonstration
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Processes", len(st.session_state.processing_history))
-    
-    with col2:
-        avg_accuracy = 85.3  # Mock data
-        st.metric("Avg Accuracy", f"{avg_accuracy}%")
-    
-    with col3:
-        total_fields = sum([hist.get('fields_processed', 0) for hist in st.session_state.processing_history])
-        st.metric("Fields Processed", total_fields)
-    
-    with col4:
-        total_images = sum([hist.get('images_inserted', 0) for hist in st.session_state.processing_history])
-        st.metric("Images Inserted", total_images)
-    
-    # Processing timeline
-    st.subheader("📈 Processing Timeline")
-    
-    # Mock chart data
-    chart_data = pd.DataFrame({
-        'Date': pd.date_range('2024-01-01', periods=30, freq='D'),
-        'Processes': np.random.randint(0, 10, 30),
-        'Accuracy': np.random.uniform(75, 95, 30)
-    })
-    
-    st.line_chart(chart_data.set_index('Date'))
-
-# Main application
 def main():
     if not st.session_state.authenticated:
         show_login()
-        return
-    
-    # Sidebar navigation
-    with st.sidebar:
-        st.title("🤖 AI Template Mapper")
-        st.write(f"Welcome, {st.session_state.name}!")
-        st.write(f"Role: {st.session_state.user_role.title()}")
+    else:
+        # Navigation
+        st.sidebar.title(f"Welcome, {st.session_state.name}")
+        st.sidebar.write(f"Role: {st.session_state.user_role}")
         
-        st.divider()
+        page = st.sidebar.selectbox(
+            "Navigate",
+            ["Enhanced Processor", "Mapping Rules", "Help"]
+        )
         
-        menu_options = ["🚀 Enhanced Processor", "📊 Analytics"]
-        if st.session_state.user_role == 'admin':
-            menu_options.insert(1, "📚 Template Manager")
-        
-        selected = st.selectbox("Navigation", menu_options)
-        
-        st.divider()
-        
-        # System info
-        with st.expander("ℹ️ System Info"):
-            st.write(f"**NLP Status**: {'✅ Advanced' if ADVANCED_NLP else '⚠️ Basic'}")
-            st.write(f"**NLTK Ready**: {'✅ Yes' if NLTK_READY else '❌ No'}")
-            st.write(f"**Version**: 2.1.0")
-        
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.sidebar.button("Logout"):
             for key in list(st.session_state.keys()):
-                del st.session_state[key]
+                if key != 'enhanced_mapper':  # Keep the mapper instance
+                    del st.session_state[key]
             st.rerun()
+        
+        # Show selected page
+        if page == "Enhanced Processor":
+            show_enhanced_processor()
+        elif page == "Mapping Rules":
+            show_mapping_rules()
+        elif page == "Help":
+            show_help()
+
+def show_help():
+    st.header("📚 Help & Documentation")
     
-    # Main content
-    if selected == "🚀 Enhanced Processor":
-        show_enhanced_processor()
-    elif selected == "📚 Template Manager":
-        show_template_manager()
-    elif selected == "📊 Analytics":
-        show_analytics()
+    st.subheader("🚀 Getting Started")
+    st.markdown("""
+    1. **Upload Template**: Choose an Excel file (.xlsx/.xlsm) containing your template
+    2. **Upload Data**: Choose an Excel or CSV file containing your data
+    3. **Configure**: Adjust similarity threshold and image processing options
+    4. **Process**: Click "Process Template" to generate filled template
+    5. **Download**: Get your completed template with data and images
+    """)
+    
+    st.subheader("✨ Key Features")
+    st.markdown("""
+    - **Section-Aware Mapping**: Automatically detects packaging sections (Primary, Secondary, Part Information)
+    - **Advanced Text Matching**: Uses multiple similarity algorithms for better field matching
+    - **Image Processing**: Extracts and inserts images from templates
+    - **Smart Field Detection**: Identifies mappable fields automatically
+    - **Flexible Configuration**: Adjustable similarity thresholds
+    """)
+    
+    st.subheader("🔧 Technical Requirements")
+    st.markdown("""
+    - **Template Format**: Excel files (.xlsx, .xlsm)
+    - **Data Format**: Excel (.xlsx, .xlsm) or CSV files
+    - **Image Support**: PNG, JPEG, GIF, BMP formats
+    - **Maximum Images**: Up to 4 images per template
+    """)
+    
+    st.subheader("⚠️ Troubleshooting")
+    st.markdown("""
+    - **No mappable fields found**: Check if template contains recognizable field labels
+    - **Low mapping accuracy**: Try lowering the similarity threshold
+    - **Images not inserting**: Ensure template has image placeholder text
+    - **Processing errors**: Check file formats and data structure
+    """)
 
 if __name__ == "__main__":
     main()
