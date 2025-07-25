@@ -920,6 +920,8 @@ def show_data_processing():
                                     filled_workbook, filled_count = mapper.fill_template_with_data(
                                         template_path, mapping_results, data_df
                                     )
+                                    st.write("DEBUG: Filled workbook object:", filled_workbook)
+                                    st.write("DEBUG: Number of fields filled:", filled_count)
                                     
                                     if filled_workbook:
                                         # Save filled template
