@@ -882,12 +882,18 @@ def show_template_mapping():
             
             # Analyze template
             with st.spinner("🔍 Analyzing template and finding mappable fields..."):
-                # Save template temporarily
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
                     tmp_template.write(template_file.read())
                     template_path = tmp_template.name
-                
-                # Find template fields and image areas
+                # 🔍 DEBUG: List available methods on the object
+                st.write("### Debug: Methods on EnhancedTemplateMapperWithImages")
+                st.code(dir(st.session_state.enhanced_mapper))
+                # 🧪 Check if the method exists
+                if hasattr(st.session_state.enhanced_mapper, 'find_template_fields_with_context_and_images'):
+                    st.success("✅ Method found: find_template_fields_with_context_and_images")
+                else:
+                    st.error("❌ Method MISSING: find_template_fields_with_context_and_images")
+                # Attempt to run only if method exists
                 template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
                 
                 # Perform mapping
