@@ -625,7 +625,7 @@ class EnhancedTemplateMapperWithImages:
                         or 'primary' in label_lower and area_type == 'primary_packaging'
                         or 'secondary' in label_lower and area_type == 'secondary_packaging'
                         or 'current' in label_lower and area_type == 'current_packaging'
-                        or label_lower in label_tex
+                        or label_lower in label_text
                         or label_text in label_lower
                     ):
                         matching_image = img_data
