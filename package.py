@@ -119,13 +119,13 @@ class EnhancedTemplateMapper:
                 'field_mappings': {
                     'packaging type': 'Primary Packaging Type',
                     'primary packaging type': 'Primary Packaging Type',
-                    'lmm': 'Primary L-mm',
+                    'l-mm': 'Primary L-mm',
                     'l mm': 'Primary L-mm',
                     'length': 'Primary L-mm',
-                    'wmm': 'Primary W-mm',
+                    'w-mm': 'Primary W-mm',
                     'w mm': 'Primary W-mm', 
                     'width': 'Primary W-mm',
-                    'hmm': 'Primary H-mm',
+                    'h-mm': 'Primary H-mm',
                     'h mm': 'Primary H-mm',
                     'height': 'Primary H-mm',
                     'qty/pack': 'Primary Qty/Pack',
@@ -143,15 +143,15 @@ class EnhancedTemplateMapper:
                     'packaging type': 'Secondary Packaging Type',
                     'secondary packaging type': 'Secondary Packaging Type',
                     'l-mm': 'Secondary L-mm',
-                    'l- mm': 'Secondary L-mm',
+                    'l mm': 'Secondary L-mm',
                     'length': 'Secondary L-mm',
                     'w-mm': 'Secondary W-mm',
-                    'w- mm': 'Secondary W-mm',
+                    'w mm': 'Secondary W-mm',
                     'width': 'Secondary W-mm',
                     'h-mm': 'Secondary H-mm',
-                    'h- mm': 'Secondary H-mm',
+                    'h mm': 'Secondary H-mm',
                     'height': 'Secondary H-mm',
-                    'qty / pack': 'Secondary Qty/Pack',
+                    'qty/pack': 'Secondary Qty/Pack',
                     'quantity': 'Secondary Qty/Pack',
                     'empty weight': 'Secondary Empty Weight',
                     'pack weight': 'Secondary Pack Weight'
@@ -742,14 +742,14 @@ def show_enhanced_processor():
         
         **Primary Packaging Section:**
         - `Packaging Type` ← `Primary Packaging Type`
-        - `Lmm/Wmm/Hmm` ← `Primary L-mm/W-mm/H-mm`
+        - `L-mm/W-mm/H-mm` ← `Primary L-mm/W-mm/H-mm`
         - `Qty/Pack` ← `Primary Qty/Pack`
         - `Empty Weight/Pack Weight` ← `Primary Empty Weight/Pack Weight`
         
         **Secondary Packaging Section:**
         - `Packaging Type` ← `Secondary Packaging Type`
         - `L-mm/W-mm/H-mm` ← `Secondary L-mm/W-mm/H-mm`
-        - `Qty / Pack` ← `Secondary Qty/Pack`
+        - `Qty/Pack` ← `Secondary Qty/Pack`
         - `Empty Weight/Pack Weight` ← `Secondary Empty Weight/Pack Weight`
         
         **Reference Images Section:**
