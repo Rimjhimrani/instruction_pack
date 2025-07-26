@@ -718,12 +718,7 @@ class EnhancedTemplateMapperWithImages:
                 'size': (4.3, 4.3),  # cm
                 'offset_from_header': 0
             },
-            'primary_label': {
-                'row_range': (50, 52),
-                'size': (4.3, 4.3),  # cm
-                'offset_from_header': 0
-            },
-            'secondary_label': {
+            'label': {
                 'row_range': (50, 52),
                 'size': (4.3, 4.3),  # cm
                 'offset_from_header': 0
@@ -772,52 +767,52 @@ class EnhancedTemplateMapperWithImages:
                         used_images.add(label)
                         break
             
-                    # Fallback to unused image
-                    if not matching_image:
-                        for label, img_data in uploaded_images.items():
-                            if label not in used_images:
-                                matching_image = img_data
-                                used_images.add(label)
-                                break
+                # Fallback to unused image
+                if not matching_image:
+                    for label, img_data in uploaded_images.items():
+                        if label not in used_images:
+                            matching_image = img_data
+                            used_images.add(label)
+                            break
             
-                    if matching_image:
-                        try:
-                            # Create temporary image file
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                image_bytes = base64.b64decode(matching_image['data'])
-                                tmp_img.write(image_bytes)
-                                tmp_img_path = tmp_img.name
+                if matching_image:
+                    try:
+                        # Create temporary image file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                            image_bytes = base64.b64decode(matching_image['data'])
+                            tmp_img.write(image_bytes)
+                            tmp_img_path = tmp_img.name
                     
-                            # Get precise positioning and sizing
-                            target_row, target_col, width, height = self.determine_image_position_and_size(
-                                area_type, area['row'], area['column']
-                            )
+                        # Get precise positioning and sizing
+                        target_row, target_col, width, height = self.determine_image_position_and_size(
+                            area_type, area['row'], area['column']
+                        )
                     
-                            # Create and configure image
-                            img = OpenpyxlImage(tmp_img_path)
-                            img.width = width
-                            img.height = height
+                        # Create and configure image
+                        img = OpenpyxlImage(tmp_img_path)
+                        img.width = width
+                        img.height = height
                     
-                            # Position image
-                            cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                            worksheet.add_image(img, cell_coord)
+                        # Position image
+                        cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                        worksheet.add_image(img, cell_coord)
                     
-                            # Adjust row height if needed
-                            current_height = worksheet.row_dimensions[target_row].height
-                            required_height = height * 0.75  # Convert points to Excel row height units
-                            if not current_height or current_height < required_height:
-                                worksheet.row_dimensions[target_row].height = required_height
+                        # Adjust row height if needed
+                        current_height = worksheet.row_dimensions[target_row].height
+                        required_height = height * 0.75  # Convert points to Excel row height units
+                        if not current_height or current_height < required_height:
+                            worksheet.row_dimensions[target_row].height = required_height
                     
-                            temp_image_paths.append(tmp_img_path)
-                            added_images += 1
+                        temp_image_paths.append(tmp_img_path)
+                        added_images += 1
                     
-                            st.success(f"✅ Added {area_type} image at {cell_coord} ({width/28.35:.1f}×{height/28.35:.1f} cm)")
+                        st.success(f"✅ Added {area_type} image at {cell_coord} ({width/28.35:.1f}×{height/28.35:.1f} cm)")
                     
-                        except Exception as e:
-                            st.warning(f"❌ Could not add {area_type} image: {e}")
-                            continue
+                    except Exception as e:
+                        st.warning(f"❌ Could not add {area_type} image: {e}")
+                        continue
                     
-                        return added_images, temp_image_paths
+                    return added_images, temp_image_paths
         
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
@@ -852,21 +847,21 @@ class EnhancedTemplateMapperWithImages:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
                     
-                    target_cell = self.find_data_cell_for_label(worksheet, field_info)
+                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
                     
-                    if target_cell and len(data_df) > 0:
-                        data_value = data_df.iloc[0][mapping['data_column']]
+                        if target_cell and len(data_df) > 0:
+                            data_value = data_df.iloc[0][mapping['data_column']]
                         
-                        cell_obj = worksheet[target_cell]
-                        if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                            for merged_range in worksheet.merged_cells.ranges:
-                                if target_cell in merged_range:
-                                    anchor_cell = merged_range.start_cell
-                                    anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                    break
-                        else:
-                            cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                        filled_count += 1
+                            cell_obj = worksheet[target_cell]
+                            if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
+                                for merged_range in worksheet.merged_cells.ranges:
+                                    if target_cell in merged_range:
+                                        anchor_cell = merged_range.start_cell
+                                        anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
+                                        break
+                            else:
+                                cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
+                            filled_count += 1
                         
                 except Exception as e:
                     st.error(f"Error filling mapping {coord}: {e}")
@@ -887,55 +882,7 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             st.error(f"Error filling template: {e}")
             return None, 0, 0, []
-    
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
-        """Fill template with mapped data and images"""
-        try:
-            workbook = openpyxl.load_workbook(template_file)
-            worksheet = workbook.active
-            
-            filled_count = 0
-            images_added = 0
-            temp_image_paths = []
-            
-            # Fill data fields
-            for coord, mapping in mapping_results.items():
-                try:
-                    if mapping['data_column'] is not None and mapping['is_mappable']:
-                        field_info = mapping['field_info']
-                        
-                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                        
-                        if target_cell and len(data_df) > 0:
-                            data_value = data_df.iloc[0][mapping['data_column']]
-                            
-                            cell_obj = worksheet[target_cell]
-                            if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                                for merged_range in worksheet.merged_cells.ranges:
-                                    if target_cell in merged_range:
-                                        anchor_cell = merged_range.start_cell
-                                        anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                        break
-                            else:
-                                cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                            filled_count += 1
-                            
-                except Exception as e:
-                    st.error(f"Error filling mapping {coord}: {e}")
-                    continue
-            
-            # Add images if provided
-            if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
-                
-            return workbook, filled_count, images_added, temp_image_paths
-            
-        except Exception as e:
-            st.error(f"Error filling template: {e}")
-            return None, 0, 0, []
-
+        
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
