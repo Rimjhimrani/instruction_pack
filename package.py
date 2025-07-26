@@ -137,19 +137,20 @@ class ImageExtractor:
     def identify_image_upload_areas(self, worksheet):
         """Identify areas in template designated for image uploads"""
         upload_areas = []
-        
+    
         try:
             # Look for cells with image-related text
             image_keywords = [
                 'upload image', 'image', 'photo', 'picture', 'upload',
-                'attach image', 'insert image', 'current packaging'
+                'attach image', 'insert image', 'current packaging',
+                'primary packaging', 'secondary packaging', 'label'
             ]
-            
+        
             for row in worksheet.iter_rows():
                 for cell in row:
                     if cell.value:
                         cell_text = str(cell.value).lower().strip()
-                        
+                    
                         for keyword in image_keywords:
                             if keyword in cell_text:
                                 upload_areas.append({
@@ -160,9 +161,26 @@ class ImageExtractor:
                                     'type': self.classify_image_area(cell_text)
                                 })
                                 break
-            
+        
+            # If no areas found, create some default areas based on common patterns
+            if not upload_areas:
+                print("No explicit image areas found, looking for implicit areas...")
+                # Look for cells that might be image placeholders
+                for row in worksheet.iter_rows():
+                    for cell in row:
+                        if cell.value:
+                            cell_text = str(cell.value).lower().strip()
+                            # Look for empty cells or cells with placeholder text near packaging terms
+                            if any(term in cell_text for term in ['packaging', 'image', 'photo']):
+                                upload_areas.append({
+                                    'position': cell.coordinate,
+                                    'row': cell.row,
+                                    'column': cell.column,
+                                    'text': cell.value,
+                                    'type': self.classify_image_area(cell_text)
+                                })
             return upload_areas
-            
+        
         except Exception as e:
             st.error(f"Error identifying image upload areas: {e}")
             return []
@@ -170,7 +188,6 @@ class ImageExtractor:
     def classify_image_area(self, text):
         """Classify the type of image area based on text"""
         text = text.lower()
-        
         if 'current' in text or 'existing' in text:
             return 'current_packaging'
         elif 'primary' in text:
@@ -179,9 +196,11 @@ class ImageExtractor:
             return 'secondary_packaging'
         elif 'reference' in text or 'ref' in text:
             return 'reference'
+        elif 'label' in text:
+            return 'label'
         else:
             return 'general'
-
+        
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
         self.similarity_threshold = 0.3
@@ -609,10 +628,12 @@ class EnhancedTemplateMapperWithImages:
             added_images = 0
             temp_image_paths = []
             used_images = set()
+        
             for area in image_areas:
                 area_type = area['type']
                 label_text = area.get('text', '').lower()
                 matching_image = None
+                matching_label = None
 
                 # Find matching image based on area type and label
                 for label, img_data in uploaded_images.items():
@@ -629,16 +650,19 @@ class EnhancedTemplateMapperWithImages:
                         or label_text in label_lower
                     ):
                         matching_image = img_data
+                        matching_label = label
                         used_images.add(label)
                         break
-                    
+                
                 # Fallback to any unused image
                 if not matching_image:
                     for label, img_data in uploaded_images.items():
                         if label not in used_images:
                             matching_image = img_data
+                            matching_label = label
                             used_images.add(label)
                             break
+                        
                 if matching_image:
                     try:
                         # Create temporary image file
@@ -646,25 +670,27 @@ class EnhancedTemplateMapperWithImages:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
-                        img = OpenpyxlImage(tmp_img_path)
                     
+                        img = OpenpyxlImage(tmp_img_path)
+                
                         # Set dimensions based on area type
                         if area_type == 'current_packaging':
                             # Current packaging: 8.5 cm for both height and width
                             img.width = int(8.5 * 28.35)  # Convert cm to points (1 cm ≈ 28.35 points)
                             img.height = int(8.5 * 28.35)
-                        
+                    
                             # Position below the header to avoid overlapping
-                            # Get the header row and add offset
-                            target_row = area['row'] + 1  # Move one row below heade
+                            target_row = area['row'] + 1  # Move one row below header
+                            target_col = area['column']
                         else:
                             # Primary, secondary, label packaging: 4.3 cm for both
                             img.width = int(4.3 * 28.35)  # Convert cm to points
                             img.height = int(4.3 * 28.35)
-                        
+                    
                             # Position in the designated area without overlapping header
                             target_row = area['row']
-                        
+                            target_col = area['column']
+                    
                             # For rows 44-52 range, ensure proper positioning
                             if 44 <= area['row'] <= 52:
                                 if area_type == 'primary_packaging':
@@ -677,29 +703,31 @@ class EnhancedTemplateMapperWithImages:
                                     # Keep labels in their designated rows (e.g., 50-52)
                                     target_row = max(50, area['row'])
 
-                            # Create cell coordinate with proper positioning
-                            cell_coord = f"{get_column_letter(area['column'])}{target_row}"
-                    
-                            # Add image to worksheet
-                            worksheet.add_image(img, cell_coord)
-                    
-                            # Adjust row height to accommodate image (optional)
-                            if area_type == 'current_packaging':
-                                worksheet.row_dimensions[target_row].height = int(8.5 * 28.35 * 0.75)  # Adjust for Excel row height
-                            else:
-                                worksheet.row_dimensions[target_row].height = int(4.3 * 28.35 * 0.75)
-                    
-                            temp_image_paths.append(tmp_img_path)
-                            added_images += 1
-                    
-                            print(f"Added {area_type} image at {cell_coord} with size {img.width}x{img.height}")
-                    
+                        # Create cell coordinate with proper positioning
+                        cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                
+                        # Add image to worksheet
+                        worksheet.add_image(img, cell_coord)
+                
+                        # Adjust row height to accommodate image (optional)
+                        if area_type == 'current_packaging':
+                            worksheet.row_dimensions[target_row].height = int(8.5 * 28.35 * 0.75)  # Adjust for Excel row height
+                        else:
+                            worksheet.row_dimensions[target_row].height = int(4.3 * 28.35 * 0.75)
+                
+                        temp_image_paths.append(tmp_img_path)
+                        added_images += 1
+                
+                        print(f"Added {area_type} image ({matching_label}) at {cell_coord} with size {img.width}x{img.height}")
+                
                     except Exception as e:
-                        st.warning(f"Could not add image to {area.get('position', area_type)}: {e}")
+                        print(f"Could not add image to {area.get('position', area_type)}: {e}")
                         continue
-                    
-                    return added_images, temp_image_paths
-        
+                else:
+                    print(f"No matching image found for {area_type} at {area.get('position', 'unknown position')}")
+                
+            return added_images, temp_image_paths
+    
         except Exception as e: 
             st.error(f"Error adding images to template: {e}")
             return 0, []
@@ -750,31 +778,34 @@ class EnhancedTemplateMapperWithImages:
             added_images = 0
             temp_image_paths = []
             used_images = set()
-        
+    
             for area in image_areas:
                 area_type = area['type']
                 label_text = area.get('text', '').lower()
-            
+        
                 # Find matching image
                 matching_image = None
+                matching_label = None
                 for label, img_data in uploaded_images.items():
                     if label in used_images:
                         continue
-                    
+                
                     label_lower = label.lower()
                     if self.is_image_match(label_lower, area_type, label_text):
                         matching_image = img_data
+                        matching_label = label
                         used_images.add(label)
                         break
-            
+        
                 # Fallback to unused image
                 if not matching_image:
                     for label, img_data in uploaded_images.items():
                         if label not in used_images:
                             matching_image = img_data
+                            matching_label = label
                             used_images.add(label)
                             break
-            
+        
                 if matching_image:
                     try:
                         # Create temporary image file
@@ -782,42 +813,44 @@ class EnhancedTemplateMapperWithImages:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
-                    
+                
                         # Get precise positioning and sizing
                         target_row, target_col, width, height = self.determine_image_position_and_size(
                             area_type, area['row'], area['column']
                         )
-                    
+                
                         # Create and configure image
                         img = OpenpyxlImage(tmp_img_path)
                         img.width = width
                         img.height = height
-                    
+                
                         # Position image
                         cell_coord = f"{get_column_letter(target_col)}{target_row}"
                         worksheet.add_image(img, cell_coord)
-                    
+                
                         # Adjust row height if needed
                         current_height = worksheet.row_dimensions[target_row].height
                         required_height = height * 0.75  # Convert points to Excel row height units
                         if not current_height or current_height < required_height:
                             worksheet.row_dimensions[target_row].height = required_height
-                    
+                
                         temp_image_paths.append(tmp_img_path)
                         added_images += 1
-                    
-                        st.success(f"✅ Added {area_type} image at {cell_coord} ({width/28.35:.1f}×{height/28.35:.1f} cm)")
-                    
+                
+                        print(f"✅ Added {area_type} image ({matching_label}) at {cell_coord} ({width/28.35:.1f}×{height/28.35:.1f} cm)")
+                
                     except Exception as e:
-                        st.warning(f"❌ Could not add {area_type} image: {e}")
+                        print(f"❌ Could not add {area_type} image: {e}")
                         continue
-                    
-                    return added_images, temp_image_paths
-        
+                else:
+                    print(f"⚠️ No matching image found for {area_type} at {area.get('position', 'unknown position')}")
+                
+            return added_images, temp_image_paths
+    
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             return 0, []
-
+        
     def is_image_match(self, label_lower, area_type, label_text):
         """Check if image label matches the area type"""
         return (
