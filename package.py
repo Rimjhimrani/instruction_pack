@@ -75,13 +75,12 @@ except ImportError as e:
 
 class ImageExtractor:
     """Handles image extraction from Excel files"""
-    
-    
+     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
     def extract_images_from_excel(self, excel_file_path):
-        """Extract all images from Excel file with better positioning"""
+        """Extract all images from Excel file with better positioning and duplicate prevention"""
         try:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
@@ -93,11 +92,20 @@ class ImageExtractor:
                 # Extract images from worksheet
                 if hasattr(worksheet, '_images'):
                     processed_positions = set()  # Track processed positions to avoid duplicates
+                    processed_images = set()     # Track processed image data to avoid duplicates
                     
                     for idx, img in enumerate(worksheet._images):
                         try:
                             # Get image data
                             image_data = img._data()
+                            
+                            # Create a hash of image data to detect duplicates
+                            image_hash = hashlib.md5(image_data).hexdigest()
+                            if image_hash in processed_images:
+                                print(f"Skipping duplicate image {idx} (hash: {image_hash[:8]})")
+                                continue
+                            
+                            processed_images.add(image_hash)
                             
                             # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
@@ -105,26 +113,38 @@ class ImageExtractor:
                             # Get more accurate image position
                             anchor = img.anchor
                             position_key = None
+                            col = 0
+                            row = 0
                             
+                            # Better anchor position detection
                             if hasattr(anchor, '_from') and anchor._from:
                                 col = anchor._from.col
                                 row = anchor._from.row
                                 position_key = f"{get_column_letter(col + 1)}{row + 1}"
                             elif hasattr(anchor, 'col') and hasattr(anchor, 'row'):
-                                position_key = f"{get_column_letter(anchor.col + 1)}{anchor.row + 1}"
+                                col = anchor.col
+                                row = anchor.row
+                                position_key = f"{get_column_letter(col + 1)}{row + 1}"
                             else:
-                                position_key = f"Image_{idx + 1}"
+                                # Use a unique identifier for orphaned images
+                                position_key = f"Image_{len(sheet_images) + 1}"
+                                print(f"Warning: Image {idx} has no clear position, using {position_key}")
                             
-                            # Skip if we've already processed this position (avoid duplicates)
+                            # Skip if we've already processed this exact position
                             if position_key in processed_positions:
-                                continue
+                                # Create a unique position by adding suffix
+                                original_key = position_key
+                                counter = 1
+                                while position_key in processed_positions:
+                                    position_key = f"{original_key}_dup{counter}"
+                                    counter += 1
+                                print(f"Position conflict resolved: {original_key} -> {position_key}")
                             
                             processed_positions.add(position_key)
                             
-                            # Find the nearest column header for better context
+                            # Find the most relevant column header for better context
                             column_context = self.find_column_header_context(
-                                worksheet, col if hasattr(anchor, '_from') and anchor._from else 0, 
-                                row if hasattr(anchor, '_from') and anchor._from else 0
+                                worksheet, col, row
                             )
                             
                             # Convert to base64 for storage
@@ -138,9 +158,12 @@ class ImageExtractor:
                                 'size': pil_image.size,
                                 'position': position_key,
                                 'column_context': column_context,
-                                'original_col': col if hasattr(anchor, '_from') and anchor._from else 0,
-                                'original_row': row if hasattr(anchor, '_from') and anchor._from else 0
+                                'original_col': col,
+                                'original_row': row,
+                                'image_hash': image_hash[:8]  # For debugging
                             }
+                            
+                            print(f"Extracted image: {position_key} (col:{col}, row:{row}) - Context: {column_context}")
                             
                         except Exception as e:
                             print(f"Error extracting image {idx}: {e}")
@@ -148,6 +171,7 @@ class ImageExtractor:
                 
                 if sheet_images:
                     images[sheet_name] = sheet_images
+                    print(f"Sheet '{sheet_name}': Found {len(sheet_images)} unique images")
             
             workbook.close()
             return images
@@ -156,10 +180,10 @@ class ImageExtractor:
             st.error(f"Error extracting images: {e}")
             return {}
     
-    def find_column_header_context(self, worksheet, col, row, search_range=10):
-        """Find the column header that best describes this image position"""
+    def find_column_header_context(self, worksheet, col, row, search_range=15):
+        """Find the column header that best describes this image position with improved logic"""
         try:
-            # Look upwards from the image position to find column headers
+            # Primary search: Look upwards in the same column
             for search_row in range(max(1, row - search_range), row + 1):
                 try:
                     cell = worksheet.cell(row=search_row, column=col + 1)  # +1 because openpyxl is 1-indexed
@@ -175,12 +199,32 @@ class ImageExtractor:
                 except Exception:
                     continue
             
-            # If no specific header found, look for any non-empty cell above
+            # Secondary search: Look in nearby columns for headers
+            for col_offset in range(-2, 3):  # Check 2 columns left and right
+                target_col = col + col_offset + 1  # +1 for openpyxl indexing
+                if target_col > 0 and target_col <= worksheet.max_column:
+                    for search_row in range(max(1, row - search_range), row + 1):
+                        try:
+                            cell = worksheet.cell(row=search_row, column=target_col)
+                            if cell.value:
+                                cell_text = str(cell.value).strip().lower()
+                                image_keywords = [
+                                    'image', 'photo', 'picture', 'upload', 'packaging',
+                                    'current', 'primary', 'secondary', 'reference'
+                                ]
+                                if any(keyword in cell_text for keyword in image_keywords):
+                                    return cell_text
+                        except Exception:
+                            continue
+            
+            # Tertiary search: Look for any non-empty cell above in same column
             for search_row in range(max(1, row - search_range), row + 1):
                 try:
                     cell = worksheet.cell(row=search_row, column=col + 1)
                     if cell.value:
-                        return str(cell.value).strip().lower()
+                        cell_text = str(cell.value).strip()
+                        if cell_text and len(cell_text) > 0:
+                            return cell_text.lower()
                 except Exception:
                     continue
             
@@ -196,11 +240,12 @@ class ImageExtractor:
         processed_cells = set()
         
         try:
-            # Look for cells with image-related text
+            # Enhanced image keywords for better matching
             image_keywords = [
                 'upload image', 'image', 'photo', 'picture', 'upload',
                 'attach image', 'insert image', 'current packaging',
-                'primary packaging', 'secondary packaging', 'reference image'
+                'primary packaging', 'secondary packaging', 'reference image',
+                'current', 'primary', 'secondary', 'packaging'
             ]
             
             for row in worksheet.iter_rows():
@@ -211,26 +256,39 @@ class ImageExtractor:
                     if cell.value:
                         cell_text = str(cell.value).lower().strip()
                         
+                        # Check for image-related keywords
+                        is_image_area = False
+                        matched_keyword = None
+                        
                         for keyword in image_keywords:
                             if keyword in cell_text:
-                                # Find the best position for image placement
-                                image_position = self.find_image_placement_position(
-                                    worksheet, cell.row, cell.column
-                                )
-                                
-                                upload_areas.append({
-                                    'position': cell.coordinate,
-                                    'image_position': image_position,
-                                    'row': image_position['row'],
-                                    'column': image_position['column'],
-                                    'text': cell.value,
-                                    'type': self.classify_image_area(cell_text),
-                                    'header_context': cell_text
-                                })
-                                
-                                processed_cells.add(cell.coordinate)
+                                is_image_area = True
+                                matched_keyword = keyword
                                 break
+                        
+                        if is_image_area:
+                            # Find the best position for image placement
+                            image_position = self.find_image_placement_position(
+                                worksheet, cell.row, cell.column
+                            )
+                            
+                            area_type = self.classify_image_area(cell_text)
+                            
+                            upload_areas.append({
+                                'position': cell.coordinate,
+                                'image_position': image_position,
+                                'row': image_position['row'],
+                                'column': image_position['column'],
+                                'text': cell.value,
+                                'type': area_type,
+                                'header_context': cell_text,
+                                'matched_keyword': matched_keyword
+                            })
+                            
+                            processed_cells.add(cell.coordinate)
+                            print(f"Found image area: {cell.coordinate} -> {area_type} (keyword: {matched_keyword})")
             
+            print(f"Total image upload areas found: {len(upload_areas)}")
             return upload_areas
             
         except Exception as e:
@@ -240,8 +298,8 @@ class ImageExtractor:
     def find_image_placement_position(self, worksheet, label_row, label_col):
         """Find the best position to place an image near a label"""
         try:
-            # Strategy 1: Look for empty cells to the right
-            for col_offset in range(1, 5):
+            # Strategy 1: Look for empty cells to the right (most common pattern)
+            for col_offset in range(1, 6):
                 target_col = label_col + col_offset
                 if target_col <= worksheet.max_column:
                     cell = worksheet.cell(row=label_row, column=target_col)
@@ -249,14 +307,23 @@ class ImageExtractor:
                         return {'row': label_row, 'column': target_col}
             
             # Strategy 2: Look for empty cells below
-            for row_offset in range(1, 3):
+            for row_offset in range(1, 4):
                 target_row = label_row + row_offset
                 if target_row <= worksheet.max_row:
                     cell = worksheet.cell(row=target_row, column=label_col)
                     if not cell.value or str(cell.value).strip() == "":
                         return {'row': target_row, 'column': label_col}
             
-            # Strategy 3: Use the original label position
+            # Strategy 3: Look diagonally (down-right)
+            for offset in range(1, 3):
+                target_row = label_row + offset
+                target_col = label_col + offset
+                if (target_row <= worksheet.max_row and target_col <= worksheet.max_column):
+                    cell = worksheet.cell(row=target_row, column=target_col)
+                    if not cell.value or str(cell.value).strip() == "":
+                        return {'row': target_row, 'column': target_col}
+            
+            # Strategy 4: Use the original label position as fallback
             return {'row': label_row, 'column': label_col}
             
         except Exception as e:
@@ -267,13 +334,14 @@ class ImageExtractor:
         """Classify the type of image area based on text with improved accuracy"""
         text = text.lower()
         
+        # More specific classification rules
         if 'current' in text and 'packaging' in text:
             return 'current_packaging'
         elif 'primary' in text and 'packaging' in text:
             return 'primary_packaging'
         elif 'secondary' in text and 'packaging' in text:
             return 'secondary_packaging'
-        elif 'reference' in text:
+        elif 'reference' in text and 'image' in text:
             return 'reference'
         elif 'primary' in text:
             return 'primary_packaging'
@@ -281,10 +349,12 @@ class ImageExtractor:
             return 'secondary_packaging'
         elif 'current' in text:
             return 'current_packaging'
+        elif 'packaging' in text:
+            return 'general_packaging'
         else:
             return 'general'
 
-# Enhanced method for better image matching and placement
+
 def add_images_to_template(self, worksheet, uploaded_images, image_areas):
     """Add uploaded images to template in designated areas with improved matching"""
     try:
@@ -292,27 +362,35 @@ def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         temp_image_paths = []
         used_images = set()
         
-        # Create a mapping of image contexts to uploaded images
+        print(f"Debug: Starting image placement with {len(image_areas)} areas and {len(uploaded_images)} images")
+        
+        # Create enhanced mapping between image contexts and uploaded images
         image_context_map = {}
         for label, img_data in uploaded_images.items():
             context = img_data.get('column_context', label.lower())
-            image_context_map[context] = img_data
+            image_context_map[context] = {
+                'data': img_data,
+                'label': label,
+                'used': False
+            }
+            print(f"Image available: {label} -> Context: {context}")
         
-        print(f"Debug: Found {len(image_areas)} image areas in template")
-        print(f"Debug: Found {len(uploaded_images)} uploaded images")
+        # Sort image areas by type for better matching priority
+        sorted_areas = sorted(image_areas, key=lambda x: x['type'])
         
-        for area in image_areas:
+        for area in sorted_areas:
             area_type = area['type']
             label_text = area.get('text', '').lower()
             header_context = area.get('header_context', '').lower()
+            matched_keyword = area.get('matched_keyword', '')
             
-            print(f"Debug: Processing area - Type: {area_type}, Text: {label_text}")
+            print(f"Processing area: {area['position']} -> Type: {area_type}, Text: '{label_text}'")
             
             matching_image = None
             best_match_score = 0
             best_match_key = None
             
-            # Try to find the best matching image
+            # Enhanced matching algorithm
             for img_key, img_data in uploaded_images.items():
                 if img_key in used_images:
                     continue
@@ -320,38 +398,82 @@ def add_images_to_template(self, worksheet, uploaded_images, image_areas):
                 img_context = img_data.get('column_context', '').lower()
                 match_score = 0
                 
-                # Exact type match
-                if area_type in img_context or img_context in area_type:
-                    match_score += 3
+                print(f"  Checking image: {img_key} -> Context: '{img_context}'")
+                
+                # Exact type match (highest priority)
+                if area_type != 'general':
+                    area_keywords = area_type.replace('_', ' ').split()
+                    for keyword in area_keywords:
+                        if keyword in img_context:
+                            match_score += 5
+                            print(f"    Keyword match: '{keyword}' (+5)")
                 
                 # Header context match
                 if header_context and img_context:
                     if header_context in img_context or img_context in header_context:
-                        match_score += 2
+                        match_score += 3
+                        print(f"    Header context match (+3)")
                 
-                # Keyword matching
-                area_keywords = area_type.replace('_', ' ').split()
-                for keyword in area_keywords:
-                    if keyword in img_context:
-                        match_score += 1
+                # Matched keyword from template
+                if matched_keyword and matched_keyword in img_context:
+                    match_score += 4
+                    print(f"    Template keyword match: '{matched_keyword}' (+4)")
                 
                 # Label text matching
-                if label_text in img_context or img_context in label_text:
-                    match_score += 1
+                if label_text and img_context:
+                    if label_text in img_context or img_context in label_text:
+                        match_score += 2
+                        print(f"    Label text match (+2)")
+                
+                # Position-based matching (if images are from similar positions)
+                img_position = img_data.get('position', '')
+                if img_position and area['position']:
+                    # Extract column letters for comparison
+                    area_col = ''.join(filter(str.isalpha, area['position']))
+                    img_col = ''.join(filter(str.isalpha, img_position))
+                    if area_col == img_col:
+                        match_score += 1
+                        print(f"    Position column match (+1)")
+                
+                print(f"    Total score: {match_score}")
                 
                 if match_score > best_match_score:
                     best_match_score = match_score
                     matching_image = img_data
                     best_match_key = img_key
             
-            # If no good match found, use the first available image
-            if not matching_image and uploaded_images:
+            # If no good match found with scoring, use fallback logic
+            if not matching_image or best_match_score == 0:
+                print(f"  No scored match found, trying fallback matching...")
+                
+                # Fallback: Simple keyword matching
                 for img_key, img_data in uploaded_images.items():
                     if img_key not in used_images:
-                        matching_image = img_data
-                        best_match_key = img_key
-                        break
+                        img_context = img_data.get('column_context', '').lower()
+                        
+                        # Check for any relevant keywords
+                        relevant_keywords = ['primary', 'secondary', 'current', 'packaging', 'image']
+                        area_has_keywords = [kw for kw in relevant_keywords if kw in label_text]
+                        img_has_keywords = [kw for kw in relevant_keywords if kw in img_context]
+                        
+                        if area_has_keywords and img_has_keywords:
+                            common_keywords = set(area_has_keywords) & set(img_has_keywords)
+                            if common_keywords:
+                                matching_image = img_data
+                                best_match_key = img_key
+                                print(f"  Fallback match found: {img_key} (common keywords: {common_keywords})")
+                                break
+                
+                # Last resort: Use first available image
+                if not matching_image:
+                    for img_key, img_data in uploaded_images.items():
+                        if img_key not in used_images:
+                            matching_image = img_data
+                            best_match_key = img_key
+                            print(f"  Last resort: Using first available image {img_key}")
+                            break
             
+            # Place the image if we found a match
             if matching_image and best_match_key:
                 try:
                     # Create temporary image file
@@ -364,13 +486,21 @@ def add_images_to_template(self, worksheet, uploaded_images, image_areas):
                     img = OpenpyxlImage(tmp_img_path)
                     
                     # Resize image to reasonable dimensions
-                    img.width = min(250, matching_image['size'][0])
-                    img.height = min(150, matching_image['size'][1])
+                    original_width, original_height = matching_image['size']
+                    max_width, max_height = 200, 150
+                    
+                    # Calculate scaling to maintain aspect ratio
+                    width_ratio = max_width / original_width
+                    height_ratio = max_height / original_height
+                    scale_ratio = min(width_ratio, height_ratio, 1.0)  # Don't upscale
+                    
+                    img.width = int(original_width * scale_ratio)
+                    img.height = int(original_height * scale_ratio)
                     
                     # Use the designated image position
                     cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
                     
-                    print(f"Debug: Adding image to position {cell_coord}")
+                    print(f"  Placing image {best_match_key} at {cell_coord} (size: {img.width}x{img.height})")
                     
                     # Add image to worksheet
                     worksheet.add_image(img, cell_coord)
@@ -379,27 +509,26 @@ def add_images_to_template(self, worksheet, uploaded_images, image_areas):
                     used_images.add(best_match_key)
                     added_images += 1
                     
-                    print(f"Debug: Successfully added image {best_match_key} to {cell_coord}")
+                    print(f"  ✓ Successfully placed image {best_match_key} at {cell_coord}")
                     
                 except Exception as e:
                     st.warning(f"Could not add image to {area['position']}: {e}")
-                    print(f"Debug: Error adding image: {e}")
+                    print(f"  ✗ Error placing image: {e}")
                     continue
             else:
-                print(f"Debug: No matching image found for area {area_type}")
+                print(f"  ✗ No suitable image found for area {area['position']} ({area_type})")
         
+        print(f"Image placement complete: {added_images} images added, {len(used_images)} images used")
         return added_images, temp_image_paths
         
     except Exception as e:
         st.error(f"Error adding images to template: {e}")
-        print(f"Debug: Error in add_images_to_template: {e}")
+        print(f"Error in add_images_to_template: {e}")
         return 0, []
 
-# Also update the main image processing section in show_main_app():
-# Replace the existing extracted_images processing with this improved version:
 
 def process_extracted_images_better(extracted_images, data_df):
-    """Process extracted images with better context mapping"""
+    """Process extracted images with better context mapping and duplicate prevention"""
     processed_images = {}
     
     if extracted_images:
@@ -408,30 +537,58 @@ def process_extracted_images_better(extracted_images, data_df):
                 # Create better image keys based on context
                 column_context = img_data.get('column_context', '')
                 
-                # Try to match with data column headers
+                # Try to match with data column headers more intelligently
                 best_column_match = None
+                best_match_score = 0
+                
                 if column_context:
                     for col in data_df.columns:
-                        col_lower = col.lower()
-                        if (column_context in col_lower or 
-                            col_lower in column_context or
-                            # Check for packaging-related keywords
-                            any(keyword in col_lower and keyword in column_context 
-                                for keyword in ['primary', 'secondary', 'current', 'packaging', 'image'])):
+                        col_lower = col.lower().strip()
+                        context_lower = column_context.lower().strip()
+                        
+                        # Calculate match score
+                        match_score = 0
+                        
+                        # Exact match
+                        if context_lower == col_lower:
+                            match_score = 10
+                        # Substring match
+                        elif context_lower in col_lower or col_lower in context_lower:
+                            match_score = 7
+                        # Keyword match for packaging terms
+                        else:
+                            packaging_keywords = ['primary', 'secondary', 'current', 'packaging', 'image']
+                            context_keywords = set(kw for kw in packaging_keywords if kw in context_lower)
+                            col_keywords = set(kw for kw in packaging_keywords if kw in col_lower)
+                            
+                            if context_keywords and col_keywords:
+                                common_keywords = context_keywords & col_keywords
+                                if common_keywords:
+                                    match_score = len(common_keywords) * 2
+                        
+                        if match_score > best_match_score:
+                            best_match_score = match_score
                             best_column_match = col
-                            break
                 
-                # Use the best match or fallback to position
-                image_key = best_column_match if best_column_match else f"{sheet_name}_{position}"
+                # Use the best match or create a descriptive fallback key
+                if best_column_match:
+                    base_key = best_column_match
+                else:
+                    # Create a more descriptive key based on context
+                    if column_context and column_context != f"column_{img_data.get('original_col', 0) + 1}":
+                        base_key = column_context
+                    else:
+                        base_key = f"Image_{position}"
                 
-                # Avoid duplicate keys
+                # Ensure unique keys
+                image_key = base_key
                 counter = 1
-                original_key = image_key
                 while image_key in processed_images:
-                    image_key = f"{original_key}_{counter}"
+                    image_key = f"{base_key}_{counter}"
                     counter += 1
                 
                 processed_images[image_key] = img_data
+                print(f"Processed image: {position} -> {image_key} (context: {column_context})")
     
     return processed_images
 
