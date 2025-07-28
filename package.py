@@ -9,7 +9,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
-from openpyxl.utils import get_column_letter
+from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.drawing.image import Image as OpenpyxlImage
 import re
 import io
