@@ -145,8 +145,10 @@ class ImageExtractor:
                     if (area_type == 'primary' and ('primary' in img_key_lower or 'sheet1' in img_key_lower)) or \
                        (area_type == 'secondary' and ('secondary' in img_key_lower or 'sheet2' in img_key_lower or 'sec' in img_key_lower)) or \
                        (area_type == 'current' and ('current' in img_key_lower or 'sheet3' in img_key_lower)) or \
-                       (area_type == 'label' and ('label' in img_key_lower or 'sheet4' in img_key_lower))
-                    
+                       (area_type == 'label' and ('label' in img_key_lower or 'sheet4' in img_key_lower)):
+                           matching_image = img_data
+                           matching_key = img_key
+                           break
                 # Fallback: assign images in order if no specific match
                 if not matching_image:
                     for img_key, img_data in uploaded_images.items():
