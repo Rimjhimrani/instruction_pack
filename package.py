@@ -246,8 +246,8 @@ class ImageExtractor:
             # Define target grid for each type
             grid_positions = {
                 'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C rows 44–51
-                'secondary': [(col, row) for col in range(4, 11) for row in range(44, 52)],  # D–K
-                'label': [(col, row) for col in range(13, 18) for row in range(44, 52)],     # M–R
+                'secondary': [(col, row) for col in range(5, 11) for row in range(44, 52)],  # D–K
+                'label': [(col, row) for col in range(12, 18) for row in range(44, 52)],     # M–R
             }
             position_index = defaultdict(int)
             # Group images by type
