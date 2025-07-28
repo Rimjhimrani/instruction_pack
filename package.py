@@ -275,10 +275,10 @@ class ImageExtractor:
                     
                     # Keyword matching
                     type_keywords = {
-                        'primary': ['primary', 'sheet1'],
-                        'secondary': ['secondary', 'sheet2', 'sec'],
-                        'current': ['current', 'sheet3', 'existing'],
-                        'label': ['label', 'sheet4', 'labels']
+                        'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C
+                        'secondary': [(col, row) for col in range(4, 11) for row in range(44, 52)],  # D–K
+                        'label': [(col, row) for col in range(13, 18) for row in range(44, 52)],     # M–R
+                        'current': []  # Current uses header row from template
                     }
                     
                     if area_type in type_keywords:
