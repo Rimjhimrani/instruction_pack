@@ -248,6 +248,17 @@ class ImageExtractor:
             
             print(f"Processing {len(image_areas_sorted)} image areas")
             print(f"Available images: {list(uploaded_images.keys())}")
+
+            # Initialize placement counters for grid-based types
+            if not hasattr(self, "_placement_counters"):
+                self._placement_counters = defaultdict(int)
+
+            # Define cell grids (defined outside loop to avoid scope issues)
+            placement_grids = {
+                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C, rows 44–51
+                'secondary': [(col, row) for col in range(5, 11) for row in range(44, 52)],  # E–K, rows 44–51
+                'label': [(col, row) for col in range(13, 18) for row in range(44, 52)]      # M–R, rows 44–51
+            }
         
             for area in image_areas_sorted:
                 area_type = area['type']
