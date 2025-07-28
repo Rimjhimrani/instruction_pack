@@ -74,7 +74,7 @@ except ImportError as e:
     st.warning("⚠️ Advanced NLP features disabled. Install nltk and scikit-learn for better matching.")
 
 class ImageExtractor:
-    """Handles image extraction from Excel files"""
+    """Handles image extraction from Excel files with improved duplicate handling"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
@@ -82,66 +82,169 @@ class ImageExtractor:
     def identify_image_upload_areas(self, worksheet):
         """Identify areas in template designated for image uploads"""
         upload_areas = []
-        processed_cells = set()  # Track processed cells to avoid duplicates
+        processed_cells = set()
         
         try:
-            # Look for column headers with image-related text
+            # Enhanced image keywords with better matching
             image_keywords = {
                 'primary': ['primary packaging', 'primary pack', 'primary'],
                 'secondary': ['secondary packaging', 'secondary pack', 'secondary', 'sec'],
-                'current': ['current packaging', 'current', 'existing packaging'],
-                'label': ['label', 'product label', 'labeling']
+                'current': ['current packaging', 'current', 'existing packaging', 'existing'],
+                'label': ['label', 'product label', 'labeling', 'labels']
             }
             
             # Search through first few rows for column headers
-            for row_num in range(1, min(10, worksheet.max_row + 1)):
+            for row_num in range(1, min(15, worksheet.max_row + 1)):
                 for col_num in range(1, worksheet.max_column + 1):
                     cell = worksheet.cell(row=row_num, column=col_num)
                     cell_coord = f"{row_num}_{col_num}"
                     
-                    # Skip if cell already processed or empty
                     if cell_coord in processed_cells or not cell.value:
                         continue
                         
                     cell_text = str(cell.value).lower().strip()
                     
-                    # Find the best matching category for this cell
+                    # Find the best matching category
                     best_match = None
+                    best_score = 0
+                    
                     for category, keywords in image_keywords.items():
                         for keyword in keywords:
+                            # Calculate match score based on keyword length and position
                             if keyword in cell_text:
-                                if not best_match or len(keyword) > len(best_match[1]):
+                                score = len(keyword)
+                                # Bonus for exact match
+                                if keyword == cell_text:
+                                    score += 10
+                                # Bonus for word boundary match
+                                if cell_text.startswith(keyword) or cell_text.endswith(keyword):
+                                    score += 5
+                                
+                                if score > best_score:
                                     best_match = (category, keyword)
+                                    best_score = score
                     
-                    # If we found a match, add it and mark cell as processed
                     if best_match:
                         upload_areas.append({
                             'position': cell.coordinate,
-                            'row': row_num + 1,
+                            'row': row_num + 1,  # Position image below header
                             'column': col_num,
                             'text': cell.value,
                             'type': best_match[0],
                             'header_text': cell_text,
-                            'matched_keyword': best_match[1]
+                            'matched_keyword': best_match[1],
+                            'match_score': best_score
                         })
                         processed_cells.add(cell_coord)
-                        print(f"Found {best_match[0]} area at {cell.coordinate}: '{cell.value}'")
+                        print(f"Found {best_match[0]} area at {cell.coordinate}: '{cell.value}' (score: {best_score})")
 
+            # Sort by match score (best matches first)
+            upload_areas.sort(key=lambda x: x['match_score'], reverse=True)
             return upload_areas
             
         except Exception as e:
             st.error(f"Error identifying image upload areas: {e}")
             return []
 
+    def extract_images_from_excel(self, excel_file_path):
+        """Extract unique images from Excel file with better deduplication"""
+        try:
+            images = {}
+            workbook = openpyxl.load_workbook(excel_file_path)
+            image_hashes = set()  # Track image hashes to avoid duplicates
+            
+            for sheet_name in workbook.sheetnames:
+                worksheet = workbook[sheet_name]
+                print(f"Processing sheet: {sheet_name}")
+                
+                if hasattr(worksheet, '_images') and worksheet._images:
+                    print(f"Found {len(worksheet._images)} images in {sheet_name}")
+                    
+                    for idx, img in enumerate(worksheet._images):
+                        try:
+                            # Get image data
+                            image_data = img._data()
+                            
+                            # Create hash of image data to detect duplicates
+                            import hashlib
+                            image_hash = hashlib.md5(image_data).hexdigest()
+                            
+                            # Skip if we've already processed this image
+                            if image_hash in image_hashes:
+                                print(f"Skipping duplicate image in {sheet_name}")
+                                continue
+                            
+                            image_hashes.add(image_hash)
+                            
+                            # Create PIL Image
+                            pil_image = Image.open(io.BytesIO(image_data))
+                        
+                            # Get image position
+                            anchor = img.anchor
+                            if hasattr(anchor, '_from') and anchor._from:
+                                col = anchor._from.col
+                                row = anchor._from.row
+                                position = f"{get_column_letter(col + 1)}{row + 1}"
+                            else:
+                                position = f"Image_{idx + 1}"
+                            
+                            # Convert to base64
+                            buffered = io.BytesIO()
+                            pil_image.save(buffered, format="PNG")
+                            img_str = base64.b64encode(buffered.getvalue()).decode()
+                        
+                            # Create descriptive key based on sheet name and content
+                            if 'sheet1' in sheet_name.lower() or 'primary' in sheet_name.lower():
+                                image_type = 'primary'
+                            elif 'sheet2' in sheet_name.lower() or 'secondary' in sheet_name.lower():
+                                image_type = 'secondary'
+                            elif 'sheet3' in sheet_name.lower() or 'current' in sheet_name.lower():
+                                image_type = 'current'
+                            elif 'sheet4' in sheet_name.lower() or 'label' in sheet_name.lower():
+                                image_type = 'label'
+                            else:
+                                image_type = f'image_{len(images) + 1}'
+                            
+                            image_key = f"{image_type}_{sheet_name}_{position}"
+                        
+                            images[image_key] = {
+                                'data': img_str,
+                                'format': 'PNG',
+                                'size': pil_image.size,
+                                'position': position,
+                                'sheet': sheet_name,
+                                'index': idx,
+                                'type': image_type,
+                                'hash': image_hash
+                            }
+                            
+                            print(f"Extracted unique image: {image_key} at position {position}")
+                            
+                        except Exception as e:
+                            print(f"Error extracting image {idx} from {sheet_name}: {e}")
+                            continue
+                else:
+                    print(f"No images found in sheet: {sheet_name}")
+            
+            workbook.close()
+            
+            print(f"Total unique extracted images: {len(images)}")
+            return {'all_sheets': images}
+            
+        except Exception as e:
+            st.error(f"Error extracting images: {e}")
+            print(f"Error in extract_images_from_excel: {e}")
+            return {}
+
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template in designated areas with proper positioning"""
+        """Add uploaded images to template with improved matching logic"""
         try:
             added_images = 0
             temp_image_paths = []
             used_images = set()
             
-            # Sort image areas by column to maintain order
-            image_areas_sorted = sorted(image_areas, key=lambda x: x['column'])
+            # Sort image areas by match score and column
+            image_areas_sorted = sorted(image_areas, key=lambda x: (x.get('match_score', 0), x['column']), reverse=True)
             
             print(f"Processing {len(image_areas_sorted)} image areas")
             print(f"Available images: {list(uploaded_images.keys())}")
@@ -150,36 +253,45 @@ class ImageExtractor:
                 area_type = area['type']
                 header_text = area.get('header_text', '').lower()
                 
-                print(f"Processing area: {area_type} at {area['position']}")
+                print(f"Processing area: {area_type} at {area['position']} (score: {area.get('match_score', 0)})")
             
                 matching_image = None
                 matching_key = None
             
-                # Find matching image based on area type and header text
+                # Strategy 1: Match by image type extracted from filename/sheet
                 for img_key, img_data in uploaded_images.items():
                     if img_key in used_images:
                         continue
                     
+                    img_type = img_data.get('type', '').lower()
                     img_key_lower = img_key.lower()
-                
-                    # Enhanced matching logic with better pattern matching
-                    type_match = False
-                    if area_type == 'primary':
-                        type_match = any(keyword in img_key_lower for keyword in ['primary', 'sheet1'])
-                    elif area_type == 'secondary':
-                        type_match = any(keyword in img_key_lower for keyword in ['secondary', 'sheet2', 'sec'])
-                    elif area_type == 'current':
-                        type_match = any(keyword in img_key_lower for keyword in ['current', 'sheet3', 'existing'])
-                    elif area_type == 'label':
-                        type_match = any(keyword in img_key_lower for keyword in ['label', 'sheet4'])
                     
-                    if type_match:
+                    # Direct type matching
+                    if area_type == img_type:
                         matching_image = img_data
                         matching_key = img_key
-                        print(f"Matched {area_type} with image: {img_key}")
+                        print(f"Direct type match: {area_type} with {img_key}")
                         break
+                    
+                    # Keyword matching
+                    type_keywords = {
+                        'primary': ['primary', 'sheet1'],
+                        'secondary': ['secondary', 'sheet2', 'sec'],
+                        'current': ['current', 'sheet3', 'existing'],
+                        'label': ['label', 'sheet4', 'labels']
+                    }
+                    
+                    if area_type in type_keywords:
+                        for keyword in type_keywords[area_type]:
+                            if keyword in img_key_lower:
+                                matching_image = img_data
+                                matching_key = img_key
+                                print(f"Keyword match: {area_type} with {img_key} (keyword: {keyword})")
+                                break
+                        if matching_image:
+                            break
                 
-                # Fallback: assign images in order if no specific match
+                # Strategy 2: Fallback to first available image
                 if not matching_image:
                     for img_key, img_data in uploaded_images.items():
                         if img_key not in used_images:
@@ -199,24 +311,20 @@ class ImageExtractor:
                         # Create openpyxl image object
                         img = OpenpyxlImage(tmp_img_path)
                     
-                        # Set image size in CM (converted to pixels)
-                        # Excel uses 96 DPI, so 1 cm = 37.795 pixels
-                        cm_to_pixels = 37.795
+                        # Set image size based on type
+                        cm_to_pixels = 37.795  # Excel 96 DPI conversion
                         
                         if area_type == 'current':
-                            # Current packaging: 8.3 x 8.3 cm
                             width_cm = 8.3
                             height_cm = 8.3
                         else:
-                            # Primary, secondary, label: 4.3 x 4.3 cm
                             width_cm = 4.3
                             height_cm = 4.3
                         
-                        # Convert CM to pixels and set image size
                         img.width = int(width_cm * cm_to_pixels)
                         img.height = int(height_cm * cm_to_pixels)
                         
-                        # Position image below the column header
+                        # Position image in the designated cell
                         cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
                         
                         # Add image to worksheet
@@ -226,11 +334,11 @@ class ImageExtractor:
                         used_images.add(matching_key)
                         added_images += 1
                     
-                        print(f"✅ Added {area_type} image at {cell_coord} with size {width_cm}x{height_cm} cm ({img.width}x{img.height} pixels)")
+                        print(f"✅ Added {area_type} image at {cell_coord} ({width_cm}x{height_cm} cm)")
                         
                     except Exception as e:
-                        print(f"❌ Could not add {area_type} image to {area['position']}: {e}")
-                        st.warning(f"Could not add {area_type} image to {area['position']}: {e}")
+                        print(f"❌ Could not add {area_type} image: {e}")
+                        st.warning(f"Could not add {area_type} image: {e}")
                         continue
                 else:
                     print(f"⚠️ No matching image found for {area_type} at {area['position']}")
@@ -243,82 +351,6 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
 
-    def extract_images_from_excel(self, excel_file_path):
-        """Extract all images from Excel file with better organization"""
-        try:
-            images = {}
-            workbook = openpyxl.load_workbook(excel_file_path)
-            
-            for sheet_name in workbook.sheetnames:
-                worksheet = workbook[sheet_name]
-                sheet_images = {}
-                
-                print(f"Processing sheet: {sheet_name}")
-                
-                # Extract images from worksheet
-                if hasattr(worksheet, '_images') and worksheet._images:
-                    print(f"Found {len(worksheet._images)} images in {sheet_name}")
-                    
-                    for idx, img in enumerate(worksheet._images):
-                        try:
-                            # Get image data
-                            image_data = img._data()
-                            # Create PIL Image
-                            pil_image = Image.open(io.BytesIO(image_data))
-                        
-                            # Get image position (approximate)
-                            anchor = img.anchor
-                            if hasattr(anchor, '_from') and anchor._from:
-                                col = anchor._from.col
-                                row = anchor._from.row
-                                position = f"{get_column_letter(col + 1)}{row + 1}"
-                            else:
-                                position = f"Image_{idx + 1}"
-                            
-                            # Convert to base64 for storage
-                            buffered = io.BytesIO()
-                            pil_image.save(buffered, format="PNG")
-                            img_str = base64.b64encode(buffered.getvalue()).decode()
-                        
-                            # Create a more descriptive key
-                            image_key = f"{sheet_name}_{position}_{idx}"
-                        
-                            sheet_images[image_key] = {
-                                'data': img_str,
-                                'format': 'PNG',
-                                'size': pil_image.size,
-                                'position': position,
-                                'sheet': sheet_name,
-                                'index': idx
-                            }
-                            
-                            print(f"Extracted image: {image_key} at position {position}")
-                            
-                        except Exception as e:
-                            print(f"Error extracting image {idx} from {sheet_name}: {e}")
-                            continue
-                else:
-                    print(f"No images found in sheet: {sheet_name}")
-                
-                if sheet_images:
-                    images.update(sheet_images)
-            
-            workbook.close()
-            
-            # Limit to first 4 images if more than 4 are found
-            if len(images) > 4:
-                image_keys = list(images.keys())[:4]
-                images = {key: images[key] for key in image_keys}
-                print(f"Limited to first 4 images: {list(images.keys())}")
-            
-            print(f"Total extracted images: {len(images)}")
-            return {'all_sheets': images}
-            
-        except Exception as e:
-            st.error(f"Error extracting images: {e}")
-            print(f"Error in extract_images_from_excel: {e}")
-            return {}
-
     def process_extracted_images_for_template(self, extracted_images):
         """Convert extracted images to format expected by template filling"""
         processed_images = {}
@@ -326,225 +358,6 @@ class ImageExtractor:
             for image_key, img_data in extracted_images['all_sheets'].items():
                 processed_images[image_key] = img_data
         return processed_images
-
-
-# Updated main class methods (to replace the existing ones)
-def find_template_fields_with_context_and_images_updated(self, template_file):
-    """Find template fields and image upload areas - Updated version"""
-    fields = {}
-    image_areas = []
-    
-    try:
-        workbook = openpyxl.load_workbook(template_file)
-        worksheet = workbook.active
-        
-        merged_ranges = worksheet.merged_cells.ranges
-        
-        # Find mappable fields
-        for row in worksheet.iter_rows():
-            for cell in row:
-                try:
-                    if cell.value is not None:
-                        cell_value = str(cell.value).strip()
-                        
-                        if cell_value and self.is_mappable_field(cell_value):
-                            cell_coord = cell.coordinate
-                            merged_range = None
-                            
-                            for merge_range in merged_ranges:
-                                if cell.coordinate in merge_range:
-                                    merged_range = str(merge_range)
-                                    break
-                            
-                            # Identify section context
-                            section_context = self.identify_section_context(
-                                worksheet, cell.row, cell.column
-                            )
-                            
-                            fields[cell_coord] = {
-                                'value': cell_value,
-                                'row': cell.row,
-                                'column': cell.column,
-                                'merged_range': merged_range,
-                                'section_context': section_context,
-                                'is_mappable': True
-                            }
-                except Exception as e:
-                    continue
-        
-        # Find image upload areas using the improved ImageExtractor method
-        image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
-        
-        workbook.close()
-        
-    except Exception as e:
-        st.error(f"Error reading template: {e}")
-    
-    return fields, image_areas
-
-
-def add_images_to_template_updated(self, worksheet, uploaded_images, image_areas):
-    """Updated method to add uploaded images to template with CM-based sizing"""
-    try:
-        added_images = 0
-        temp_image_paths = []
-        used_images = set()
-        
-        # Sort image areas by column to maintain order
-        image_areas_sorted = sorted(image_areas, key=lambda x: x['column'])
-        
-        print(f"Processing {len(image_areas_sorted)} image areas")
-        print(f"Available images: {list(uploaded_images.keys())}")
-    
-        for area in image_areas_sorted:
-            area_type = area['type']
-            header_text = area.get('header_text', '').lower()
-            
-            print(f"Processing area: {area_type} at {area['position']}")
-        
-            matching_image = None
-            matching_key = None
-        
-            # Find matching image based on area type and header text
-            for img_key, img_data in uploaded_images.items():
-                if img_key in used_images:
-                    continue
-                
-                img_key_lower = img_key.lower()
-            
-                # Enhanced matching logic with better pattern matching
-                type_match = False
-                if area_type == 'primary':
-                    type_match = any(keyword in img_key_lower for keyword in ['primary', 'sheet1'])
-                elif area_type == 'secondary':
-                    type_match = any(keyword in img_key_lower for keyword in ['secondary', 'sheet2', 'sec'])
-                elif area_type == 'current':
-                    type_match = any(keyword in img_key_lower for keyword in ['current', 'sheet3', 'existing'])
-                elif area_type == 'label':
-                    type_match = any(keyword in img_key_lower for keyword in ['label', 'sheet4'])
-                
-                if type_match:
-                    matching_image = img_data
-                    matching_key = img_key
-                    print(f"Matched {area_type} with image: {img_key}")
-                    break
-            
-            # Fallback: assign images in order if no specific match
-            if not matching_image:
-                for img_key, img_data in uploaded_images.items():
-                    if img_key not in used_images:
-                        matching_image = img_data
-                        matching_key = img_key
-                        print(f"Fallback match for {area_type}: {img_key}")
-                        break
-            
-            if matching_image and matching_key:
-                try:
-                    # Create temporary image file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                        image_bytes = base64.b64decode(matching_image['data'])
-                        tmp_img.write(image_bytes)
-                        tmp_img_path = tmp_img.name
-                    
-                    # Create openpyxl image object
-                    img = OpenpyxlImage(tmp_img_path)
-                
-                    # Set image size in CM (converted to pixels)
-                    # Excel uses 96 DPI, so 1 cm = 37.795 pixels
-                    cm_to_pixels = 37.795
-                    
-                    if area_type == 'current':
-                        # Current packaging: 8.3 x 8.3 cm
-                        width_cm = 8.3
-                        height_cm = 8.3
-                    else:
-                        # Primary, secondary, label: 4.3 x 4.3 cm
-                        width_cm = 4.3
-                        height_cm = 4.3
-                    
-                    # Convert CM to pixels and set image size
-                    img.width = int(width_cm * cm_to_pixels)
-                    img.height = int(height_cm * cm_to_pixels)
-                    
-                    # Position image below the column header
-                    cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
-                    
-                    # Add image to worksheet
-                    worksheet.add_image(img, cell_coord)
-                
-                    temp_image_paths.append(tmp_img_path)
-                    used_images.add(matching_key)
-                    added_images += 1
-                
-                    print(f"✅ Added {area_type} image at {cell_coord} with size {width_cm}x{height_cm} cm ({img.width}x{img.height} pixels)")
-                    
-                except Exception as e:
-                    print(f"❌ Could not add {area_type} image to {area['position']}: {e}")
-                    st.warning(f"Could not add {area_type} image to {area['position']}: {e}")
-                    continue
-            else:
-                print(f"⚠️ No matching image found for {area_type} at {area['position']}")
-        
-        print(f"Total images added: {added_images}")
-        return added_images, temp_image_paths
-        
-    except Exception as e:
-        st.error(f"Error adding images to template: {e}")
-        print(f"Error in add_images_to_template: {e}")
-        return 0, []
-
-
-def fill_template_with_data_and_images_updated(self, template_file, mapping_results, data_df, uploaded_images=None):
-    """Updated method to fill template with mapped data and images"""
-    try:
-        workbook = openpyxl.load_workbook(template_file)
-        worksheet = workbook.active
-        
-        filled_count = 0
-        images_added = 0
-        temp_image_paths = []
-        
-        # Fill data fields
-        for coord, mapping in mapping_results.items():
-            try:
-                if mapping['data_column'] is not None and mapping['is_mappable']:
-                    field_info = mapping['field_info']
-                    
-                    target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                    
-                    if target_cell and len(data_df) > 0:
-                        data_value = data_df.iloc[0][mapping['data_column']]
-                        
-                        cell_obj = worksheet[target_cell]
-                        if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                            for merged_range in worksheet.merged_cells.ranges:
-                                if target_cell in merged_range:
-                                    anchor_cell = merged_range.start_cell
-                                    anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                    break
-                        else:
-                            cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                        filled_count += 1
-                        
-            except Exception as e:
-                st.error(f"Error filling mapping {coord}: {e}")
-                continue
-        
-        # Add images if provided
-        if uploaded_images:
-            # First, identify image upload areas using the improved method
-            _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-            
-            # Use the improved ImageExtractor method for adding images
-            images_added, temp_image_paths = self.image_extractor.add_images_to_template(
-                worksheet, uploaded_images, image_areas
-            )
-            
-        return workbook, filled_count, images_added, temp_image_paths
-        
-    except Exception as e:
-        st.error(f"Error filling template: {e}")
-        return None, 0, 0, []
         
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
