@@ -75,7 +75,6 @@ except ImportError as e:
 
 class ImageExtractor:
    """Handles image extraction from Excel files with improved duplicate handling"""
-    
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
