@@ -16,6 +16,7 @@ import io
 import tempfile
 import shutil
 from pathlib import Path
+from collections import defaultdict
 import zipfile
 from PIL import Image
 import base64
@@ -239,7 +240,6 @@ class ImageExtractor:
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template with improved matching and proper placement"""
         try:
-            from collections import defaultdict
             added_images = 0
             temp_image_paths = []
             used_images = set()
