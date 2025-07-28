@@ -75,6 +75,7 @@ except ImportError as e:
 
 class ImageExtractor:
     """Handles image extraction from Excel files"""
+    
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
@@ -325,6 +326,226 @@ class ImageExtractor:
             for image_key, img_data in extracted_images['all_sheets'].items():
                 processed_images[image_key] = img_data
         return processed_images
+
+
+# Updated main class methods (to replace the existing ones)
+def find_template_fields_with_context_and_images_updated(self, template_file):
+    """Find template fields and image upload areas - Updated version"""
+    fields = {}
+    image_areas = []
+    
+    try:
+        workbook = openpyxl.load_workbook(template_file)
+        worksheet = workbook.active
+        
+        merged_ranges = worksheet.merged_cells.ranges
+        
+        # Find mappable fields
+        for row in worksheet.iter_rows():
+            for cell in row:
+                try:
+                    if cell.value is not None:
+                        cell_value = str(cell.value).strip()
+                        
+                        if cell_value and self.is_mappable_field(cell_value):
+                            cell_coord = cell.coordinate
+                            merged_range = None
+                            
+                            for merge_range in merged_ranges:
+                                if cell.coordinate in merge_range:
+                                    merged_range = str(merge_range)
+                                    break
+                            
+                            # Identify section context
+                            section_context = self.identify_section_context(
+                                worksheet, cell.row, cell.column
+                            )
+                            
+                            fields[cell_coord] = {
+                                'value': cell_value,
+                                'row': cell.row,
+                                'column': cell.column,
+                                'merged_range': merged_range,
+                                'section_context': section_context,
+                                'is_mappable': True
+                            }
+                except Exception as e:
+                    continue
+        
+        # Find image upload areas using the improved ImageExtractor method
+        image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
+        
+        workbook.close()
+        
+    except Exception as e:
+        st.error(f"Error reading template: {e}")
+    
+    return fields, image_areas
+
+
+def add_images_to_template_updated(self, worksheet, uploaded_images, image_areas):
+    """Updated method to add uploaded images to template with CM-based sizing"""
+    try:
+        added_images = 0
+        temp_image_paths = []
+        used_images = set()
+        
+        # Sort image areas by column to maintain order
+        image_areas_sorted = sorted(image_areas, key=lambda x: x['column'])
+        
+        print(f"Processing {len(image_areas_sorted)} image areas")
+        print(f"Available images: {list(uploaded_images.keys())}")
+    
+        for area in image_areas_sorted:
+            area_type = area['type']
+            header_text = area.get('header_text', '').lower()
+            
+            print(f"Processing area: {area_type} at {area['position']}")
+        
+            matching_image = None
+            matching_key = None
+        
+            # Find matching image based on area type and header text
+            for img_key, img_data in uploaded_images.items():
+                if img_key in used_images:
+                    continue
+                
+                img_key_lower = img_key.lower()
+            
+                # Enhanced matching logic with better pattern matching
+                type_match = False
+                if area_type == 'primary':
+                    type_match = any(keyword in img_key_lower for keyword in ['primary', 'sheet1'])
+                elif area_type == 'secondary':
+                    type_match = any(keyword in img_key_lower for keyword in ['secondary', 'sheet2', 'sec'])
+                elif area_type == 'current':
+                    type_match = any(keyword in img_key_lower for keyword in ['current', 'sheet3', 'existing'])
+                elif area_type == 'label':
+                    type_match = any(keyword in img_key_lower for keyword in ['label', 'sheet4'])
+                
+                if type_match:
+                    matching_image = img_data
+                    matching_key = img_key
+                    print(f"Matched {area_type} with image: {img_key}")
+                    break
+            
+            # Fallback: assign images in order if no specific match
+            if not matching_image:
+                for img_key, img_data in uploaded_images.items():
+                    if img_key not in used_images:
+                        matching_image = img_data
+                        matching_key = img_key
+                        print(f"Fallback match for {area_type}: {img_key}")
+                        break
+            
+            if matching_image and matching_key:
+                try:
+                    # Create temporary image file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                        image_bytes = base64.b64decode(matching_image['data'])
+                        tmp_img.write(image_bytes)
+                        tmp_img_path = tmp_img.name
+                    
+                    # Create openpyxl image object
+                    img = OpenpyxlImage(tmp_img_path)
+                
+                    # Set image size in CM (converted to pixels)
+                    # Excel uses 96 DPI, so 1 cm = 37.795 pixels
+                    cm_to_pixels = 37.795
+                    
+                    if area_type == 'current':
+                        # Current packaging: 8.3 x 8.3 cm
+                        width_cm = 8.3
+                        height_cm = 8.3
+                    else:
+                        # Primary, secondary, label: 4.3 x 4.3 cm
+                        width_cm = 4.3
+                        height_cm = 4.3
+                    
+                    # Convert CM to pixels and set image size
+                    img.width = int(width_cm * cm_to_pixels)
+                    img.height = int(height_cm * cm_to_pixels)
+                    
+                    # Position image below the column header
+                    cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
+                    
+                    # Add image to worksheet
+                    worksheet.add_image(img, cell_coord)
+                
+                    temp_image_paths.append(tmp_img_path)
+                    used_images.add(matching_key)
+                    added_images += 1
+                
+                    print(f"✅ Added {area_type} image at {cell_coord} with size {width_cm}x{height_cm} cm ({img.width}x{img.height} pixels)")
+                    
+                except Exception as e:
+                    print(f"❌ Could not add {area_type} image to {area['position']}: {e}")
+                    st.warning(f"Could not add {area_type} image to {area['position']}: {e}")
+                    continue
+            else:
+                print(f"⚠️ No matching image found for {area_type} at {area['position']}")
+        
+        print(f"Total images added: {added_images}")
+        return added_images, temp_image_paths
+        
+    except Exception as e:
+        st.error(f"Error adding images to template: {e}")
+        print(f"Error in add_images_to_template: {e}")
+        return 0, []
+
+
+def fill_template_with_data_and_images_updated(self, template_file, mapping_results, data_df, uploaded_images=None):
+    """Updated method to fill template with mapped data and images"""
+    try:
+        workbook = openpyxl.load_workbook(template_file)
+        worksheet = workbook.active
+        
+        filled_count = 0
+        images_added = 0
+        temp_image_paths = []
+        
+        # Fill data fields
+        for coord, mapping in mapping_results.items():
+            try:
+                if mapping['data_column'] is not None and mapping['is_mappable']:
+                    field_info = mapping['field_info']
+                    
+                    target_cell = self.find_data_cell_for_label(worksheet, field_info)
+                    
+                    if target_cell and len(data_df) > 0:
+                        data_value = data_df.iloc[0][mapping['data_column']]
+                        
+                        cell_obj = worksheet[target_cell]
+                        if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
+                            for merged_range in worksheet.merged_cells.ranges:
+                                if target_cell in merged_range:
+                                    anchor_cell = merged_range.start_cell
+                                    anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
+                                    break
+                        else:
+                            cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
+                        filled_count += 1
+                        
+            except Exception as e:
+                st.error(f"Error filling mapping {coord}: {e}")
+                continue
+        
+        # Add images if provided
+        if uploaded_images:
+            # First, identify image upload areas using the improved method
+            _, image_areas = self.find_template_fields_with_context_and_images(template_file)
+            
+            # Use the improved ImageExtractor method for adding images
+            images_added, temp_image_paths = self.image_extractor.add_images_to_template(
+                worksheet, uploaded_images, image_areas
+            )
+            
+        return workbook, filled_count, images_added, temp_image_paths
+        
+    except Exception as e:
+        st.error(f"Error filling template: {e}")
+        return None, 0, 0, []
+        
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
         self.similarity_threshold = 0.3
