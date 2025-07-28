@@ -312,20 +312,18 @@ class ImageExtractor:
                         img = OpenpyxlImage(tmp_img_path)
                     
                         # Set image size based on type
-                        cm_to_pixels = 37.795  # Excel 96 DPI conversion
-                        
-                        if area_type == 'current':
-                            width_cm = 8.3
-                            height_cm = 8.3
+                        width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
+                        img.width = int(width_cm * 37.8)   # Excel standard DPI
+                        img.height = int(height_cm * 37.8)
+                        # 📌 Hardcoded positions
+                        if area_type == 'primary':
+                            cell_coord = 'A44'
+                        elif area_type == 'secondary':
+                            cell_coord = 'D44'
+                        elif area_type == 'label':
+                            cell_coord = 'M44'
                         else:
-                            width_cm = 4.3
-                            height_cm = 4.3
-                        
-                        img.width = int(width_cm * cm_to_pixels)
-                        img.height = int(height_cm * cm_to_pixels)
-                        
-                        # Position image in the designated cell
-                        cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
+                            cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
                         
                         # Add image to worksheet
                         worksheet.add_image(img, cell_coord)
