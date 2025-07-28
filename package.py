@@ -153,33 +153,29 @@ class ImageExtractor:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
             image_hashes = set()  # Track image hashes to avoid duplicates
-            
             for sheet_name in workbook.sheetnames:
                 worksheet = workbook[sheet_name]
                 print(f"Processing sheet: {sheet_name}")
-                
+
                 if hasattr(worksheet, '_images') and worksheet._images:
                     print(f"Found {len(worksheet._images)} images in {sheet_name}")
-                    
+
                     for idx, img in enumerate(worksheet._images):
                         try:
                             # Get image data
                             image_data = img._data()
-                            
+
                             # Create hash of image data to detect duplicates
-                            import hashlib
                             image_hash = hashlib.md5(image_data).hexdigest()
-                            
-                            # Skip if we've already processed this image
+
                             if image_hash in image_hashes:
                                 print(f"Skipping duplicate image in {sheet_name}")
                                 continue
-                            
                             image_hashes.add(image_hash)
-                            
+
                             # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
-                        
+
                             # Get image position
                             anchor = img.anchor
                             if hasattr(anchor, '_from') and anchor._from:
@@ -188,26 +184,25 @@ class ImageExtractor:
                                 position = f"{get_column_letter(col + 1)}{row + 1}"
                             else:
                                 position = f"Image_{idx + 1}"
-                            
+
                             # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
-                        
-                            # Create descriptive key based on sheet name and content
-                            if any(word in sheet_name.lower() for word in ['sheet1', 'primary', 'internal']):
+
+                            # Classify image type from sheet name
+                            sheet_name_lc = sheet_name.lower()
+                            if any(word in sheet_name_lc for word in ['primary', 'sheet1', 'internal']):
                                 image_type = 'primary'
-                            elif 'sheet2' in sheet_name.lower() or 'secondary' in sheet_name.lower():
+                            elif any(word in sheet_name_lc for word in ['secondary', 'sheet2', 'external']):
                                 image_type = 'secondary'
-                            elif 'sheet3' in sheet_name.lower() or 'current' in sheet_name.lower():
+                            elif any(word in sheet_name_lc for word in ['current', 'sheet3', 'existing']):
                                 image_type = 'current'
-                            elif 'sheet4' in sheet_name.lower() or 'label' in sheet_name.lower():
+                            elif any(word in sheet_name_lc for word in ['label', 'sheet4']):
                                 image_type = 'label'
                             else:
                                 image_type = f'image_{len(images) + 1}'
-                            
                             image_key = f"{image_type}_{sheet_name}_{position}"
-                        
                             images[image_key] = {
                                 'data': img_str,
                                 'format': 'PNG',
@@ -218,20 +213,16 @@ class ImageExtractor:
                                 'type': image_type,
                                 'hash': image_hash
                             }
-                            
+
                             print(f"Extracted unique image: {image_key} at position {position}")
-                            
                         except Exception as e:
                             print(f"Error extracting image {idx} from {sheet_name}: {e}")
                             continue
                 else:
                     print(f"No images found in sheet: {sheet_name}")
-            
             workbook.close()
-            
             print(f"Total unique extracted images: {len(images)}")
             return {'all_sheets': images}
-            
         except Exception as e:
             st.error(f"Error extracting images: {e}")
             print(f"Error in extract_images_from_excel: {e}")
