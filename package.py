@@ -196,14 +196,14 @@ class ImageExtractor:
                             # Create descriptive key based on sheet name and content
                             if any(word in sheet_name.lower() for word in ['sheet1', 'primary', 'internal']):
                                 image_type = 'primary'
-                            elif 'sheet2' in sheet_name.lower() or 'secondary' in sheet_name.lower():
+                            elif any(word in sheet_name.lower() for word in ['sheet2', 'secondary', 'sec']):
                                 image_type = 'secondary'
-                            elif 'sheet3' in sheet_name.lower() or 'current' in sheet_name.lower():
+                            elif any(word in sheet_name.lower() for word in ['sheet3', 'current', 'existing']):
                                 image_type = 'current'
-                            elif 'sheet4' in sheet_name.lower() or 'label' in sheet_name.lower():
+                            elif any(word in sheet_name.lower() for word in ['sheet4', 'label', 'labels']):
                                 image_type = 'label'
                             else:
-                                image_type = f'image_{len(images) + 1}'
+                                image_type = f"image_{len(images) + 1}"
                             
                             image_key = f"{image_type}_{sheet_name}_{position}"
                         
