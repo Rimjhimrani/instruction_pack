@@ -237,95 +237,70 @@ class ImageExtractor:
             return {}
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to correct cell ranges based on type"""
+        """Force-place images by type in fixed cell ranges (in cm size)."""
         try:
+            from collections import defaultdict
             added_images = 0
             temp_image_paths = []
             used_images = set()
-
-            # Define image positions per type
-            placement_map = {
-                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C
+            # Define target grid for each type
+            grid_positions = {
+                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C rows 44–51
                 'secondary': [(col, row) for col in range(4, 11) for row in range(44, 52)],  # D–K
                 'label': [(col, row) for col in range(13, 18) for row in range(44, 52)],     # M–R
-                'current': []  # Current uses header row from template
             }
-
-            placement_index = {'primary': 0, 'secondary': 0, 'label': 0}
-
-            print(f"Processing {len(image_areas)} image areas")
-            print(f"Available uploaded images: {list(uploaded_images.keys())}")
-
-            for area in image_areas:
-                area_type = area['type']
-                header_text = area.get('header_text', '').lower()
-
-                matching_image = None
-                matching_key = None
-
-                # Try to find image for this type
-                for img_key, img_data in uploaded_images.items():
+            position_index = defaultdict(int)
+            # Group images by type
+            grouped_images = defaultdict(list)
+            for key, img in uploaded_images.items():
+                grouped_images[img.get('type', '').lower()].append((key, img))
+            # Place grouped images in fixed positions
+            for img_type, images in grouped_images.items():
+                if img_type not in grid_positions and img_type != 'current':
+                    print(f"⚠️ Skipping unsupported type: {img_type}")
+                    continue
+                for img_key, img_data in images:
                     if img_key in used_images:
                         continue
-                    img_type = img_data.get('type', '').lower()
-                    if img_type == area_type:
-                        matching_image = img_data
-                        matching_key = img_key
-                        break
-                # Fallback if no match
-                if not matching_image:
-                    for img_key, img_data in uploaded_images.items():
-                        if img_key not in used_images:
-                            matching_image = img_data
-                            matching_key = img_key
-                            break
-                if matching_image and matching_key:
                     try:
-                        # Temp image file
+                        # Prepare image
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                            image_bytes = base64.b64decode(matching_image['data'])
-                            tmp_img.write(image_bytes)
+                            tmp_img.write(base64.b64decode(img_data['data']))
                             tmp_img_path = tmp_img.name
                         img = OpenpyxlImage(tmp_img_path)
 
-                        # Size in cm (converted to pixels)
-                        width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
+                        width_cm, height_cm = (8.3, 8.3) if img_type == 'current' else (4.3, 4.3)
                         img.width = int(width_cm * 37.8)
                         img.height = int(height_cm * 37.8)
-
-                        # Decide position
-                        if area_type in placement_map and area_type != 'current':
-                            positions = placement_map[area_type]
-                            index = placement_index[area_type]
-                            if index < len(positions):
-                                col, row = positions[index]
-                                placement_index[area_type] += 1
-                                cell_coord = f"{get_column_letter(col)}{row}"
-                            else:
-                                print(f"No more space for {area_type} images.")
+                        if img_type == 'current':
+                            # Use image_areas for current packaging
+                            matched_area = next((area for area in image_areas if area['type'] == 'current' and area['column'] not in [1, 4, 13]), None)
+                            if not matched_area:
+                                print(f"⚠️ No placement found for current image: {img_key}")
                                 continue
+                            cell_coord = f"{get_column_letter(matched_area['column'])}{matched_area['row']}"
                         else:
-                            # current packaging — use dynamic header-based row
-                            col = area['column']
-                            row = area['row']
+                            pos_list = grid_positions[img_type]
+                            index = position_index[img_type]
+                            if index >= len(pos_list):
+                                print(f"❌ No space left for {img_type} images.")
+                                continue
+                            col, row = pos_list[index]
                             cell_coord = f"{get_column_letter(col)}{row}"
-                            
+                            position_index[img_type] += 1
                         img.anchor = cell_coord
                         worksheet.add_image(img)
+                        used_images.add(img_key)
                         temp_image_paths.append(tmp_img_path)
-                        used_images.add(matching_key)
                         added_images += 1
-
-                        print(f"✅ Added {area_type} image at {cell_coord}")
+                        print(f"✅ Placed {img_type} image at {cell_coord}")
                     except Exception as e:
-                        print(f"❌ Error placing {area_type} image: {e}")
-                        continue
-                else:
-                    print(f"⚠️ No match found for {area_type} image area at {area['position']}")
-            print(f"✅ Total images added: {added_images}")
+                        print(f"❌ Failed placing {img_type} image {img_key}: {e}")
+            print(f"🎯 Total images added: {added_images}")
             return added_images, temp_image_paths
+        
         except Exception as e:
-            print(f"❌ Error in add_images_to_template: {e}")
+            print(f"💥 Error in add_images_to_template: {e}")
             return 0, []
 
     def process_extracted_images_for_template(self, extracted_images):
