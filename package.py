@@ -102,16 +102,17 @@ class ImageExtractor:
                                 if keyword in cell_text:
                                     upload_areas.append({
                                         'position': cell.coordinate,
-                                        'row': row_num + 1,  # Position below the header
+                                        'row': row_num + 1,
                                         'column': col_num,
                                         'text': cell.value,
-                                        'type': category,
+                                        'type': category
                                         'header_text': cell_text
                                     })
-                                    break
+                                    break  # Exit keyword loop
                             else:
                                 continue
-                            break
+                            break  # ✅ Exit category loop to prevent multiple matches per column
+
             return upload_areas
         except Exception as e:
             st.error(f"Error identifying image upload areas: {e}")
