@@ -105,7 +105,7 @@ class ImageExtractor:
                                         'row': row_num + 1,
                                         'column': col_num,
                                         'text': cell.value,
-                                        'type': category
+                                        'type': category,
                                         'header_text': cell_text
                                     })
                                     break  # Exit keyword loop
