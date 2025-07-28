@@ -75,12 +75,12 @@ except ImportError as e:
 
 class ImageExtractor:
     """Handles image extraction from Excel files"""
-     
+    
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
     def extract_images_from_excel(self, excel_file_path):
-        """Extract all images from Excel file with better positioning and duplicate prevention"""
+        """Extract all images from Excel file"""
         try:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
@@ -91,79 +91,34 @@ class ImageExtractor:
                 
                 # Extract images from worksheet
                 if hasattr(worksheet, '_images'):
-                    processed_positions = set()  # Track processed positions to avoid duplicates
-                    processed_images = set()     # Track processed image data to avoid duplicates
-                    
                     for idx, img in enumerate(worksheet._images):
                         try:
                             # Get image data
                             image_data = img._data()
                             
-                            # Create a hash of image data to detect duplicates
-                            image_hash = hashlib.md5(image_data).hexdigest()
-                            if image_hash in processed_images:
-                                print(f"Skipping duplicate image {idx} (hash: {image_hash[:8]})")
-                                continue
-                            
-                            processed_images.add(image_hash)
-                            
                             # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
                             
-                            # Get more accurate image position
+                            # Get image position (approximate)
                             anchor = img.anchor
-                            position_key = None
-                            col = 0
-                            row = 0
-                            
-                            # Better anchor position detection
-                            if hasattr(anchor, '_from') and anchor._from:
+                            if hasattr(anchor, '_from'):
                                 col = anchor._from.col
                                 row = anchor._from.row
-                                position_key = f"{get_column_letter(col + 1)}{row + 1}"
-                            elif hasattr(anchor, 'col') and hasattr(anchor, 'row'):
-                                col = anchor.col
-                                row = anchor.row
-                                position_key = f"{get_column_letter(col + 1)}{row + 1}"
+                                position = f"{get_column_letter(col + 1)}{row + 1}"
                             else:
-                                # Use a unique identifier for orphaned images
-                                position_key = f"Image_{len(sheet_images) + 1}"
-                                print(f"Warning: Image {idx} has no clear position, using {position_key}")
-                            
-                            # Skip if we've already processed this exact position
-                            if position_key in processed_positions:
-                                # Create a unique position by adding suffix
-                                original_key = position_key
-                                counter = 1
-                                while position_key in processed_positions:
-                                    position_key = f"{original_key}_dup{counter}"
-                                    counter += 1
-                                print(f"Position conflict resolved: {original_key} -> {position_key}")
-                            
-                            processed_positions.add(position_key)
-                            
-                            # Find the most relevant column header for better context
-                            column_context = self.find_column_header_context(
-                                worksheet, col, row
-                            )
+                                position = f"Image_{idx + 1}"
                             
                             # Convert to base64 for storage
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
                             
-                            sheet_images[position_key] = {
+                            sheet_images[position] = {
                                 'data': img_str,
                                 'format': 'PNG',
                                 'size': pil_image.size,
-                                'position': position_key,
-                                'column_context': column_context,
-                                'original_col': col,
-                                'original_row': row,
-                                'image_hash': image_hash[:8]  # For debugging
+                                'position': position
                             }
-                            
-                            print(f"Extracted image: {position_key} (col:{col}, row:{row}) - Context: {column_context}")
                             
                         except Exception as e:
                             print(f"Error extracting image {idx}: {e}")
@@ -171,7 +126,6 @@ class ImageExtractor:
                 
                 if sheet_images:
                     images[sheet_name] = sheet_images
-                    print(f"Sheet '{sheet_name}': Found {len(sheet_images)} unique images")
             
             workbook.close()
             return images
@@ -180,417 +134,45 @@ class ImageExtractor:
             st.error(f"Error extracting images: {e}")
             return {}
     
-    def find_column_header_context(self, worksheet, col, row, search_range=15):
-        """Find the column header that best describes this image position with improved logic"""
-        try:
-            # Primary search: Look upwards in the same column
-            for search_row in range(max(1, row - search_range), row + 1):
-                try:
-                    cell = worksheet.cell(row=search_row, column=col + 1)  # +1 because openpyxl is 1-indexed
-                    if cell.value:
-                        cell_text = str(cell.value).strip().lower()
-                        # Check if this looks like a column header for images
-                        image_keywords = [
-                            'image', 'photo', 'picture', 'upload', 'packaging',
-                            'current', 'primary', 'secondary', 'reference'
-                        ]
-                        if any(keyword in cell_text for keyword in image_keywords):
-                            return cell_text
-                except Exception:
-                    continue
-            
-            # Secondary search: Look in nearby columns for headers
-            for col_offset in range(-2, 3):  # Check 2 columns left and right
-                target_col = col + col_offset + 1  # +1 for openpyxl indexing
-                if target_col > 0 and target_col <= worksheet.max_column:
-                    for search_row in range(max(1, row - search_range), row + 1):
-                        try:
-                            cell = worksheet.cell(row=search_row, column=target_col)
-                            if cell.value:
-                                cell_text = str(cell.value).strip().lower()
-                                image_keywords = [
-                                    'image', 'photo', 'picture', 'upload', 'packaging',
-                                    'current', 'primary', 'secondary', 'reference'
-                                ]
-                                if any(keyword in cell_text for keyword in image_keywords):
-                                    return cell_text
-                        except Exception:
-                            continue
-            
-            # Tertiary search: Look for any non-empty cell above in same column
-            for search_row in range(max(1, row - search_range), row + 1):
-                try:
-                    cell = worksheet.cell(row=search_row, column=col + 1)
-                    if cell.value:
-                        cell_text = str(cell.value).strip()
-                        if cell_text and len(cell_text) > 0:
-                            return cell_text.lower()
-                except Exception:
-                    continue
-            
-            return f"column_{col + 1}"
-            
-        except Exception as e:
-            print(f"Error finding column header context: {e}")
-            return f"column_{col + 1}"
-    
-    def identify_image_upload_areas(self, worksheet):
-        """Identify areas in template designated for image uploads with better accuracy"""
+    def identify_image_upload_areas_precise(self, worksheet):
+        """Identify precise image upload positions based on column headers"""
         upload_areas = []
-        processed_cells = set()
         
         try:
-            # Enhanced image keywords for better matching
-            image_keywords = [
-                'upload image', 'image', 'photo', 'picture', 'upload',
-                'attach image', 'insert image', 'current packaging',
-                'primary packaging', 'secondary packaging', 'reference image',
-                'current', 'primary', 'secondary', 'packaging'
-            ]
+            # Look for specific column headers and their positions
+            header_patterns = {
+                'primary_packaging': ['primary packaging', 'primary', 'internal packaging'],
+                'secondary_packaging': ['secondary packaging', 'secondary', 'outer packaging', 'external packaging'],
+                'current_packaging': ['current packaging', 'existing packaging', 'current']
+            }
             
-            for row in worksheet.iter_rows():
-                for cell in row:
-                    if cell.coordinate in processed_cells:
-                        continue
-                        
+            # Search for headers in first few rows
+            for row_idx in range(1, min(10, worksheet.max_row + 1)):
+                for col_idx in range(1, worksheet.max_column + 1):
+                    cell = worksheet.cell(row=row_idx, column=col_idx)
                     if cell.value:
                         cell_text = str(cell.value).lower().strip()
                         
-                        # Check for image-related keywords
-                        is_image_area = False
-                        matched_keyword = None
-                        
-                        for keyword in image_keywords:
-                            if keyword in cell_text:
-                                is_image_area = True
-                                matched_keyword = keyword
-                                break
-                        
-                        if is_image_area:
-                            # Find the best position for image placement
-                            image_position = self.find_image_placement_position(
-                                worksheet, cell.row, cell.column
-                            )
-                            
-                            area_type = self.classify_image_area(cell_text)
-                            
-                            upload_areas.append({
-                                'position': cell.coordinate,
-                                'image_position': image_position,
-                                'row': image_position['row'],
-                                'column': image_position['column'],
-                                'text': cell.value,
-                                'type': area_type,
-                                'header_context': cell_text,
-                                'matched_keyword': matched_keyword
-                            })
-                            
-                            processed_cells.add(cell.coordinate)
-                            print(f"Found image area: {cell.coordinate} -> {area_type} (keyword: {matched_keyword})")
+                        for area_type, patterns in header_patterns.items():
+                            for pattern in patterns:
+                                if pattern in cell_text:
+                                    # Found a header, place image below it
+                                    image_row = row_idx + 1
+                                    upload_areas.append({
+                                        'type': area_type,
+                                        'position': f"{get_column_letter(col_idx)}{image_row}",
+                                        'row': image_row,
+                                        'column': col_idx,
+                                        'header_text': cell.value,
+                                        'header_position': cell.coordinate
+                                    })
+                                    break
             
-            print(f"Total image upload areas found: {len(upload_areas)}")
             return upload_areas
             
         except Exception as e:
             st.error(f"Error identifying image upload areas: {e}")
             return []
-    
-    def find_image_placement_position(self, worksheet, label_row, label_col):
-        """Find the best position to place an image near a label"""
-        try:
-            # Strategy 1: Look for empty cells to the right (most common pattern)
-            for col_offset in range(1, 6):
-                target_col = label_col + col_offset
-                if target_col <= worksheet.max_column:
-                    cell = worksheet.cell(row=label_row, column=target_col)
-                    if not cell.value or str(cell.value).strip() == "":
-                        return {'row': label_row, 'column': target_col}
-            
-            # Strategy 2: Look for empty cells below
-            for row_offset in range(1, 4):
-                target_row = label_row + row_offset
-                if target_row <= worksheet.max_row:
-                    cell = worksheet.cell(row=target_row, column=label_col)
-                    if not cell.value or str(cell.value).strip() == "":
-                        return {'row': target_row, 'column': label_col}
-            
-            # Strategy 3: Look diagonally (down-right)
-            for offset in range(1, 3):
-                target_row = label_row + offset
-                target_col = label_col + offset
-                if (target_row <= worksheet.max_row and target_col <= worksheet.max_column):
-                    cell = worksheet.cell(row=target_row, column=target_col)
-                    if not cell.value or str(cell.value).strip() == "":
-                        return {'row': target_row, 'column': target_col}
-            
-            # Strategy 4: Use the original label position as fallback
-            return {'row': label_row, 'column': label_col}
-            
-        except Exception as e:
-            print(f"Error finding image placement position: {e}")
-            return {'row': label_row, 'column': label_col}
-    
-    def classify_image_area(self, text):
-        """Classify the type of image area based on text with improved accuracy"""
-        text = text.lower()
-        
-        # More specific classification rules
-        if 'current' in text and 'packaging' in text:
-            return 'current_packaging'
-        elif 'primary' in text and 'packaging' in text:
-            return 'primary_packaging'
-        elif 'secondary' in text and 'packaging' in text:
-            return 'secondary_packaging'
-        elif 'reference' in text and 'image' in text:
-            return 'reference'
-        elif 'primary' in text:
-            return 'primary_packaging'
-        elif 'secondary' in text:
-            return 'secondary_packaging'
-        elif 'current' in text:
-            return 'current_packaging'
-        elif 'packaging' in text:
-            return 'general_packaging'
-        else:
-            return 'general'
-
-
-def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-    """Add uploaded images to template in designated areas with improved matching"""
-    try:
-        added_images = 0
-        temp_image_paths = []
-        used_images = set()
-        
-        print(f"Debug: Starting image placement with {len(image_areas)} areas and {len(uploaded_images)} images")
-        
-        # Create enhanced mapping between image contexts and uploaded images
-        image_context_map = {}
-        for label, img_data in uploaded_images.items():
-            context = img_data.get('column_context', label.lower())
-            image_context_map[context] = {
-                'data': img_data,
-                'label': label,
-                'used': False
-            }
-            print(f"Image available: {label} -> Context: {context}")
-        
-        # Sort image areas by type for better matching priority
-        sorted_areas = sorted(image_areas, key=lambda x: x['type'])
-        
-        for area in sorted_areas:
-            area_type = area['type']
-            label_text = area.get('text', '').lower()
-            header_context = area.get('header_context', '').lower()
-            matched_keyword = area.get('matched_keyword', '')
-            
-            print(f"Processing area: {area['position']} -> Type: {area_type}, Text: '{label_text}'")
-            
-            matching_image = None
-            best_match_score = 0
-            best_match_key = None
-            
-            # Enhanced matching algorithm
-            for img_key, img_data in uploaded_images.items():
-                if img_key in used_images:
-                    continue
-                
-                img_context = img_data.get('column_context', '').lower()
-                match_score = 0
-                
-                print(f"  Checking image: {img_key} -> Context: '{img_context}'")
-                
-                # Exact type match (highest priority)
-                if area_type != 'general':
-                    area_keywords = area_type.replace('_', ' ').split()
-                    for keyword in area_keywords:
-                        if keyword in img_context:
-                            match_score += 5
-                            print(f"    Keyword match: '{keyword}' (+5)")
-                
-                # Header context match
-                if header_context and img_context:
-                    if header_context in img_context or img_context in header_context:
-                        match_score += 3
-                        print(f"    Header context match (+3)")
-                
-                # Matched keyword from template
-                if matched_keyword and matched_keyword in img_context:
-                    match_score += 4
-                    print(f"    Template keyword match: '{matched_keyword}' (+4)")
-                
-                # Label text matching
-                if label_text and img_context:
-                    if label_text in img_context or img_context in label_text:
-                        match_score += 2
-                        print(f"    Label text match (+2)")
-                
-                # Position-based matching (if images are from similar positions)
-                img_position = img_data.get('position', '')
-                if img_position and area['position']:
-                    # Extract column letters for comparison
-                    area_col = ''.join(filter(str.isalpha, area['position']))
-                    img_col = ''.join(filter(str.isalpha, img_position))
-                    if area_col == img_col:
-                        match_score += 1
-                        print(f"    Position column match (+1)")
-                
-                print(f"    Total score: {match_score}")
-                
-                if match_score > best_match_score:
-                    best_match_score = match_score
-                    matching_image = img_data
-                    best_match_key = img_key
-            
-            # If no good match found with scoring, use fallback logic
-            if not matching_image or best_match_score == 0:
-                print(f"  No scored match found, trying fallback matching...")
-                
-                # Fallback: Simple keyword matching
-                for img_key, img_data in uploaded_images.items():
-                    if img_key not in used_images:
-                        img_context = img_data.get('column_context', '').lower()
-                        
-                        # Check for any relevant keywords
-                        relevant_keywords = ['primary', 'secondary', 'current', 'packaging', 'image']
-                        area_has_keywords = [kw for kw in relevant_keywords if kw in label_text]
-                        img_has_keywords = [kw for kw in relevant_keywords if kw in img_context]
-                        
-                        if area_has_keywords and img_has_keywords:
-                            common_keywords = set(area_has_keywords) & set(img_has_keywords)
-                            if common_keywords:
-                                matching_image = img_data
-                                best_match_key = img_key
-                                print(f"  Fallback match found: {img_key} (common keywords: {common_keywords})")
-                                break
-                
-                # Last resort: Use first available image
-                if not matching_image:
-                    for img_key, img_data in uploaded_images.items():
-                        if img_key not in used_images:
-                            matching_image = img_data
-                            best_match_key = img_key
-                            print(f"  Last resort: Using first available image {img_key}")
-                            break
-            
-            # Place the image if we found a match
-            if matching_image and best_match_key:
-                try:
-                    # Create temporary image file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                        image_bytes = base64.b64decode(matching_image['data'])
-                        tmp_img.write(image_bytes)
-                        tmp_img_path = tmp_img.name
-                    
-                    # Create openpyxl image object
-                    img = OpenpyxlImage(tmp_img_path)
-                    
-                    # Resize image to reasonable dimensions
-                    original_width, original_height = matching_image['size']
-                    max_width, max_height = 200, 150
-                    
-                    # Calculate scaling to maintain aspect ratio
-                    width_ratio = max_width / original_width
-                    height_ratio = max_height / original_height
-                    scale_ratio = min(width_ratio, height_ratio, 1.0)  # Don't upscale
-                    
-                    img.width = int(original_width * scale_ratio)
-                    img.height = int(original_height * scale_ratio)
-                    
-                    # Use the designated image position
-                    cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
-                    
-                    print(f"  Placing image {best_match_key} at {cell_coord} (size: {img.width}x{img.height})")
-                    
-                    # Add image to worksheet
-                    worksheet.add_image(img, cell_coord)
-                    
-                    temp_image_paths.append(tmp_img_path)
-                    used_images.add(best_match_key)
-                    added_images += 1
-                    
-                    print(f"  ✓ Successfully placed image {best_match_key} at {cell_coord}")
-                    
-                except Exception as e:
-                    st.warning(f"Could not add image to {area['position']}: {e}")
-                    print(f"  ✗ Error placing image: {e}")
-                    continue
-            else:
-                print(f"  ✗ No suitable image found for area {area['position']} ({area_type})")
-        
-        print(f"Image placement complete: {added_images} images added, {len(used_images)} images used")
-        return added_images, temp_image_paths
-        
-    except Exception as e:
-        st.error(f"Error adding images to template: {e}")
-        print(f"Error in add_images_to_template: {e}")
-        return 0, []
-
-
-def process_extracted_images_better(extracted_images, data_df):
-    """Process extracted images with better context mapping and duplicate prevention"""
-    processed_images = {}
-    
-    if extracted_images:
-        for sheet_name, sheet_images in extracted_images.items():
-            for position, img_data in sheet_images.items():
-                # Create better image keys based on context
-                column_context = img_data.get('column_context', '')
-                
-                # Try to match with data column headers more intelligently
-                best_column_match = None
-                best_match_score = 0
-                
-                if column_context:
-                    for col in data_df.columns:
-                        col_lower = col.lower().strip()
-                        context_lower = column_context.lower().strip()
-                        
-                        # Calculate match score
-                        match_score = 0
-                        
-                        # Exact match
-                        if context_lower == col_lower:
-                            match_score = 10
-                        # Substring match
-                        elif context_lower in col_lower or col_lower in context_lower:
-                            match_score = 7
-                        # Keyword match for packaging terms
-                        else:
-                            packaging_keywords = ['primary', 'secondary', 'current', 'packaging', 'image']
-                            context_keywords = set(kw for kw in packaging_keywords if kw in context_lower)
-                            col_keywords = set(kw for kw in packaging_keywords if kw in col_lower)
-                            
-                            if context_keywords and col_keywords:
-                                common_keywords = context_keywords & col_keywords
-                                if common_keywords:
-                                    match_score = len(common_keywords) * 2
-                        
-                        if match_score > best_match_score:
-                            best_match_score = match_score
-                            best_column_match = col
-                
-                # Use the best match or create a descriptive fallback key
-                if best_column_match:
-                    base_key = best_column_match
-                else:
-                    # Create a more descriptive key based on context
-                    if column_context and column_context != f"column_{img_data.get('original_col', 0) + 1}":
-                        base_key = column_context
-                    else:
-                        base_key = f"Image_{position}"
-                
-                # Ensure unique keys
-                image_key = base_key
-                counter = 1
-                while image_key in processed_images:
-                    image_key = f"{base_key}_{counter}"
-                    counter += 1
-                
-                processed_images[image_key] = img_data
-                print(f"Processed image: {position} -> {image_key} (context: {column_context})")
-    
-    return processed_images
 
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
@@ -882,8 +464,8 @@ class EnhancedTemplateMapperWithImages:
                     except Exception as e:
                         continue
             
-            # Find image upload areas
-            image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
+            # Find precise image upload areas
+            image_areas = self.image_extractor.identify_image_upload_areas_precise(worksheet)
             
             workbook.close()
             
@@ -1013,60 +595,89 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
     
-    def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template in designated areas"""
+    def add_images_to_template_precise(self, worksheet, uploaded_images, image_areas):
+        """Add uploaded images to template with precise positioning and sizing"""
         try:
             added_images = 0
             temp_image_paths = []
             used_images = set()
+            
+            # Process each image area
             for area in image_areas:
                 area_type = area['type']
-                label_text = area.get('text', '').lower()  # ✅ Define label_text here
-
+                position = area['position']
+                
+                # Find matching image for this area
                 matching_image = None
-
+                matching_label = None
+                
+                # First, try to find exact type match
                 for label, img_data in uploaded_images.items():
                     if label in used_images:
                         continue
                     label_lower = label.lower()
-                    if (
-                        area_type in label_lower
-                        or area_type.replace('_', ' ') in label_lower
-                        or 'primary' in label_lower and area_type == 'primary_packaging'
-                        or 'secondary' in label_lower and area_type == 'secondary_packaging'
-                        or 'current' in label_lower and area_type == 'current_packaging'
-                        or label_lower in label_text
-                        or label_text in label_lower
-                    ):
+                    
+                    # Check for exact type matches
+                    if area_type == 'primary_packaging' and 'primary' in label_lower:
                         matching_image = img_data
-                        used_images.add(label)
+                        matching_label = label
                         break
-                        
+                    elif area_type == 'secondary_packaging' and 'secondary' in label_lower:
+                        matching_image = img_data
+                        matching_label = label
+                        break
+                    elif area_type == 'current_packaging' and 'current' in label_lower:
+                        matching_image = img_data
+                        matching_label = label
+                        break
+                
+                # If no exact match, use any available image
                 if not matching_image:
                     for label, img_data in uploaded_images.items():
                         if label not in used_images:
                             matching_image = img_data
-                            used_images.add(label)
+                            matching_label = label
                             break
+                
+                # Add image if found
                 if matching_image:
                     try:
+                        # Create temporary image file
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
+                        
+                        # Create openpyxl image object
                         img = OpenpyxlImage(tmp_img_path)
-                        img.width = 250
-                        img.height = 150
-
-                        cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
-                        worksheet.add_image(img, cell_coord)
-
+                        
+                        # Set precise dimensions based on area type
+                        if area_type == 'current_packaging':
+                            # Current packaging: 8.3 cm x 8.3 cm
+                            img.width = int(8.3 * 28.35)  # Convert cm to points (1 cm ≈ 28.35 points)
+                            img.height = int(8.3 * 28.35)
+                        else:
+                            # Primary and Secondary packaging: 4.3 cm x 4.3 cm
+                            img.width = int(4.3 * 28.35)
+                            img.height = int(4.3 * 28.35)
+                        
+                        # Add image to the precise position
+                        worksheet.add_image(img, position)
+                        
                         temp_image_paths.append(tmp_img_path)
+                        used_images.add(matching_label)
                         added_images += 1
+                        
+                        st.success(f"✅ Added {area_type} image at {position}")
+                        
                     except Exception as e:
-                        st.warning(f"Could not add image to {area['position']}: {e}")
+                        st.warning(f"❌ Could not add {area_type} image to {position}: {e}")
                         continue
+                else:
+                    st.info(f"ℹ️ No matching image found for {area_type} at {position}")
+            
             return added_images, temp_image_paths
+            
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             return 0, []
@@ -1109,9 +720,9 @@ class EnhancedTemplateMapperWithImages:
             
             # Add images if provided
             if uploaded_images:
-                # First, identify image upload areas
+                # Find precise image upload areas
                 _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
+                images_added, temp_image_paths = self.add_images_to_template_precise(worksheet, uploaded_images, image_areas)
                 
             return workbook, filled_count, images_added, temp_image_paths
             
@@ -1128,6 +739,8 @@ if 'templates' not in st.session_state:
     st.session_state.templates = {}
 if 'enhanced_mapper' not in st.session_state:
     st.session_state.enhanced_mapper = EnhancedTemplateMapperWithImages()
+if 'saved_template_path' not in st.session_state:
+    st.session_state.saved_template_path = None
 
 # User management functions
 def hash_password(password):
@@ -1139,339 +752,683 @@ def verify_password(password, hashed):
 DEFAULT_USERS = {
     "admin": {
         "password": hash_password("admin123"),
-        "role": "admin",
-        "name": "Administrator"
+        "role": "admin"
     },
-    "user1": {
+    "user": {
         "password": hash_password("user123"),
-        "role": "user",
-        "name": "Regular User"
+        "role": "user"
     }
 }
 
 def authenticate_user(username, password):
     if username in DEFAULT_USERS:
-        if verify_password(password, DEFAULT_USERS[username]['password']):
-            return DEFAULT_USERS[username]['role'], DEFAULT_USERS[username]['name']
-    return None, None
+        if verify_password(password, DEFAULT_USERS[username]["password"]):
+            return DEFAULT_USERS[username]["role"]
+    return None
 
-def show_login():
-    st.title("🤖 Enhanced AI Template Mapper with Images")
-    st.markdown("### Advanced packaging template processing with image support")
+def login_interface():
+    st.title("🔐 AI Template Mapper Login")
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        with st.form("login_form"):
-            st.subheader("Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login", use_container_width=True)
-            
-            if submit:
-                role, name = authenticate_user(username, password)
+    with st.form("login_form"):
+        username = st.text_input("Username", placeholder="Enter username")
+        password = st.text_input("Password", type="password", placeholder="Enter password")
+        submit_button = st.form_submit_button("Login")
+        
+        if submit_button:
+            if username and password:
+                role = authenticate_user(username, password)
                 if role:
                     st.session_state.authenticated = True
                     st.session_state.user_role = role
                     st.session_state.username = username
-                    st.session_state.name = name
+                    st.success(f"Welcome {username}! Logged in as {role}")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials")
-        
-        st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
+                    st.error("Invalid username or password")
+            else:
+                st.warning("Please enter both username and password")
+    
+    with st.expander("Demo Credentials"):
+        st.info("**Admin:** username: `admin`, password: `admin123`")
+        st.info("**User:** username: `user`, password: `user123`")
 
-def show_main_app():
-    st.title("🤖 Enhanced AI Template Mapper with Images")
-    
-    # Header with user info
-    col1, col2, col3 = st.columns([2, 1, 1])
+def logout():
+    st.session_state.authenticated = False
+    st.session_state.user_role = None
+    st.session_state.username = None
+    st.rerun()
+
+def main_interface():
+    # Header with logout
+    col1, col2 = st.columns([6, 1])
     with col1:
-        st.markdown(f"Welcome, **{st.session_state.name}** ({st.session_state.user_role})")
-    with col3:
-        if st.button("Logout"):
-            st.session_state.authenticated = False
-            st.session_state.user_role = None
-            st.rerun()
+        st.title("🤖 AI Template Mapper - Enhanced with Images")
+        st.markdown("**Intelligent Excel template mapping with image support**")
+    with col2:
+        if st.button("Logout", type="secondary"):
+            logout()
     
-    st.markdown("---")
-    
-    # Sidebar for file uploads
+    # Sidebar
     with st.sidebar:
-        st.header("📁 File Upload")
+        st.header("📊 Dashboard")
+        st.info(f"👤 Logged in as: **{st.session_state.username}** ({st.session_state.user_role})")
         
-        # Template upload
-        st.subheader("Excel Template")
-        template_file = st.file_uploader(
-            "Upload Excel Template",
-            type=['xlsx', 'xls'],
-            help="Upload the Excel template file"
-        )
-        
-        # Data upload
-        st.subheader("Data File")
-        data_file = st.file_uploader(
-            "Upload Data File",
-            type=['xlsx', 'xls', 'csv'],
-            help="Upload the data file to map to template (images will be extracted from Excel files)"
-        )
-        
-        # Settings
-        st.subheader("⚙️ Settings")
+        st.header("⚙️ Settings")
         similarity_threshold = st.slider(
-            "Similarity Threshold",
-            min_value=0.1,
-            max_value=1.0,
-            value=0.3,
-            step=0.1,
+            "Similarity Threshold", 
+            min_value=0.1, 
+            max_value=0.9, 
+            value=0.3, 
+            step=0.05,
             help="Minimum similarity score for field matching"
         )
-        
         st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
+        
+        st.header("📈 Statistics")
+        if 'last_mapping_stats' in st.session_state:
+            stats = st.session_state.last_mapping_stats
+            st.metric("Fields Mapped", stats.get('mapped_fields', 0))
+            st.metric("Images Added", stats.get('images_added', 0))
+            st.metric("Success Rate", f"{stats.get('success_rate', 0):.1%}")
     
-    # Main content area
-    if template_file and data_file:
-        try:
-            # Extract images from data file (only if it's Excel)
-            extracted_images = {}
-            if data_file.name.endswith(('.xlsx', '.xls')):
-                # Create temporary file for data file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
-                    tmp_data.write(data_file.getvalue())
-                    data_path = tmp_data.name
-                
-                st.info("🔍 Extracting images from data file...")
-                with st.spinner("Extracting images from Excel file..."):
-                    extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
-                
-                # Clean up data file copy
+    # Main tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["🔧 Template Mapping", "📋 Template Analysis", "🖼️ Image Management", "📊 Batch Processing"])
+    
+    with tab1:
+        template_mapping_interface()
+    
+    with tab2:
+        template_analysis_interface()
+    
+    with tab3:
+        image_management_interface()
+    
+    with tab4:
+        if st.session_state.user_role == "admin":
+            batch_processing_interface()
+        else:
+            st.warning("🔒 Admin access required for batch processing")
+
+def template_mapping_interface():
+    st.header("🔧 Template Mapping")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📄 Upload Template")
+        template_file = st.file_uploader(
+            "Choose Excel template file",
+            type=['xlsx', 'xls'],
+            help="Upload your Excel template with fields to be mapped"
+        )
+        
+        if template_file:
+            st.success("✅ Template uploaded successfully!")
+            
+            # Preview template structure
+            with st.expander("🔍 Template Preview"):
                 try:
-                    os.unlink(data_path)
-                except:
-                    pass
+                    preview_df = pd.read_excel(template_file, nrows=10)
+                    st.dataframe(preview_df, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error previewing template: {e}")
+    
+    with col2:
+        st.subheader("📊 Upload Data")
+        data_file = st.file_uploader(
+            "Choose data file",
+            type=['xlsx', 'xls', 'csv'],
+            help="Upload your data file with values to map"
+        )
+        
+        if data_file:
+            st.success("✅ Data file uploaded successfully!")
             
-            # Read data file
-            if data_file.name.endswith('.csv'):
-                data_df = pd.read_csv(data_file)
-            else:
-                data_df = pd.read_excel(data_file)
-            
-            # Create temporary file for template
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
-                tmp_template.write(template_file.getvalue())
-                template_path = tmp_template.name
-            
-            # Process template and find fields
-            st.subheader("📋 Template Analysis")
-            
-            with st.spinner("Analyzing template fields and image areas..."):
-                template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
-            
-            if template_fields:
-                st.success(f"Found {len(template_fields)} mappable fields")
-                
-                # Show template fields
-                with st.expander("Template Fields Details", expanded=False):
-                    fields_df = pd.DataFrame([
-                        {
-                            'Position': coord,
-                            'Field': field['value'],
-                            'Section': field.get('section_context', 'Unknown'),
-                            'Row': field['row'],
-                            'Column': field['column']
-                        }
-                        for coord, field in template_fields.items()
-                    ])
-                    st.dataframe(fields_df, use_container_width=True)
-                
-                # Show image areas
-                if image_areas:
-                    st.info(f"Found {len(image_areas)} image upload areas in template")
-                    with st.expander("Image Upload Areas", expanded=False):
-                        image_df = pd.DataFrame(image_areas)
-                        st.dataframe(image_df, use_container_width=True)
-                
-                # Show extracted images from data file
-                if extracted_images:
-                    total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
-                    st.success(f"🖼️ Extracted {total_images} images from data file")
-                    
-                    with st.expander("Extracted Images from Data File", expanded=True):
-                        for sheet_name, sheet_images in extracted_images.items():
-                            if sheet_images:
-                                st.write(f"**Sheet: {sheet_name}**")
-                                cols = st.columns(min(3, len(sheet_images)))
-                                
-                                for idx, (position, img_data) in enumerate(sheet_images.items()):
-                                    with cols[idx % 3]:
-                                        st.write(f"Position: {position}")
-                                        # Display image thumbnail
-                                        img_bytes = base64.b64decode(img_data['data'])
-                                        st.image(img_bytes, width=150)
-                                        st.write(f"Size: {img_data['size']}")
-                else:
-                    if data_file.name.endswith(('.xlsx', '.xls')):
-                        st.info("No images found in the data file")
+            # Preview data
+            with st.expander("🔍 Data Preview"):
+                try:
+                    if data_file.name.endswith('.csv'):
+                        preview_df = pd.read_csv(data_file, nrows=10)
                     else:
-                        st.info("CSV files don't contain images. Use Excel files to include images.")
-                
-                # Data mapping
-                st.subheader("🔗 Field Mapping")
-                
-                with st.spinner("Mapping template fields to data columns..."):
-                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(
-                        template_fields, data_df
-                    )
-                
-                if mapping_results:
-                    # Show mapping results
-                    mapping_df = pd.DataFrame([
-                        {
-                            'Template Field': mapping['template_field'],
-                            'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
-                            'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
-                            'Section': mapping.get('section_context', 'Unknown'),
-                            'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
-                        }
-                        for mapping in mapping_results.values()
-                    ])
+                        preview_df = pd.read_excel(data_file, nrows=10)
+                    st.dataframe(preview_df, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error previewing data: {e}")
+    
+    # Image upload section
+    st.subheader("🖼️ Upload Images (Optional)")
+    uploaded_images = {}
+    
+    col_img1, col_img2, col_img3 = st.columns(3)
+    
+    with col_img1:
+        st.write("**Primary Packaging Image**")
+        primary_img = st.file_uploader(
+            "Primary packaging",
+            type=['png', 'jpg', 'jpeg'],
+            key="primary_img"
+        )
+        if primary_img:
+            # Convert to base64 for storage
+            img_bytes = primary_img.read()
+            img_b64 = base64.b64encode(img_bytes).decode()
+            uploaded_images["primary_packaging"] = {
+                'data': img_b64,
+                'format': primary_img.type.split('/')[-1].upper()
+            }
+            st.image(primary_img, caption="Primary Packaging", width=150)
+    
+    with col_img2:
+        st.write("**Secondary Packaging Image**")
+        secondary_img = st.file_uploader(
+            "Secondary packaging",
+            type=['png', 'jpg', 'jpeg'],
+            key="secondary_img"
+        )
+        if secondary_img:
+            img_bytes = secondary_img.read()
+            img_b64 = base64.b64encode(img_bytes).decode()
+            uploaded_images["secondary_packaging"] = {
+                'data': img_b64,
+                'format': secondary_img.type.split('/')[-1].upper()
+            }
+            st.image(secondary_img, caption="Secondary Packaging", width=150)
+    
+    with col_img3:
+        st.write("**Current Packaging Image**")
+        current_img = st.file_uploader(
+            "Current packaging",
+            type=['png', 'jpg', 'jpeg'],
+            key="current_img"
+        )
+        if current_img:
+            img_bytes = current_img.read()
+            img_b64 = base64.b64encode(img_bytes).decode()
+            uploaded_images["current_packaging"] = {
+                'data': img_b64,
+                'format': current_img.type.split('/')[-1].upper()
+            }
+            st.image(current_img, caption="Current Packaging", width=150)
+    
+    # Process mapping
+    if template_file and data_file:
+        if st.button("🚀 Process Mapping", type="primary"):
+            with st.spinner("Processing template mapping..."):
+                try:
+                    # Save uploaded files temporarily
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
+                        tmp_template.write(template_file.read())
+                        tmp_template_path = tmp_template.name
                     
-                    st.dataframe(mapping_df, use_container_width=True)
+                    # Read data
+                    if data_file.name.endswith('.csv'):
+                        data_df = pd.read_csv(data_file)
+                    else:
+                        data_df = pd.read_excel(data_file)
+                    
+                    # Find template fields and image areas
+                    template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(tmp_template_path)
+                    
+                    # Map data
+                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(template_fields, data_df)
+                    
+                    # Display mapping results
+                    st.subheader("📋 Mapping Results")
+                    
+                    mapping_df = []
+                    mapped_count = 0
+                    for coord, result in mapping_results.items():
+                        status = "✅ Mapped" if result['is_mappable'] else "❌ No Match"
+                        if result['is_mappable']:
+                            mapped_count += 1
+                        
+                        mapping_df.append({
+                            'Position': coord,
+                            'Template Field': result['template_field'],
+                            'Data Column': result['data_column'] or 'No match',
+                            'Similarity': f"{result['similarity']:.2f}" if result['similarity'] > 0 else "0.00",
+                            'Section': result['section_context'] or 'General',
+                            'Status': status
+                        })
+                    
+                    mapping_display_df = pd.DataFrame(mapping_df)
+                    st.dataframe(mapping_display_df, use_container_width=True)
                     
                     # Statistics
-                    mapped_count = sum(1 for m in mapping_results.values() if m['is_mappable'])
-                    total_count = len(mapping_results)
+                    total_fields = len(mapping_results)
+                    success_rate = mapped_count / total_fields if total_fields > 0 else 0
                     
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Total Fields", total_count)
-                    with col2:
+                    col_stat1, col_stat2, col_stat3 = st.columns(3)
+                    with col_stat1:
+                        st.metric("Total Fields", total_fields)
+                    with col_stat2:
                         st.metric("Mapped Fields", mapped_count)
-                    with col3:
-                        st.metric("Mapping Rate", f"{(mapped_count/total_count*100):.1f}%")
-                    with col4:
-                        images_count = sum(len(sheet_images) for sheet_images in extracted_images.values()) if extracted_images else 0
-                        st.metric("Images Found", images_count)
+                    with col_stat3:
+                        st.metric("Success Rate", f"{success_rate:.1%}")
                     
-                    # Fill template
-                    st.subheader("📝 Fill Template")
-                    
-                    if st.button("Generate Filled Template", type="primary", use_container_width=True):
-                        with st.spinner("Filling template with data and extracted images..."):
+                    # Generate filled template
+                    if st.button("📄 Generate Filled Template", type="secondary"):
+                        with st.spinner("Generating filled template..."):
                             try:
-                                # Convert extracted images to the format expected by fill_template_with_data_and_images
-                                processed_images = {}
-                                if extracted_images:
-                                    for sheet_name, sheet_images in extracted_images.items():
-                                        for position, img_data in sheet_images.items():
-                                            # Create a unique key for each image
-                                            image_key = f"{sheet_name}_{position}"
-                                            processed_images[image_key] = img_data
-                                
-                                workbook, filled_count, images_added, temp_image_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                                    template_path, mapping_results, data_df, processed_images
+                                filled_workbook, filled_count, images_added, temp_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
+                                    tmp_template_path, mapping_results, data_df, uploaded_images if uploaded_images else None
                                 )
                                 
-                                if workbook:
-                                    # Save filled template
-                                    output_buffer = io.BytesIO()
-                                    workbook.save(output_buffer)
-                                    for path in temp_image_paths:
-                                        try:
-                                            os.unlink(path)
-                                        except Exception as e:
-                                            st.warning(f"Failed to delete temp file {path}: {e}")
-                                    output_buffer.seek(0)
+                                if filled_workbook:
+                                    # Save to temporary file
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_output:
+                                        filled_workbook.save(tmp_output.name)
+                                        st.session_state.saved_template_path = tmp_output.name
                                     
-                                    # Success message
-                                    st.success(f"Template filled successfully!")
-                                    st.info(f"📊 Filled {filled_count} data fields")
-                                    if images_added > 0:
-                                        st.info(f"🖼️ Added {images_added} images from data file")
-                                    elif processed_images:
-                                        st.warning("Images were found but could not be placed in template areas")
+                                    # Store statistics
+                                    st.session_state.last_mapping_stats = {
+                                        'mapped_fields': filled_count,
+                                        'images_added': images_added,
+                                        'success_rate': success_rate
+                                    }
+                                    
+                                    st.success(f"✅ Template filled successfully! {filled_count} fields filled, {images_added} images added.")
                                     
                                     # Download button
-                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                    filename = f"filled_template_{timestamp}.xlsx"
+                                    with open(st.session_state.saved_template_path, 'rb') as file:
+                                        st.download_button(
+                                            label="📥 Download Filled Template",
+                                            data=file.read(),
+                                            file_name=f"filled_template_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        )
                                     
-                                    st.download_button(
-                                        label="📥 Download Filled Template",
-                                        data=output_buffer.getvalue(),
-                                        file_name=filename,
-                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                        use_container_width=True
-                                    )
-                                    
-                                    workbook.close()
-                                else:
-                                    st.error("Failed to fill template")
-                                    
+                                    # Clean up temporary image files
+                                    for temp_path in temp_paths:
+                                        try:
+                                            os.unlink(temp_path)
+                                        except:
+                                            pass
+                                
                             except Exception as e:
-                                st.error(f"Error filling template: {e}")
-                                st.exception(e)
+                                st.error(f"Error generating filled template: {e}")
+                    
+                    # Clean up temporary template file
+                    try:
+                        os.unlink(tmp_template_path)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    st.error(f"Error processing mapping: {e}")
+
+def template_analysis_interface():
+    st.header("📋 Template Analysis")
+    
+    uploaded_file = st.file_uploader(
+        "Upload Excel template for analysis",
+        type=['xlsx', 'xls'],
+        key="analysis_file"
+    )
+    
+    if uploaded_file:
+        try:
+            # Save temporarily
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_file_path = tmp_file.name
+            
+            # Analyze template
+            template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(tmp_file_path)
+            
+            # Display analysis results
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("🔍 Detected Fields")
                 
+                if template_fields:
+                    fields_df = []
+                    for coord, field in template_fields.items():
+                        fields_df.append({
+                            'Position': coord,
+                            'Field Name': field['value'],
+                            'Section': field.get('section_context', 'General'),
+                            'Row': field['row'],
+                            'Column': field['column'],
+                            'Merged': 'Yes' if field['merged_range'] else 'No'
+                        })
+                    
+                    fields_display_df = pd.DataFrame(fields_df)
+                    st.dataframe(fields_display_df, use_container_width=True)
+                    
+                    # Section breakdown
+                    st.subheader("📊 Section Breakdown")
+                    section_counts = fields_display_df['Section'].value_counts()
+                    st.bar_chart(section_counts)
                 else:
-                    st.warning("No mapping results generated")
+                    st.warning("No mappable fields detected in template")
             
-            else:
-                st.warning("No mappable fields found in template")
+            with col2:
+                st.subheader("🖼️ Image Upload Areas")
+                
+                if image_areas:
+                    image_df = []
+                    for area in image_areas:
+                        image_df.append({
+                            'Type': area['type'].replace('_', ' ').title(),
+                            'Position': area['position'],
+                            'Header Text': area.get('header_text', ''),
+                            'Header Position': area.get('header_position', '')
+                        })
+                    
+                    image_display_df = pd.DataFrame(image_df)
+                    st.dataframe(image_display_df, use_container_width=True)
+                    
+                    st.info(f"Found {len(image_areas)} image upload areas")
+                else:
+                    st.warning("No image upload areas detected")
+                
+                # Extract existing images
+                st.subheader("📷 Existing Images")
+                existing_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(tmp_file_path)
+                
+                if existing_images:
+                    for sheet_name, sheet_images in existing_images.items():
+                        st.write(f"**Sheet: {sheet_name}**")
+                        for pos, img_info in sheet_images.items():
+                            col_img1, col_img2 = st.columns([1, 2])
+                            with col_img1:
+                                # Display image
+                                img_data = base64.b64decode(img_info['data'])
+                                st.image(img_data, caption=f"Position: {pos}", width=100)
+                            with col_img2:
+                                st.write(f"**Position:** {pos}")
+                                st.write(f"**Size:** {img_info['size'][0]}x{img_info['size'][1]}")
+                                st.write(f"**Format:** {img_info['format']}")
+                else:
+                    st.info("No existing images found in template")
             
-            # Clean up temporary file
+            # Clean up
             try:
-                os.unlink(template_path)
+                os.unlink(tmp_file_path)
             except:
                 pass
                 
         except Exception as e:
-            st.error(f"Error processing files: {e}")
-            st.exception(e)
+            st.error(f"Error analyzing template: {e}")
+
+def image_management_interface():
+    st.header("🖼️ Image Management")
     
-    else:
-        st.info("👆 Please upload both an Excel template and a data file to begin")
+    st.subheader("📤 Bulk Image Upload")
+    
+    # Multiple image upload
+    uploaded_files = st.file_uploader(
+        "Upload multiple images",
+        type=['png', 'jpg', 'jpeg'],
+        accept_multiple_files=True,
+        help="Upload multiple images for batch processing"
+    )
+    
+    if uploaded_files:
+        st.success(f"✅ {len(uploaded_files)} images uploaded successfully!")
         
-        # Show demo information
-        st.markdown("### 🎯 Features")
+        # Display uploaded images
+        cols = st.columns(min(len(uploaded_files), 4))
+        for idx, uploaded_file in enumerate(uploaded_files):
+            with cols[idx % 4]:
+                st.image(uploaded_file, caption=uploaded_file.name, width=150)
+                
+                # Image info
+                img = Image.open(uploaded_file)
+                st.write(f"**Size:** {img.size[0]}x{img.size[1]}")
+                st.write(f"**Format:** {img.format}")
+                st.write(f"**Mode:** {img.mode}")
         
-        col1, col2 = st.columns(2)
+        # Image processing options
+        st.subheader("⚙️ Processing Options")
         
-        with col1:
-            st.markdown("""
-            **Template Processing:**
-            - 📋 Smart field detection
-            - 🎯 Section-aware mapping
-            - 🔄 Merged cell handling
-            - 📏 Packaging-specific patterns
-            """)
+        col_proc1, col_proc2 = st.columns(2)
+        
+        with col_proc1:
+            resize_images = st.checkbox("Resize images", value=True)
+            if resize_images:
+                resize_width = st.number_input("Width (px)", value=400, min_value=50, max_value=2000)
+                resize_height = st.number_input("Height (px)", value=400, min_value=50, max_value=2000)
+        
+        with col_proc2:
+            convert_format = st.selectbox("Convert to format", ["Keep original", "PNG", "JPEG"])
+            compress_quality = st.slider("JPEG Quality", 10, 100, 85) if convert_format == "JPEG" else None
+        
+        # Process images
+        if st.button("🔄 Process Images", type="primary"):
+            processed_images = {}
             
-        with col2:
-            st.markdown("""
-            **Image Processing:**
-            - 🖼️ Auto image extraction from Excel data files
-            - 📍 Smart image placement in templates
-            - 🎨 Format conversion and optimization
-            - 📦 Packaging image area detection
-            """)
-        
-        st.markdown("""
-        ### 📚 Supported Sections
-        - **Primary Packaging**: Internal packaging dimensions and specifications
-        - **Secondary Packaging**: Outer packaging details
-        - **Part Information**: Component specifications and measurements
-        
-        ### 🖼️ Image Processing
-        - Images are automatically extracted from Excel data files
-        - Supports multiple image formats (PNG, JPG, GIF, BMP)
-        - Images are intelligently placed in designated template areas
-        - No manual image upload required - everything is automated!
-        """)
-        
+            for uploaded_file in uploaded_files:
+                try:
+                    img = Image.open(uploaded_file)
+                    
+                    # Resize if requested
+                    if resize_images:
+                        img = img.resize((resize_width, resize_height), Image.Resampling.LANCZOS)
+                    
+                    # Convert format if requested
+                    if convert_format != "Keep original":
+                        if convert_format == "JPEG" and img.mode in ("RGBA", "P"):
+                            img = img.convert("RGB")
+                    
+                    # Save to base64
+                    buffered = io.BytesIO()
+                    save_format = convert_format if convert_format != "Keep original" else img.format
+                    save_kwargs = {}
+                    
+                    if save_format == "JPEG" and compress_quality:
+                        save_kwargs['quality'] = compress_quality
+                    
+                    img.save(buffered, format=save_format, **save_kwargs)
+                    img_b64 = base64.b64encode(buffered.getvalue()).decode()
+                    
+                    processed_images[uploaded_file.name] = {
+                        'data': img_b64,
+                        'format': save_format,
+                        'size': img.size
+                    }
+                    
+                except Exception as e:
+                    st.error(f"Error processing {uploaded_file.name}: {e}")
+            
+            st.success(f"✅ Processed {len(processed_images)} images successfully!")
+            
+            # Store in session state for use in mapping
+            st.session_state.processed_images = processed_images
+
+def batch_processing_interface():
+    st.header("📊 Batch Processing")
+    st.info("🔒 Admin feature - Process multiple templates at once")
+    
+    # Template upload
+    st.subheader("📄 Upload Templates")
+    template_files = st.file_uploader(
+        "Upload multiple template files",
+        type=['xlsx', 'xls'],
+        accept_multiple_files=True,
+        key="batch_templates"
+    )
+    
+    # Data upload
+    st.subheader("📊 Upload Data Files")
+    data_files = st.file_uploader(
+        "Upload corresponding data files",
+        type=['xlsx', 'xls', 'csv'],
+        accept_multiple_files=True,
+        key="batch_data"
+    )
+    
+    if template_files and data_files:
+        if len(template_files) != len(data_files):
+            st.warning("⚠️ Number of template files must match number of data files")
+        else:
+            st.success(f"✅ Ready to process {len(template_files)} template-data pairs")
+            
+            # Processing options
+            st.subheader("⚙️ Batch Processing Options")
+            
+            col_batch1, col_batch2 = st.columns(2)
+            
+            with col_batch1:
+                output_format = st.selectbox("Output format", ["Individual Files", "ZIP Archive"])
+                include_summary = st.checkbox("Include processing summary", value=True)
+            
+            with col_batch2:
+                auto_download = st.checkbox("Auto-download results", value=True)
+                parallel_processing = st.checkbox("Parallel processing", value=True, help="Process multiple files simultaneously")
+            
+            # Process batch
+            if st.button("🚀 Start Batch Processing", type="primary"):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                results = []
+                temp_files = []
+                
+                for idx, (template_file, data_file) in enumerate(zip(template_files, data_files)):
+                    try:
+                        status_text.text(f"Processing {template_file.name}...")
+                        progress_bar.progress((idx + 1) / len(template_files))
+                        
+                        # Save template temporarily
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
+                            tmp_template.write(template_file.read())
+                            tmp_template_path = tmp_template.name
+                        
+                        # Read data
+                        if data_file.name.endswith('.csv'):
+                            data_df = pd.read_csv(data_file)
+                        else:
+                            data_df = pd.read_excel(data_file)
+                        
+                        # Process mapping
+                        template_fields, _ = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(tmp_template_path)
+                        mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(template_fields, data_df)
+                        
+                        # Fill template
+                        filled_workbook, filled_count, images_added, temp_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
+                            tmp_template_path, mapping_results, data_df
+                        )
+                        
+                        if filled_workbook:
+                            # Save result
+                            output_filename = f"filled_{template_file.name}"
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_output:
+                                filled_workbook.save(tmp_output.name)
+                                temp_files.append((tmp_output.name, output_filename))
+                            
+                            # Record results
+                            total_fields = len(template_fields)
+                            success_rate = filled_count / total_fields if total_fields > 0 else 0
+                            
+                            results.append({
+                                'Template': template_file.name,
+                                'Data File': data_file.name,
+                                'Fields Mapped': filled_count,
+                                'Total Fields': total_fields,
+                                'Success Rate': f"{success_rate:.1%}",
+                                'Images Added': images_added,
+                                'Status': 'Success'
+                            })
+                        
+                        # Clean up template temp file
+                        os.unlink(tmp_template_path)
+                        
+                        # Clean up image temp files
+                        for temp_path in temp_paths:
+                            try:
+                                os.unlink(temp_path)
+                            except:
+                                pass
+                    
+                    except Exception as e:
+                        results.append({
+                            'Template': template_file.name,
+                            'Data File': data_file.name,
+                            'Fields Mapped': 0,
+                            'Total Fields': 0,
+                            'Success Rate': '0%',
+                            'Images Added': 0,
+                            'Status': f'Error: {str(e)[:50]}...'
+                        })
+                
+                progress_bar.progress(1.0)
+                status_text.text("✅ Batch processing completed!")
+                
+                # Display results
+                st.subheader("📊 Processing Results")
+                results_df = pd.DataFrame(results)
+                st.dataframe(results_df, use_container_width=True)
+                
+                # Summary statistics
+                if include_summary:
+                    successful_files = len([r for r in results if r['Status'] == 'Success'])
+                    total_mapped = sum([int(r['Fields Mapped']) for r in results if r['Status'] == 'Success'])
+                    total_images = sum([int(r['Images Added']) for r in results if r['Status'] == 'Success'])
+                    
+                    col_sum1, col_sum2, col_sum3, col_sum4 = st.columns(4)
+                    with col_sum1:
+                        st.metric("Successful Files", successful_files)
+                    with col_sum2:
+                        st.metric("Total Fields Mapped", total_mapped)
+                    with col_sum3:
+                        st.metric("Total Images Added", total_images)
+                    with col_sum4:
+                        st.metric("Overall Success Rate", f"{successful_files/len(results):.1%}")
+                
+                # Provide downloads
+                if temp_files:
+                    if output_format == "ZIP Archive":
+                        # Create ZIP file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_zip:
+                            with zipfile.ZipFile(tmp_zip.name, 'w') as zipf:
+                                for temp_path, filename in temp_files:
+                                    zipf.write(temp_path, filename)
+                            
+                            # Download ZIP
+                            with open(tmp_zip.name, 'rb') as file:
+                                st.download_button(
+                                    label="📥 Download All Results (ZIP)",
+                                    data=file.read(),
+                                    file_name=f"batch_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                    mime="application/zip"
+                                )
+                            
+                            # Clean up ZIP file
+                            os.unlink(tmp_zip.name)
+                    
+                    else:
+                        # Individual downloads
+                        st.subheader("📥 Individual Downloads")
+                        for temp_path, filename in temp_files:
+                            with open(temp_path, 'rb') as file:
+                                st.download_button(
+                                    label=f"📄 {filename}",
+                                    data=file.read(),
+                                    file_name=filename,
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    key=f"download_{filename}"
+                                )
+                    
+                    # Clean up temporary files
+                    for temp_path, _ in temp_files:
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
+
 # Main application logic
 def main():
-    if not st.session_state.authenticated:
-        show_login()
-    else:
-        show_main_app()
+    try:
+        if not st.session_state.authenticated:
+            login_interface()
+        else:
+            main_interface()
+    except Exception as e:
+        st.error(f"Application error: {e}")
+        st.info("Please refresh the page and try again.")
 
 if __name__ == "__main__":
     main()
