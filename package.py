@@ -253,12 +253,18 @@ class ImageExtractor:
             # Initialize placement counters for grid-based types
             if not hasattr(self, "_placement_counters"):
                 self._placement_counters = defaultdict(int)
+            def cell_range(start_col, end_col, start_row, end_row):
+                return [
+                    (column_index_from_string(col), row)
+                    for col in range(ord(start_col), ord(end_col)+1)
+                    for row in range(start_row, end_row+1)
+                ]
 
             # Define cell grids (defined outside loop to avoid scope issues)
             placement_grids = {
-                'primary': [(col, row) for col in range(1, 5) for row in range(41, 49)],     # A–D, rows 44–51
-                'secondary': [(col, row) for col in range(6, 9) for row in range(41, 49)],  # E–K, rows 44–51
-                'label': [(col, row) for col in range(10, 15) for row in range(41, 49)]      # M–R, rows 44–51
+                'primary': [(column_index_from_string(col), row) for col in ['A','B','C','D'] for row in range(41, 49)],     # A–D, rows 44–51
+                'secondary': [(column_index_from_string(col), row) for col in ['F','G','H','I','J'] for row in range(41, 49)],  # E–K, rows 44–51
+                'label': [(column_index_from_string(col), row) for col in ['K','L','M','N','O','P'] for row in range(41, 49)]      # M–R, rows 44–51
             }
 
             for area in image_areas_sorted:
