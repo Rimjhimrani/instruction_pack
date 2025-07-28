@@ -76,6 +76,8 @@ except ImportError as e:
 class ImageExtractor:
     """Handles image extraction from Excel files with improved duplicate handling"""
     
+    """Handles image extraction from Excel files with improved duplicate handling"""
+    
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
@@ -243,59 +245,111 @@ class ImageExtractor:
             added_images = 0
             temp_image_paths = []
             used_images = set()
-            # Define target grid for each type
+            
+            # Define target grid for each type with CORRECT column ranges
             grid_positions = {
-                'primary': [(col, row) for col in range(1, 3) for row in range(44, 52)],     # A–C rows 44–51
-                'secondary': [(col, row) for col in range(5, 12) for row in range(44, 52)],  # D–K
-                'label': [(col, row) for col in range(13, 18) for row in range(44, 52)],     # M–R
+                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A-C, rows 44-51
+                'secondary': [(col, row) for col in range(5, 8) for row in range(44, 52)],   # E-G, rows 44-51 
+                'label': [(col, row) for col in range(13, 16) for row in range(44, 52)],     # M-O, rows 44-51
             }
+            
             position_index = defaultdict(int)
+            
             # Group images by type
             grouped_images = defaultdict(list)
             for key, img in uploaded_images.items():
-                grouped_images[img.get('type', '').lower()].append((key, img))
+                img_type = img.get('type', '').lower()
+                grouped_images[img_type].append((key, img))
+                print(f"Grouped image {key} as type '{img_type}'")
+            
             # Place grouped images in fixed positions
             for img_type, images in grouped_images.items():
-                if img_type not in grid_positions and img_type != 'current':
-                    print(f"⚠️ Skipping unsupported type: {img_type}")
-                    continue
-                for img_key, img_data in images:
-                    if img_key in used_images:
-                        continue
-                    try:
-                        # Prepare image
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                            tmp_img.write(base64.b64decode(img_data['data']))
-                            tmp_img_path = tmp_img.name
-                        img = OpenpyxlImage(tmp_img_path)
-
-                        width_cm, height_cm = (8.3, 8.3) if img_type == 'current' else (4.3, 4.3)
-                        img.width = int(width_cm * 37.8)
-                        img.height = int(height_cm * 37.8)
-                        if img_type == 'current':
-                            # Use image_areas for current packaging
-                            matched_area = next((area for area in image_areas if area['type'] == 'current' and area['column'] not in [1, 4, 13]), None)
-                            if not matched_area:
-                                print(f"⚠️ No placement found for current image: {img_key}")
-                                continue
+                print(f"Processing {len(images)} images of type '{img_type}'")
+                
+                if img_type == 'current':
+                    # Handle current packaging images separately using image_areas
+                    for img_key, img_data in images:
+                        if img_key in used_images:
+                            continue
+                        
+                        # Find suitable area for current packaging (avoid columns 1, 5, 13 used by other types)
+                        suitable_areas = [area for area in image_areas 
+                                        if area['type'] == 'current' and area['column'] not in [1, 5, 13]]
+                        
+                        if not suitable_areas:
+                            print(f"⚠️ No suitable placement area found for current image: {img_key}")
+                            continue
+                        
+                        matched_area = suitable_areas[0]  # Use first available area
+                        
+                        try:
+                            # Prepare image
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(base64.b64decode(img_data['data']))
+                                tmp_img_path = tmp_img.name
+                            
+                            img = OpenpyxlImage(tmp_img_path)
+                            
+                            # Set size for current packaging (larger)
+                            width_cm, height_cm = 8.3, 8.3
+                            img.width = int(width_cm * 37.8)
+                            img.height = int(height_cm * 37.8)
+                            
                             cell_coord = f"{get_column_letter(matched_area['column'])}{matched_area['row']}"
-                        else:
-                            pos_list = grid_positions[img_type]
-                            index = position_index[img_type]
-                            if index >= len(pos_list):
-                                print(f"❌ No space left for {img_type} images.")
-                                continue
+                            img.anchor = cell_coord
+                            worksheet.add_image(img)
+                            
+                            used_images.add(img_key)
+                            temp_image_paths.append(tmp_img_path)
+                            added_images += 1
+                            print(f"✅ Placed current packaging image at {cell_coord}")
+                            
+                        except Exception as e:
+                            print(f"❌ Failed placing current image {img_key}: {e}")
+                
+                elif img_type in grid_positions:
+                    # Handle other image types using grid positions
+                    pos_list = grid_positions[img_type]
+                    
+                    for img_key, img_data in images:
+                        if img_key in used_images:
+                            continue
+                        
+                        index = position_index[img_type]
+                        if index >= len(pos_list):
+                            print(f"❌ No space left for {img_type} images (max: {len(pos_list)})")
+                            break
+                        
+                        try:
+                            # Prepare image
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                tmp_img.write(base64.b64decode(img_data['data']))
+                                tmp_img_path = tmp_img.name
+                            
+                            img = OpenpyxlImage(tmp_img_path)
+                            
+                            # Set size for other image types (smaller)
+                            width_cm, height_cm = 4.3, 4.3
+                            img.width = int(width_cm * 37.8)
+                            img.height = int(height_cm * 37.8)
+                            
                             col, row = pos_list[index]
                             cell_coord = f"{get_column_letter(col)}{row}"
+                            img.anchor = cell_coord
+                            worksheet.add_image(img)
+                            
+                            used_images.add(img_key)
+                            temp_image_paths.append(tmp_img_path)
+                            added_images += 1
                             position_index[img_type] += 1
-                        img.anchor = cell_coord
-                        worksheet.add_image(img)
-                        used_images.add(img_key)
-                        temp_image_paths.append(tmp_img_path)
-                        added_images += 1
-                        print(f"✅ Placed {img_type} image at {cell_coord}")
-                    except Exception as e:
-                        print(f"❌ Failed placing {img_type} image {img_key}: {e}")
+                            
+                            print(f"✅ Placed {img_type} image at {cell_coord}")
+                            
+                        except Exception as e:
+                            print(f"❌ Failed placing {img_type} image {img_key}: {e}")
+                else:
+                    print(f"⚠️ Skipping unsupported image type: {img_type}")
+            
             print(f"🎯 Total images added: {added_images}")
             return added_images, temp_image_paths
         
