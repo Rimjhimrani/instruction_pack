@@ -315,15 +315,28 @@ class ImageExtractor:
                         width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
                         img.width = int(width_cm * 37.8)   # Excel standard DPI
                         img.height = int(height_cm * 37.8)
-                        # 📌 Hardcoded positions
-                        if area_type == 'primary':
-                            cell_coord = 'A44'
-                        elif area_type == 'secondary':
-                            cell_coord = 'D44'
-                        elif area_type == 'label':
-                            cell_coord = 'M44'
+                        # Placement logic
+                        if area_type in placement_grids:
+                            index = self._placement_counters[area_type]
+                            grid = placement_grids[area_type]
+                            if index < len(grid):
+                                col, row = grid[index]
+                                cell_coord = f"{get_column_letter(col)}{row}"
+                                self._placement_counters[area_type] += 1
+                            else:
+                                print(f"⚠️ No more space left for {area_type} images. Skipping.")
+                                continue
+                        elif area_type == 'current':
+                            current_area = next((a for a in image_areas if a['type'] == 'current'), None)
+                            if current_area:
+                                cell_coord = f"{get_column_letter(current_area['column'])}{current_area['row']}"
+                            else:
+                                print("⚠️ No valid header found for current packaging image. Skipping.")
+                                continue
                         else:
-                            cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
+                            cell_coord = "A1"  # fallback
+
+                        img.anchor = cell_coord
                         
                         # Add image to worksheet
                         worksheet.add_image(img, cell_coord)
