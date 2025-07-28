@@ -75,7 +75,6 @@ except ImportError as e:
 
 class ImageExtractor:
     """Handles image extraction from Excel files with improved duplicate handling"""
-    """Handles image extraction from Excel files with improved duplicate handling"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
@@ -151,7 +150,7 @@ class ImageExtractor:
                 default_areas = [
                     {'position': 'A44', 'row': 44, 'column': 1, 'text': 'Primary (Default)', 'type': 'primary', 'header_text': 'primary', 'matched_keyword': 'primary', 'match_score': 5},
                     {'position': 'E44', 'row': 44, 'column': 5, 'text': 'Secondary (Default)', 'type': 'secondary', 'header_text': 'secondary', 'matched_keyword': 'secondary', 'match_score': 5},
-                    {'position': 'W4', 'row': 4, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},
+                    {'position': 'I44', 'row': 44, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},  # Fixed column position
                     {'position': 'M44', 'row': 44, 'column': 13, 'text': 'Label (Default)', 'type': 'label', 'header_text': 'label', 'matched_keyword': 'label', 'match_score': 5}
                 ]
                 upload_areas.extend(default_areas)
@@ -165,12 +164,24 @@ class ImageExtractor:
             
         except Exception as e:
             print(f"❌ Error identifying image upload areas: {e}")
-            st.error(f"Error identifying image upload areas: {e}")
+            # Import streamlit only if available
+            try:
+                import streamlit as st
+                st.error(f"Error identifying image upload areas: {e}")
+            except ImportError:
+                pass
             return []
 
     def extract_images_from_excel(self, excel_file_path):
         """Extract unique images from Excel file with better deduplication"""
         try:
+            import openpyxl
+            from openpyxl.utils import get_column_letter
+            from PIL import Image
+            import io
+            import base64
+            import hashlib
+            
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
             image_hashes = set()  # Track image hashes to avoid duplicates
@@ -188,7 +199,6 @@ class ImageExtractor:
                             image_data = img._data()
                             
                             # Create hash of image data to detect duplicates
-                            import hashlib
                             image_hash = hashlib.md5(image_data).hexdigest()
                             
                             # Skip if we've already processed this image
@@ -255,13 +265,25 @@ class ImageExtractor:
             return {'all_sheets': images}
             
         except Exception as e:
-            st.error(f"Error extracting images: {e}")
+            # Import streamlit only if available
+            try:
+                import streamlit as st
+                st.error(f"Error extracting images: {e}")
+            except ImportError:
+                pass
             print(f"Error in extract_images_from_excel: {e}")
             return {}
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Force-place images by type in fixed cell ranges (in cm size)."""
         try:
+            import openpyxl
+            from openpyxl.utils import get_column_letter
+            from openpyxl.drawing.image import Image as OpenpyxlImage
+            import tempfile
+            import base64
+            from collections import defaultdict
+            
             added_images = 0
             temp_image_paths = []
             used_images = set()
@@ -287,10 +309,11 @@ class ImageExtractor:
                 print("❌ No image areas identified in template")
                 return 0, []
             
-            # Define target grid for each type with CORRECT column ranges
+            # Define target grid for each type with CORRECT column ranges - FIXED
             grid_positions = {
                 'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A-C, rows 44-51
                 'secondary': [(col, row) for col in range(5, 8) for row in range(44, 52)],   # E-G, rows 44-51 
+                'current': [(col, row) for col in range(9, 12) for row in range(44, 52)],    # I-K, rows 44-51 - FIXED
                 'label': [(col, row) for col in range(13, 16) for row in range(44, 52)],     # M-O, rows 44-51
             }
             
@@ -321,56 +344,8 @@ class ImageExtractor:
             for img_type, images in grouped_images.items():
                 print(f"🎯 Processing {len(images)} images of type '{img_type}'")
                 
-                if img_type == 'current':
-                    # Handle current packaging images - use ANY available area for current
-                    current_areas = [area for area in image_areas if area['type'] == 'current']
-                    
-                    if not current_areas:
-                        print(f"⚠️ No 'current' areas found, trying to use any available area")
-                        # Fallback: use any area not already used by other types
-                        current_areas = [area for area in image_areas if area['column'] not in [1, 5, 13]]
-                    
-                    area_index = 0
-                    for img_key, img_data in images:
-                        if img_key in used_images:
-                            continue
-                        
-                        if area_index >= len(current_areas):
-                            print(f"⚠️ No more areas available for current image: {img_key}")
-                            continue
-                        
-                        matched_area = current_areas[area_index]
-                        area_index += 1
-                        
-                        try:
-                            # Prepare image
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                                tmp_img.write(base64.b64decode(img_data['data']))
-                                tmp_img_path = tmp_img.name
-                            
-                            img = OpenpyxlImage(tmp_img_path)
-                            
-                            # Set size for current packaging (larger)
-                            width_cm, height_cm = 8.3, 8.3
-                            img.width = int(width_cm * 37.8)
-                            img.height = int(height_cm * 37.8)
-                            
-                            cell_coord = f"{get_column_letter(matched_area['column'])}{matched_area['row']}"
-                            img.anchor = cell_coord
-                            worksheet.add_image(img)
-                            
-                            used_images.add(img_key)
-                            temp_image_paths.append(tmp_img_path)
-                            added_images += 1
-                            print(f"✅ Placed current packaging image at {cell_coord}")
-                            
-                        except Exception as e:
-                            print(f"❌ Failed placing current image {img_key}: {e}")
-                            import traceback
-                            traceback.print_exc()
-                
-                elif img_type in grid_positions:
-                    # Handle other image types using grid positions
+                if img_type in grid_positions:
+                    # Handle all image types using grid positions - UNIFIED APPROACH
                     pos_list = grid_positions[img_type]
                     
                     for img_key, img_data in images:
@@ -390,8 +365,14 @@ class ImageExtractor:
                             
                             img = OpenpyxlImage(tmp_img_path)
                             
-                            # Set size for other image types (smaller)
-                            width_cm, height_cm = 4.3, 4.3
+                            # Set size based on image type
+                            if img_type == 'current':
+                                # Larger size for current packaging
+                                width_cm, height_cm = 8.3, 8.3
+                            else:
+                                # Standard size for other types
+                                width_cm, height_cm = 4.3, 4.3
+                            
                             img.width = int(width_cm * 37.8)
                             img.height = int(height_cm * 37.8)
                             
