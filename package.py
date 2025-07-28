@@ -280,7 +280,7 @@ class ImageExtractor:
                     if area_type == img_type:
                         matching_image = img_data
                         matching_key = img_key
-                       break
+                        break
                 # Fallback to first available
                 if not matching_image:
                     for img_key, img_data in uploaded_images.items():
