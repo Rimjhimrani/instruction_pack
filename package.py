@@ -186,7 +186,7 @@ class ImageExtractor:
                     except Exception as e:
                         st.warning(f"Could not add {area_type} image to {area['position']}: {e}")
                         continue
-                return added_images, temp_image_paths
+            return added_images, temp_image_paths
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             return 0, []
