@@ -876,7 +876,7 @@ class EnhancedTemplateMapperWithImages:
             if uploaded_images:
                 # First, identify image upload areas
                 _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
+                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
                 
             return workbook, filled_count, images_added, temp_image_paths
             
