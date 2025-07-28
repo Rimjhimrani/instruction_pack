@@ -75,7 +75,6 @@ except ImportError as e:
 
 class ImageExtractor:
     """Handles image extraction from Excel files with improved duplicate handling"""
-    
     """Handles image extraction from Excel files with improved duplicate handling"""
     
     def __init__(self):
@@ -95,9 +94,11 @@ class ImageExtractor:
                 'label': ['label', 'product label', 'labeling', 'labels']
             }
             
+            print(f"🔍 Scanning worksheet for image areas (max row: {worksheet.max_row}, max col: {worksheet.max_column})")
+            
             # Search through first few rows for column headers
-            for row_num in range(1, min(15, worksheet.max_row + 1)):
-                for col_num in range(1, worksheet.max_column + 1):
+            for row_num in range(1, min(20, worksheet.max_row + 1)):  # Increased search range
+                for col_num in range(1, min(30, worksheet.max_column + 1)):  # Increased search range
                     cell = worksheet.cell(row=row_num, column=col_num)
                     cell_coord = f"{row_num}_{col_num}"
                     
@@ -105,6 +106,10 @@ class ImageExtractor:
                         continue
                         
                     cell_text = str(cell.value).lower().strip()
+                    
+                    # Skip empty or very short cells
+                    if len(cell_text) < 3:
+                        continue
                     
                     # Find the best matching category
                     best_match = None
@@ -129,7 +134,7 @@ class ImageExtractor:
                     if best_match:
                         upload_areas.append({
                             'position': cell.coordinate,
-                            'row': row_num + 1,  # Position image below header
+                            'row': row_num + 2,  # Position image 2 rows below header for better spacing
                             'column': col_num,
                             'text': cell.value,
                             'type': best_match[0],
@@ -138,13 +143,28 @@ class ImageExtractor:
                             'match_score': best_score
                         })
                         processed_cells.add(cell_coord)
-                        print(f"Found {best_match[0]} area at {cell.coordinate}: '{cell.value}' (score: {best_score})")
+                        print(f"📍 Found {best_match[0]} area at {cell.coordinate}: '{cell.value}' (score: {best_score})")
+
+            # If no areas found, create default areas
+            if not upload_areas:
+                print("⚠️ No image areas found in headers, creating default areas")
+                default_areas = [
+                    {'position': 'A44', 'row': 44, 'column': 1, 'text': 'Primary (Default)', 'type': 'primary', 'header_text': 'primary', 'matched_keyword': 'primary', 'match_score': 5},
+                    {'position': 'E44', 'row': 44, 'column': 5, 'text': 'Secondary (Default)', 'type': 'secondary', 'header_text': 'secondary', 'matched_keyword': 'secondary', 'match_score': 5},
+                    {'position': 'I44', 'row': 44, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},
+                    {'position': 'M44', 'row': 44, 'column': 13, 'text': 'Label (Default)', 'type': 'label', 'header_text': 'label', 'matched_keyword': 'label', 'match_score': 5}
+                ]
+                upload_areas.extend(default_areas)
+                print(f"📝 Created {len(default_areas)} default image areas")
 
             # Sort by match score (best matches first)
             upload_areas.sort(key=lambda x: x['match_score'], reverse=True)
+            
+            print(f"✅ Total image areas identified: {len(upload_areas)}")
             return upload_areas
             
         except Exception as e:
+            print(f"❌ Error identifying image upload areas: {e}")
             st.error(f"Error identifying image upload areas: {e}")
             return []
 
@@ -246,6 +266,27 @@ class ImageExtractor:
             temp_image_paths = []
             used_images = set()
             
+            # DEBUG: Print all available data
+            print(f"🔍 DEBUG - Total uploaded images: {len(uploaded_images)}")
+            print(f"🔍 DEBUG - Total image areas found: {len(image_areas)}")
+            
+            # Print all uploaded images for debugging
+            for key, img in uploaded_images.items():
+                print(f"📸 Image: {key} | Type: {img.get('type', 'UNKNOWN')} | Size: {img.get('size', 'UNKNOWN')}")
+            
+            # Print all image areas for debugging
+            for area in image_areas:
+                print(f"📍 Area: {area.get('type', 'UNKNOWN')} at column {area.get('column')} row {area.get('row')} | Text: '{area.get('text', '')}'")
+            
+            # If no images or no areas, return early
+            if not uploaded_images:
+                print("❌ No uploaded images to place")
+                return 0, []
+            
+            if not image_areas:
+                print("❌ No image areas identified in template")
+                return 0, []
+            
             # Define target grid for each type with CORRECT column ranges
             grid_positions = {
                 'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A-C, rows 44-51
@@ -259,28 +300,47 @@ class ImageExtractor:
             grouped_images = defaultdict(list)
             for key, img in uploaded_images.items():
                 img_type = img.get('type', '').lower()
+                if not img_type or img_type == 'unclassified':
+                    # Try to infer type from key if type is missing
+                    key_lower = key.lower()
+                    if 'primary' in key_lower:
+                        img_type = 'primary'
+                    elif 'secondary' in key_lower:
+                        img_type = 'secondary'
+                    elif 'current' in key_lower or 'existing' in key_lower:
+                        img_type = 'current'
+                    elif 'label' in key_lower:
+                        img_type = 'label'
+                    else:
+                        img_type = 'unclassified'
+                
                 grouped_images[img_type].append((key, img))
-                print(f"Grouped image {key} as type '{img_type}'")
+                print(f"📋 Grouped image {key} as type '{img_type}'")
             
             # Place grouped images in fixed positions
             for img_type, images in grouped_images.items():
-                print(f"Processing {len(images)} images of type '{img_type}'")
+                print(f"🎯 Processing {len(images)} images of type '{img_type}'")
                 
                 if img_type == 'current':
-                    # Handle current packaging images separately using image_areas
+                    # Handle current packaging images - use ANY available area for current
+                    current_areas = [area for area in image_areas if area['type'] == 'current']
+                    
+                    if not current_areas:
+                        print(f"⚠️ No 'current' areas found, trying to use any available area")
+                        # Fallback: use any area not already used by other types
+                        current_areas = [area for area in image_areas if area['column'] not in [1, 5, 13]]
+                    
+                    area_index = 0
                     for img_key, img_data in images:
                         if img_key in used_images:
                             continue
                         
-                        # Find suitable area for current packaging (avoid columns 1, 5, 13 used by other types)
-                        suitable_areas = [area for area in image_areas 
-                                        if area['type'] == 'current' and area['column'] not in [1, 5, 13]]
-                        
-                        if not suitable_areas:
-                            print(f"⚠️ No suitable placement area found for current image: {img_key}")
+                        if area_index >= len(current_areas):
+                            print(f"⚠️ No more areas available for current image: {img_key}")
                             continue
                         
-                        matched_area = suitable_areas[0]  # Use first available area
+                        matched_area = current_areas[area_index]
+                        area_index += 1
                         
                         try:
                             # Prepare image
@@ -306,6 +366,8 @@ class ImageExtractor:
                             
                         except Exception as e:
                             print(f"❌ Failed placing current image {img_key}: {e}")
+                            import traceback
+                            traceback.print_exc()
                 
                 elif img_type in grid_positions:
                     # Handle other image types using grid positions
@@ -347,14 +409,66 @@ class ImageExtractor:
                             
                         except Exception as e:
                             print(f"❌ Failed placing {img_type} image {img_key}: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            
+                elif img_type == 'unclassified':
+                    # Try to place unclassified images in any available grid position
+                    print(f"🔧 Trying to place {len(images)} unclassified images")
+                    
+                    for img_key, img_data in images:
+                        if img_key in used_images:
+                            continue
+                        
+                        # Try each grid type until we find space
+                        placed = False
+                        for grid_type, pos_list in grid_positions.items():
+                            index = position_index[grid_type] 
+                            if index < len(pos_list):
+                                try:
+                                    # Prepare image
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                                        tmp_img.write(base64.b64decode(img_data['data']))
+                                        tmp_img_path = tmp_img.name
+                                    
+                                    img = OpenpyxlImage(tmp_img_path)
+                                    
+                                    # Set size
+                                    width_cm, height_cm = 4.3, 4.3
+                                    img.width = int(width_cm * 37.8)
+                                    img.height = int(height_cm * 37.8)
+                                    
+                                    col, row = pos_list[index]
+                                    cell_coord = f"{get_column_letter(col)}{row}"
+                                    img.anchor = cell_coord
+                                    worksheet.add_image(img)
+                                    
+                                    used_images.add(img_key)
+                                    temp_image_paths.append(tmp_img_path)
+                                    added_images += 1
+                                    position_index[grid_type] += 1
+                                    placed = True
+                                    
+                                    print(f"✅ Placed unclassified image as {grid_type} at {cell_coord}")
+                                    break
+                                    
+                                except Exception as e:
+                                    print(f"❌ Failed placing unclassified image {img_key} as {grid_type}: {e}")
+                        
+                        if not placed:
+                            print(f"⚠️ Could not place unclassified image: {img_key}")
+                            
                 else:
                     print(f"⚠️ Skipping unsupported image type: {img_type}")
             
-            print(f"🎯 Total images added: {added_images}")
+            print(f"🎯 Total images successfully added: {added_images}")
+            print(f"📝 Used images: {list(used_images)}")
             return added_images, temp_image_paths
         
         except Exception as e:
             print(f"💥 Error in add_images_to_template: {e}")
+            import traceback
+            traceback.print_exc()
             return 0, []
 
     def process_extracted_images_for_template(self, extracted_images):
