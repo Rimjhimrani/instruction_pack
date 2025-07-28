@@ -74,7 +74,7 @@ except ImportError as e:
     st.warning("⚠️ Advanced NLP features disabled. Install nltk and scikit-learn for better matching.")
 
 class ImageExtractor:
-   """Handles image extraction from Excel files with improved duplicate handling"""
+    """Handles image extraction from Excel files with improved duplicate handling"""
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
     
