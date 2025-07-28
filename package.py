@@ -256,9 +256,9 @@ class ImageExtractor:
 
             # Define cell grids (defined outside loop to avoid scope issues)
             placement_grids = {
-                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–D, rows 44–51
-                'secondary': [(col, row) for col in range(5, 11) for row in range(44, 52)],  # E–K, rows 44–51
-                'label': [(col, row) for col in range(13, 18) for row in range(44, 52)]      # M–R, rows 44–51
+                'primary': [(col, row) for col in range(1, 5) for row in range(41, 49)],     # A–D, rows 44–51
+                'secondary': [(col, row) for col in range(6, 9) for row in range(41, 49)],  # E–K, rows 44–51
+                'label': [(col, row) for col in range(10, 15) for row in range(41, 49)]      # M–R, rows 44–51
             }
 
             for area in image_areas_sorted:
