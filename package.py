@@ -194,16 +194,17 @@ class ImageExtractor:
                             img_str = base64.b64encode(buffered.getvalue()).decode()
                         
                             # Create descriptive key based on sheet name and content
-                            if any(word in sheet_name.lower() for word in ['sheet1', 'primary', 'internal']):
+                            sheet_lower = sheet_name.lower()
+                            if '1' in sheet_lower or 'primary' in sheet_lower:
                                 image_type = 'primary'
-                            elif any(word in sheet_name.lower() for word in ['sheet2', 'secondary', 'sec']):
+                            elif '2' in sheet_lower or 'secondary' in sheet_lower:
                                 image_type = 'secondary'
-                            elif any(word in sheet_name.lower() for word in ['sheet3', 'current', 'existing']):
+                            elif '3' in sheet_lower or 'current' in sheet_lower or 'existing' in sheet_lower:
                                 image_type = 'current'
-                            elif any(word in sheet_name.lower() for word in ['sheet4', 'label', 'labels']):
+                            elif '4' in sheet_lower or 'label' in sheet_lower:
                                 image_type = 'label'
                             else:
-                                image_type = f"image_{len(images) + 1}"
+                                image_type = 'unclassified'
                             
                             image_key = f"{image_type}_{sheet_name}_{position}"
                         
@@ -239,7 +240,6 @@ class ImageExtractor:
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Force-place images by type in fixed cell ranges (in cm size)."""
         try:
-            from collections import defaultdict
             added_images = 0
             temp_image_paths = []
             used_images = set()
