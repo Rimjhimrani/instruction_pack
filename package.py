@@ -194,7 +194,7 @@ class ImageExtractor:
                             img_str = base64.b64encode(buffered.getvalue()).decode()
                         
                             # Create descriptive key based on sheet name and content
-                            if 'sheet1' in sheet_name.lower() or 'primary' in sheet_name.lower():
+                            if any(word in sheet_name.lower() for word in ['sheet1', 'primary', 'internal']):
                                 image_type = 'primary'
                             elif 'sheet2' in sheet_name.lower() or 'secondary' in sheet_name.lower():
                                 image_type = 'secondary'
