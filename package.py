@@ -237,15 +237,16 @@ class ImageExtractor:
             return {}
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with improved matching logic"""
+        """Add uploaded images to template with improved matching and proper placement"""
         try:
+            from collections import defaultdict
             added_images = 0
             temp_image_paths = []
             used_images = set()
-            
+
             # Sort image areas by match score and column
             image_areas_sorted = sorted(image_areas, key=lambda x: (x.get('match_score', 0), x['column']), reverse=True)
-            
+
             print(f"Processing {len(image_areas_sorted)} image areas")
             print(f"Available images: {list(uploaded_images.keys())}")
 
@@ -255,77 +256,52 @@ class ImageExtractor:
 
             # Define cell grids (defined outside loop to avoid scope issues)
             placement_grids = {
-                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–C, rows 44–51
+                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A–D, rows 44–51
                 'secondary': [(col, row) for col in range(5, 11) for row in range(44, 52)],  # E–K, rows 44–51
                 'label': [(col, row) for col in range(13, 18) for row in range(44, 52)]      # M–R, rows 44–51
             }
-        
+
             for area in image_areas_sorted:
                 area_type = area['type']
                 header_text = area.get('header_text', '').lower()
-                
+
                 print(f"Processing area: {area_type} at {area['position']} (score: {area.get('match_score', 0)})")
-            
+
                 matching_image = None
                 matching_key = None
-            
-                # Strategy 1: Match by image type extracted from filename/sheet
+
+                # Match image by type
                 for img_key, img_data in uploaded_images.items():
                     if img_key in used_images:
                         continue
-                    
                     img_type = img_data.get('type', '').lower()
                     img_key_lower = img_key.lower()
-                    
-                    # Direct type matching
+
                     if area_type == img_type:
                         matching_image = img_data
                         matching_key = img_key
-                        print(f"Direct type match: {area_type} with {img_key}")
-                        break
-                    
-                    # Keyword matching
-                    type_keywords = {
-                        'primary': ['primary', 'sheet1'],
-                        'secondary': ['secondary', 'sheet2', 'sec'],
-                        'current': ['current', 'sheet3', 'existing'],
-                        'label': ['label', 'sheet4', 'labels']
-                    }
-                    
-                    if area_type in type_keywords:
-                        for keyword in type_keywords[area_type]:
-                            if keyword in img_key_lower:
-                                matching_image = img_data
-                                matching_key = img_key
-                                print(f"Keyword match: {area_type} with {img_key} (keyword: {keyword})")
-                                break
-                        if matching_image:
-                            break
-                
-                # Strategy 2: Fallback to first available image
+                       break
+                # Fallback to first available
                 if not matching_image:
                     for img_key, img_data in uploaded_images.items():
                         if img_key not in used_images:
                             matching_image = img_data
                             matching_key = img_key
-                            print(f"Fallback match for {area_type}: {img_key}")
                             break
-                
+
                 if matching_image and matching_key:
                     try:
-                        # Create temporary image file
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                             image_bytes = base64.b64decode(matching_image['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
-                        
-                        # Create openpyxl image object
                         img = OpenpyxlImage(tmp_img_path)
-                    
-                        # Set image size based on type
+
+                        # Set image size
                         width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
-                        img.width = int(width_cm * 37.8)   # Excel standard DPI
+                        img.width = int(width_cm * 37.8)
                         img.height = int(height_cm * 37.8)
+
                         # Placement logic
                         if area_type in placement_grids:
                             index = self._placement_counters[area_type]
@@ -346,28 +322,23 @@ class ImageExtractor:
                                 continue
                         else:
                             cell_coord = "A1"  # fallback
-
                         img.anchor = cell_coord
-                        
-                        # Add image to worksheet
-                        worksheet.add_image(img, cell_coord)
-                    
+                        worksheet.add_image(img)
+
                         temp_image_paths.append(tmp_img_path)
                         used_images.add(matching_key)
                         added_images += 1
-                    
+
                         print(f"✅ Added {area_type} image at {cell_coord} ({width_cm}x{height_cm} cm)")
-                        
+
                     except Exception as e:
                         print(f"❌ Could not add {area_type} image: {e}")
                         st.warning(f"Could not add {area_type} image: {e}")
                         continue
                 else:
                     print(f"⚠️ No matching image found for {area_type} at {area['position']}")
-            
             print(f"Total images added: {added_images}")
             return added_images, temp_image_paths
-            
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
