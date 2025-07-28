@@ -151,7 +151,7 @@ class ImageExtractor:
                 default_areas = [
                     {'position': 'A44', 'row': 44, 'column': 1, 'text': 'Primary (Default)', 'type': 'primary', 'header_text': 'primary', 'matched_keyword': 'primary', 'match_score': 5},
                     {'position': 'E44', 'row': 44, 'column': 5, 'text': 'Secondary (Default)', 'type': 'secondary', 'header_text': 'secondary', 'matched_keyword': 'secondary', 'match_score': 5},
-                    {'position': 'I44', 'row': 44, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},
+                    {'position': 'W4', 'row': 4, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},
                     {'position': 'M44', 'row': 44, 'column': 13, 'text': 'Label (Default)', 'type': 'label', 'header_text': 'label', 'matched_keyword': 'label', 'match_score': 5}
                 ]
                 upload_areas.extend(default_areas)
