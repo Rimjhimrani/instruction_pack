@@ -74,7 +74,7 @@ except ImportError as e:
     st.warning("⚠️ Advanced NLP features disabled. Install nltk and scikit-learn for better matching.")
 
 class ImageExtractor:
-    """Handles image extraction from Excel files with improved duplicate handling"""
+   """Handles image extraction from Excel files with improved duplicate handling"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
@@ -150,7 +150,7 @@ class ImageExtractor:
                 default_areas = [
                     {'position': 'A44', 'row': 44, 'column': 1, 'text': 'Primary (Default)', 'type': 'primary', 'header_text': 'primary', 'matched_keyword': 'primary', 'match_score': 5},
                     {'position': 'E44', 'row': 44, 'column': 5, 'text': 'Secondary (Default)', 'type': 'secondary', 'header_text': 'secondary', 'matched_keyword': 'secondary', 'match_score': 5},
-                    {'position': 'I44', 'row': 44, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},  # Fixed column position
+                    {'position': 'I44', 'row': 44, 'column': 9, 'text': 'Current (Default)', 'type': 'current', 'header_text': 'current', 'matched_keyword': 'current', 'match_score': 5},
                     {'position': 'M44', 'row': 44, 'column': 13, 'text': 'Label (Default)', 'type': 'label', 'header_text': 'label', 'matched_keyword': 'label', 'match_score': 5}
                 ]
                 upload_areas.extend(default_areas)
@@ -275,7 +275,7 @@ class ImageExtractor:
             return {}
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Force-place images by type in fixed cell ranges (in cm size)."""
+        """Force-place images by type in fixed cell ranges with proper spacing to prevent overlapping."""
         try:
             import openpyxl
             from openpyxl.utils import get_column_letter
@@ -309,12 +309,21 @@ class ImageExtractor:
                 print("❌ No image areas identified in template")
                 return 0, []
             
-            # Define target grid for each type with CORRECT column ranges - FIXED
+            # FIXED: Define target grid for each type with proper spacing to prevent overlapping
+            # Each image type gets 4 positions with proper row spacing
             grid_positions = {
-                'primary': [(col, row) for col in range(1, 4) for row in range(44, 52)],     # A-C, rows 44-51
-                'secondary': [(col, row) for col in range(5, 8) for row in range(44, 52)],   # E-G, rows 44-51 
-                'current': [(col, row) for col in range(9, 12) for row in range(44, 52)],    # I-K, rows 44-51 - FIXED
-                'label': [(col, row) for col in range(13, 16) for row in range(44, 52)],     # M-O, rows 44-51
+                'primary': [
+                    (1, 44), (2, 44), (3, 44), (4, 44)  # A44, B44, C44, D44
+                ],
+                'secondary': [
+                    (5, 44), (6, 44), (7, 44), (8, 44)  # E44, F44, G44, H44
+                ],
+                'current': [
+                    (9, 44), (10, 44), (11, 44), (12, 44)  # I44, J44, K44, L44 - FIXED: Now in column I
+                ],
+                'label': [
+                    (13, 44), (14, 44), (15, 44), (16, 44)  # M44, N44, O44, P44
+                ]
             }
             
             position_index = defaultdict(int)
@@ -345,16 +354,16 @@ class ImageExtractor:
                 print(f"🎯 Processing {len(images)} images of type '{img_type}'")
                 
                 if img_type in grid_positions:
-                    # Handle all image types using grid positions - UNIFIED APPROACH
                     pos_list = grid_positions[img_type]
                     
-                    for img_key, img_data in images:
+                    # FIXED: Ensure we can place up to 4 images for each type
+                    for img_index, (img_key, img_data) in enumerate(images):
                         if img_key in used_images:
                             continue
                         
-                        index = position_index[img_type]
-                        if index >= len(pos_list):
-                            print(f"❌ No space left for {img_type} images (max: {len(pos_list)})")
+                        # FIXED: Check if we have space for this image
+                        if img_index >= len(pos_list):
+                            print(f"❌ No more space for {img_type} images (max: {len(pos_list)})")
                             break
                         
                         try:
@@ -365,18 +374,20 @@ class ImageExtractor:
                             
                             img = OpenpyxlImage(tmp_img_path)
                             
-                            # Set size based on image type
+                            # FIXED: Set size based on image type with proper dimensions
                             if img_type == 'current':
-                                # Larger size for current packaging
+                                # FIXED: Larger size for current packaging (8.3cm as specified)
                                 width_cm, height_cm = 8.3, 8.3
                             else:
-                                # Standard size for other types
-                                width_cm, height_cm = 4.3, 4.3
+                                # Standard size for other types (smaller to prevent overlap)
+                                width_cm, height_cm = 3.8, 3.8  # Reduced from 4.3 to prevent overlap
                             
+                            # Convert cm to pixels (1 cm ≈ 37.8 pixels)
                             img.width = int(width_cm * 37.8)
                             img.height = int(height_cm * 37.8)
                             
-                            col, row = pos_list[index]
+                            # Get position from grid
+                            col, row = pos_list[img_index]
                             cell_coord = f"{get_column_letter(col)}{row}"
                             img.anchor = cell_coord
                             worksheet.add_image(img)
@@ -384,9 +395,8 @@ class ImageExtractor:
                             used_images.add(img_key)
                             temp_image_paths.append(tmp_img_path)
                             added_images += 1
-                            position_index[img_type] += 1
                             
-                            print(f"✅ Placed {img_type} image at {cell_coord}")
+                            print(f"✅ Placed {img_type} image {img_index + 1} at {cell_coord} (size: {width_cm}x{height_cm}cm)")
                             
                         except Exception as e:
                             print(f"❌ Failed placing {img_type} image {img_key}: {e}")
@@ -394,7 +404,7 @@ class ImageExtractor:
                             traceback.print_exc()
                             
                 elif img_type == 'unclassified':
-                    # Try to place unclassified images in any available grid position
+                    # Try to place unclassified images in any available space
                     print(f"🔧 Trying to place {len(images)} unclassified images")
                     
                     for img_key, img_data in images:
@@ -404,8 +414,9 @@ class ImageExtractor:
                         # Try each grid type until we find space
                         placed = False
                         for grid_type, pos_list in grid_positions.items():
-                            index = position_index[grid_type] 
-                            if index < len(pos_list):
+                            current_count = len([k for k in used_images if grouped_images[grid_type] and any(k == img[0] for img in grouped_images[grid_type])])
+                            
+                            if current_count < len(pos_list):
                                 try:
                                     # Prepare image
                                     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -414,12 +425,16 @@ class ImageExtractor:
                                     
                                     img = OpenpyxlImage(tmp_img_path)
                                     
-                                    # Set size
-                                    width_cm, height_cm = 4.3, 4.3
+                                    # Set size based on target grid type
+                                    if grid_type == 'current':
+                                        width_cm, height_cm = 8.3, 8.3
+                                    else:
+                                        width_cm, height_cm = 3.8, 3.8
+                                    
                                     img.width = int(width_cm * 37.8)
                                     img.height = int(height_cm * 37.8)
                                     
-                                    col, row = pos_list[index]
+                                    col, row = pos_list[current_count]
                                     cell_coord = f"{get_column_letter(col)}{row}"
                                     img.anchor = cell_coord
                                     worksheet.add_image(img)
@@ -427,7 +442,6 @@ class ImageExtractor:
                                     used_images.add(img_key)
                                     temp_image_paths.append(tmp_img_path)
                                     added_images += 1
-                                    position_index[grid_type] += 1
                                     placed = True
                                     
                                     print(f"✅ Placed unclassified image as {grid_type} at {cell_coord}")
