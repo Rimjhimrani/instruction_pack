@@ -355,9 +355,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
 
-    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, 
-                           temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place a single image with proper positioning and horizontal spacing"""
+    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, is_current=False, image_index=0):
+        """Place a single image on row 41, moving horizontally from column A"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -366,45 +365,34 @@ class ImageExtractor:
                 tmp_img_path = tmp_img.name
             
             img = OpenpyxlImage(tmp_img_path)
-            img.width = int(width_cm * 37.8)  # Convert cm to pixels
+            img.width = int(width_cm * 37.8)  # 1cm = ~37.8 pixels
             img.height = int(height_cm * 37.8)
 
-            # Calculate placement position
-            if is_current:
-                # Current images (8.3cm) - place directly under header
-                target_col = area['column']
-                target_row = area['row']
-            else:
-                # Smaller images (4.3cm) - calculate proper horizontal spacing
-                # Each image is 4.3cm width + 2cm gap = 6.8cm total spacing
-                # In Excel: 1cm ≈ 0.8 columns approximately
-                
-                image_width_cols = int(4.3 * 0.8)  # 4.3cm ≈ 5 columns
-                gap_cols = int(2 * 0.8)         # 2cm ≈ 3 columns
-                total_spacing_per_image = image_width_cols + gap_cols  # ≈ 8 columns
-                
-                # Get base column from area type
-                area_type = area.get('type', 'primary')
-                type_base_columns = {
-                    'primary': 1,    # Start at column A (1)
-                    'secondary': 7,  # Start at column G (7) 
-                    'label': 13      # Start at column M (13)
-                }
-                
-                base_col = type_base_columns.get(area_type, 1)
-                target_col = base_col + (image_index * total_spacing_per_image)
-                target_row = 41  # Fixed row for all 4.3cm images
-            
+            # 🟢 Fixed row 41
+            target_row = 41
+
+            # 🟢 Start at column 1 (A), then shift right for each image
+            # Horizontal spacing logic:
+            # 4.3cm width ≈ 5 columns (4.3 * 0.8)
+            # Add 2cm gap ≈ 2 columns (2 * 0.8)
+            image_width_cols = int(4.3 * 0.8)  # ≈ 3
+            gap_cols = int(2 * 0.8)            # ≈ 1
+            total_spacing = image_width_cols + gap_cols
+
+            # Starting at column 1 (A), shift by image index
+            target_col = 1 + (image_index * total_spacing)
+
+            # Convert to Excel cell format (e.g., A41, B41, etc.)
             cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
-            worksheet.add_image(img)
 
+            worksheet.add_image(img)
             temp_image_paths.append(tmp_img_path)
             used_images.add(img_key)
 
-            print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm) [Index: {image_index}]")
-            return 1
+            print(f"✅ Added image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
 
+            return 1
         except Exception as e:
             print(f"❌ Could not add image {img_key}: {e}")
             st.warning(f"Could not add image {img_key}: {e}")
