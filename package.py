@@ -280,6 +280,7 @@ class ImageExtractor:
                 
                 if type_images:
                     print(f"\n--- Processing {image_type} images ---")
+                    print(f"Found {len(type_images)} images of type '{image_type}'")
                     
                     # Determine image size based on type
                     if image_type == 'current':
@@ -288,6 +289,10 @@ class ImageExtractor:
                         width_cm = height_cm = 4.3  # Regular images
                     
                     for img_key, img_data in type_images.items():
+                        print(f"Processing image: {img_key}")
+                        print(f"Image type from data: {img_data.get('type', 'unknown')}")
+                        print(f"Is current check: {image_type == 'current'}")
+                        
                         # Create a dummy area for the placement function
                         dummy_area = {
                             'type': image_type,
@@ -323,12 +328,19 @@ class ImageExtractor:
             img.width = int(width_cm * 37.8)  # Convert cm to pixels
             img.height = int(height_cm * 37.8)
 
+            # 🟢 Double-check if this is a current image by checking both parameter and image data
+            image_type = img_data.get('type', '').lower()
+            is_current_image = is_current or image_type == 'current' or 'current' in img_key.lower()
+
             # 🟢 Special placement for current image: Row 2, Column T
-            if is_current:
+            if is_current_image:
                 target_row = 2
                 target_col = 20  # Column T (20th column)
                 cell_coord = f"T{target_row}"
-                print(f"✅ Placing current image at fixed position: {cell_coord}")
+                print(f"🎯 CURRENT IMAGE: Placing at fixed position T2: {cell_coord}")
+                print(f"   Image key: {img_key}")
+                print(f"   Image type: {image_type}")
+                print(f"   is_current param: {is_current}")
             else:
                 # 🟢 Sequential horizontal placement for other images on row 41
                 target_row = 41
@@ -345,7 +357,7 @@ class ImageExtractor:
                 self._global_image_counter += 1
 
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"✅ Placing {img_data.get('type', 'unknown')} image at sequential position: {cell_coord}")
+                print(f"📍 OTHER IMAGE: Placing {image_type} at sequential position: {cell_coord}")
 
             img.anchor = cell_coord
             worksheet.add_image(img)
