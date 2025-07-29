@@ -301,7 +301,7 @@ class ImageExtractor:
                         )
                     
                         added_images += self._place_single_image(
-                            worksheet, img_key, img_data, dummy_area, width_cm, height_cm, 
+                            worksheet, img_key, img_data, matching_area, width_cm, height_cm, 
                             temp_image_paths, used_images, 
                             is_current=(image_type == 'current')
                         )
