@@ -334,11 +334,10 @@ class ImageExtractor:
             if is_current_image:
                 target_row = 2
                 target_col = 20  # Column T (20th column)
-                cell_coord = f"T{target_row}"
+                cell_coord = f"{get_column_letter(target_col)}{target_row}"
                 print(f"🎯 CURRENT IMAGE: Placing at fixed position T2: {cell_coord}")
                 print(f"   Image key: {img_key}")
                 print(f"   Image type: {image_type}")
-                print(f"   is_current param: {is_current}")
             else:
                 # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
                 target_row = 41
