@@ -279,92 +279,67 @@ class ImageExtractor:
                                if v.get('type', '').lower() == image_type and k not in used_images}
             
                 if type_images:
-                    print(f"\n--- Processing {image_type} images ---")
-                    print(f"Found {len(type_images)} images of type '{image_type}'")
-                
-                    # Determine image size based on type
-                    if image_type == 'current':
-                        width_cm = height_cm = 8.3  # Large images
-                    else:
-                        width_cm = height_cm = 4.3  # Regular images
-                
-                    # Process all images of each type (not just the first one)
-                    for img_key, img_data in type_images.items():
-                        print(f"Processing image: {img_key}")
-                        print(f"Image type from data: {img_data.get('type', 'unknown')}")
-                        print(f"Is current check: {image_type == 'current'}")
-                    
-                        # Create a dummy area for the placement function
-                        matching_area = next(
-                            (a for a in image_areas if a['type'] == image_type),
-                            {'type': image_type, 'column': 1, 'row': 2 if image_type == 'current' else 41}
-                        )
-                    
-                        added_images += self._place_single_image(
-                            worksheet, img_key, img_data, matching_area, width_cm, height_cm, 
-                            temp_image_paths, used_images, 
-                            is_current=(image_type == 'current')
-                        )
-            print(f"\nTotal images added: {added_images}")
-            return added_images, temp_image_paths
+                    continue
+                print(f"\n--- Processing {image_type} images ---")
+                width_cm = height_cm = 8.3 if image_type == 'current' else 4.3
 
+                matching_areas = areas_by_type.get(image_type, [])
+
+                for idx, (img_key, img_data) in enumerate(type_images.items()):
+                    if idx < len(matching_areas):
+                        area = matching_areas[idx]
+                    else:
+                        # Fallback: dummy area to avoid crash, but will still space it out
+                        area = {'type': image_type, 'column': 1, 'row': 2 if image_type == 'current' else 41}
+                    added_images += self._place_single_image(
+                        worksheet, img_key, img_data, area, width_cm, height_cm,
+                        temp_image_paths, used_images,
+                        is_current=(image_type == 'current'),
+                        image_index=idx
+                    )
+            print(f"\n✅ Total images added: {added_images}")
+            return added_images, temp_image_paths
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
             return 0, []
-
+                    
     def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place images with specific logic: current image on row 2 column T, others in predefined template positions"""
+        """Place an image either in matched location (for current) or at row 41 horizontally"""
         try:
-            # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
             img = OpenpyxlImage(tmp_img_path)
-            img.width = int(width_cm * 37.8)  # Convert cm to pixels
+            img.width = int(width_cm * 37.8)
             img.height = int(height_cm * 37.8)
 
-            # Double-check if this is a current image by checking both parameter and image data
             image_type = img_data.get('type', '').lower()
             is_current_image = is_current or image_type == 'current' or 'current' in img_key.lower()
 
-            # Special placement for current image: Row 2, Column T
             if is_current_image:
-                target_row = 2
-                target_col = 20  # Column T (20th column)
-                cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"🎯 CURRENT IMAGE: Placing at fixed position T2: {cell_coord}")
-                print(f"   Image key: {img_key}")
-                print(f"   Image type: {image_type}")
+                # ✅ Place at detected location from area
+                target_row = area.get('row', 2)
+                target_col = area.get('column', 20)
+                print(f"🎯 CURRENT IMAGE: using matched area row={target_row}, col={target_col}")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
+                # 🟢 Place on row 41, spaced horizontally
                 target_row = 41
-            
-                # Use your defined spacing calculations
-                image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
-                gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
+                image_width_cols = int(4.3 * 1.162)
+                gap_cols = int(1.162 * 1.162)
                 total_spacing = image_width_cols + gap_cols
-
-                # Start at column 1 (A), then shift right for each non-current image
                 target_col = 1 + (self._global_image_counter * total_spacing)
-            
-                # Increment counter for next non-current image
                 self._global_image_counter += 1
-
-                cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
-                print(f"   Image key: {img_key}")
-                print(f"   Image type: {image_type}")
-                print(f"   Global counter: {self._global_image_counter}")
-                print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
+                print(f"📍 {image_type.upper()} IMAGE: row={target_row}, col={target_col}")
+            cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
             worksheet.add_image(img)
 
             temp_image_paths.append(tmp_img_path)
             used_images.add(img_key)
 
-            print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
+            print(f"✅ Added {image_type} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
             return 1
         except Exception as e:
             print(f"❌ Could not add image {img_key}: {e}")
