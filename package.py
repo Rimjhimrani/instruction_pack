@@ -357,7 +357,7 @@ class ImageExtractor:
 
     def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, 
                            temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place a single image with proper positioning and vertical spacing"""
+        """Place a single image with proper positioning and horizontal spacing"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -375,21 +375,25 @@ class ImageExtractor:
                 target_col = area['column']
                 target_row = area['row']
             else:
-                # Smaller images (4.3cm) - calculate proper vertical spacing
-                target_col = area['column']
+                # Smaller images (4.3cm) - calculate proper horizontal spacing
+                # Each image is 4.3cm width + 2.5cm gap = 6.8cm total spacing
+                # In Excel: 1cm ≈ 1.2 columns approximately
                 
-                # Calculate row with proper spacing:
-                # - Start at row 41 (base row)
-                # - Each image takes 4.3cm height (approximately 6.5 rows in Excel)
-                # - Add 2.5cm gap (approximately 3.8 rows in Excel) between images
-                # - Total spacing per image: 6.5 + 3.8 = 10.3 rows (rounded to 10)
+                image_width_cols = int(4.3 * 1.2)  # 4.3cm ≈ 5 columns
+                gap_cols = int(2.5 * 1.2)         # 2.5cm ≈ 3 columns
+                total_spacing_per_image = image_width_cols + gap_cols  # ≈ 8 columns
                 
-                image_height_rows = int(4.3 * 1.5)  # 4.3cm ≈ 6.5 rows
-                gap_rows = int(2.5 * 1.5)           # 2.5cm ≈ 3.8 rows  
-                total_spacing_per_image = image_height_rows + gap_rows  # ≈ 10 rows
+                # Get base column from area type
+                area_type = area.get('type', 'primary')
+                type_base_columns = {
+                    'primary': 1,    # Start at column A (1)
+                    'secondary': 7,  # Start at column G (7) 
+                    'label': 13      # Start at column M (13)
+                }
                 
-                base_row = 41
-                target_row = base_row + (image_index * total_spacing_per_image)
+                base_col = type_base_columns.get(area_type, 1)
+                target_col = base_col + (image_index * total_spacing_per_image)
+                target_row = 41  # Fixed row for all 4.3cm images
             
             cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
@@ -408,25 +412,22 @@ class ImageExtractor:
 
     def _create_additional_placement_area(self, area_type, index, existing_areas):
         """Create additional placement area when no predefined area exists"""
-        # Use the same column as the first area of this type if available
-        if existing_areas:
-            target_column = existing_areas[0]['column']
-        else:
-            # Default column mapping for each type
-            type_columns = {
-                'primary': 1,    # Column A
-                'secondary': 4,  # Column D  
-                'label': 7       # Column G
-            }
-            target_column = type_columns.get(area_type, 1)
+        # Default column mapping for each type with horizontal spacing
+        type_base_columns = {
+            'primary': 1,    # Start at column A
+            'secondary': 7,  # Start at column G  
+            'label': 13      # Start at column M
+        }
         
-        # Calculate row with proper spacing
-        image_height_rows = int(4.3 * 1.5)  # 4.3cm in rows
-        gap_rows = int(2.5 * 1.5)           # 2.5cm gap in rows
-        total_spacing_per_image = image_height_rows + gap_rows
+        base_col = type_base_columns.get(area_type, 1)
         
-        base_row = 41
-        target_row = base_row + (index * total_spacing_per_image)
+        # Calculate column with proper horizontal spacing
+        image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
+        gap_cols = int(2.5 * 1.2)         # 2.5cm gap in columns
+        total_spacing_per_image = image_width_cols + gap_cols
+        
+        target_column = base_col + (index * total_spacing_per_image)
+        target_row = 41  # Fixed row for all 4.3cm images
         
         # Create a virtual area for additional placement
         return {
@@ -441,26 +442,26 @@ class ImageExtractor:
         }
 
     def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
-        """Place remaining images in available columns with proper vertical spacing"""
+        """Place remaining images in available columns with proper horizontal spacing"""
         try:
-            # Default column for each type
-            type_columns = {
-                'primary': 1,    # Column A
-                'secondary': 4,  # Column D
-                'label': 7       # Column G
+            # Base column for each type
+            type_base_columns = {
+                'primary': 1,    # Start at column A
+                'secondary': 7,  # Start at column G
+                'label': 13      # Start at column M
             }
             
-            target_col = type_columns.get(image_type, 1)
+            base_col = type_base_columns.get(image_type, 1)
             
-            # Calculate proper spacing
-            image_height_rows = int(4.3 * 1.5)  # 4.3cm in rows
-            gap_rows = int(2.5 * 1.5)           # 2.5cm gap in rows
-            total_spacing_per_image = image_height_rows + gap_rows
+            # Calculate proper horizontal spacing
+            image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
+            gap_cols = int(2.5 * 1.2)         # 2.5cm gap in columns
+            total_spacing_per_image = image_width_cols + gap_cols
             
-            base_row = 41
+            target_row = 41  # Fixed row for all images
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
-                target_row = base_row + (idx * total_spacing_per_image)
+                target_col = base_col + (idx * total_spacing_per_image)
                 
                 try:
                     # Create and place image
@@ -480,7 +481,7 @@ class ImageExtractor:
                     temp_image_paths.append(tmp_img_path)
                     used_images.add(img_key)
                     
-                    print(f"✅ Placed remaining {image_type} image at {cell_coord} (spacing: {total_spacing_per_image} rows)")
+                    print(f"✅ Placed remaining {image_type} image at {cell_coord} (spacing: {total_spacing_per_image} cols)")
                     
                 except Exception as e:
                     print(f"❌ Error placing remaining image: {e}")
