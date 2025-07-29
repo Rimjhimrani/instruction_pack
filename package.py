@@ -268,7 +268,7 @@ class ImageExtractor:
             print(f"Available images: {len(uploaded_images)}")
             print(f"Image areas found: {len(image_areas)}")
             
-            # Reset global image counter for sequential placement
+            # Reset global image counter for sequential placement (excluding current images)
             self._global_image_counter = 0
             
             # Process images in order: current, primary, secondary, label
@@ -291,7 +291,7 @@ class ImageExtractor:
                         # Create a dummy area for the placement function
                         dummy_area = {
                             'type': image_type,
-                            'column': 1,  # Will be overridden by sequential logic
+                            'column': 1,  # Will be overridden by placement logic
                             'row': 41
                         }
                         
@@ -311,7 +311,7 @@ class ImageExtractor:
 
     def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, 
                            temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place images sequentially on row 41, moving horizontally from column A"""
+        """Place images with specific logic: current image on row 2 column T, others sequentially on row 41"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -323,38 +323,37 @@ class ImageExtractor:
             img.width = int(width_cm * 37.8)  # Convert cm to pixels
             img.height = int(height_cm * 37.8)
 
-            # 🟢 Fixed row 41 for all images
-            target_row = 41
-
-            # 🟢 Sequential horizontal placement logic
-            # Use a class-level counter to track total images placed
-            if not hasattr(self, '_global_image_counter'):
-                self._global_image_counter = 0
-            
-            # Calculate horizontal spacing based on image size
-            if is_current or width_cm > 6:  # Large images (8.3cm)
-                image_width_cols = int(8.3 * 1.162)  # ≈ 10 columns
+            # 🟢 Special placement for current image: Row 2, Column T
+            if is_current:
+                target_row = 2
+                target_col = 20  # Column T (20th column)
+                cell_coord = f"T{target_row}"
+                print(f"✅ Placing current image at fixed position: {cell_coord}")
+            else:
+                # 🟢 Sequential horizontal placement for other images on row 41
+                target_row = 41
+                
+                # Calculate horizontal spacing based on image size
+                image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
-            else:  # Regular images (4.3cm)
-                image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns
-                gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
-            
-            total_spacing = image_width_cols + gap_cols
+                total_spacing = image_width_cols + gap_cols
 
-            # Start at column 1 (A), then shift right for each image
-            target_col = 1 + (self._global_image_counter * total_spacing)
-            
-            # Increment counter for next image
-            self._global_image_counter += 1
+                # Start at column 1 (A), then shift right for each non-current image
+                target_col = 1 + (self._global_image_counter * total_spacing)
+                
+                # Increment counter for next non-current image
+                self._global_image_counter += 1
 
-            cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                print(f"✅ Placing {img_data.get('type', 'unknown')} image at sequential position: {cell_coord}")
+
             img.anchor = cell_coord
             worksheet.add_image(img)
 
             temp_image_paths.append(tmp_img_path)
             used_images.add(img_key)
 
-            print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm) [Global Index: {self._global_image_counter-1}]")
+            print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
             return 1
 
         except Exception as e:
