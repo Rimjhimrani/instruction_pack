@@ -311,7 +311,7 @@ class ImageExtractor:
                         else:
                             # For other types, place multiple images in a grid below the header
                             images_per_column = 4  # Number of images you want per column
-                            base_row = 44  # Starting row for images
+                            base_row = 41  # Starting row for images
                             # Get counter for this specific column header
                             column_key = f"{area_type}_{header_column}"
                             if column_key not in self._placement_counters:
