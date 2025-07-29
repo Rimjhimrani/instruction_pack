@@ -258,7 +258,7 @@ class ImageExtractor:
             return type_order[index % len(type_order)]
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with matched locations"""
+        """Add uploaded images to template with fixed positions"""
         try:
             added_images = 0
             temp_image_paths = []
@@ -266,14 +266,9 @@ class ImageExtractor:
             
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
-            print(f"Image areas found: {len(image_areas)}")
             
-            self._global_image_counter = 0
-
-            # Group image areas by type
-            areas_by_type = defaultdict(list)
-            for area in image_areas:
-                areas_by_type[area['type']].append(area)
+            # Initialize counter for row 41 images (primary, secondary, label)
+            row_41_counter = 0
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -287,43 +282,17 @@ class ImageExtractor:
                 print(f"\n--- Processing {image_type} images ---")
                 print(f"Found {len(type_images)} images of type '{image_type}'")
                 
-                # Set dimensions based on image type
-                if image_type == 'current':
-                    width_cm = height_cm = 8.3
-                else:
-                    width_cm = height_cm = 4.3
-
-                # Get matching areas for this type
-                matching_areas = areas_by_type.get(image_type, [])
-                print(f"Found {len(matching_areas)} matching areas for type '{image_type}'")
-
                 for idx, (img_key, img_data) in enumerate(type_images.items()):
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
-                    if idx < len(matching_areas):
-                        area = matching_areas[idx]
-                        print(f"Using matched area: {area}")
-                    else:
-                        # Create fallback area
-                        if image_type == 'current':
-                            print("⚠️ No matched area for current packaging image. Using fallback position C6.")
-                            area = {
-                                'type': 'current',
-                                'column': 20,  # Column C
-                                'row': 3      # Row 6
-                            }
-                        else:
-                            print(f"⚠️ No matched area for {image_type} image. Using fallback position at row 41.")
-                            area = {
-                                'type': image_type,
-                                'column': 1 + (self._global_image_counter * 3),  # Spread horizontally
-                                'row': 41
-                            }
-                            
                     added_images += self._place_single_image(
-                        worksheet, img_key, img_data, area, width_cm, height_cm,
-                        temp_image_paths, used_images, image_type
+                        worksheet, img_key, img_data, image_type, idx, row_41_counter,
+                        temp_image_paths, used_images
                     )
+                    
+                    # Increment row 41 counter for non-current images
+                    if image_type != 'current':
+                        row_41_counter += 1
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -333,8 +302,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
                     
-    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, image_type):
-        """Place image at specified location"""
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
+        """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -344,24 +313,27 @@ class ImageExtractor:
                 
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
-            img.width = int(width_cm * 37.8)   # Convert cm to pixels (37.8 pixels per cm)
-            img.height = int(height_cm * 37.8)
-
-            # Determine placement based on image type
+            
+            # FIXED PLACEMENT LOGIC - NO MIXING
             if image_type == 'current':
-                # Current packaging goes to its designated area or fallback
-                target_row = area.get('row', 3)
-                target_col = area.get('column', 20)
-                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (size: {width_cm}x{height_cm}cm)")
+                # CURRENT PACKAGING: Always at row 2, column 20
+                target_row = 2
+                target_col = 20
+                # Current images are larger (8.3cm x 8.3cm)
+                img.width = int(8.3 * 37.8)
+                img.height = int(8.3 * 37.8)
+                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
+                
             else:
-                # Other images go to row 41 with horizontal spacing
+                # PRIMARY, SECONDARY, LABEL: Always at row 41 with horizontal spacing
                 target_row = 41
-                image_width_cols = int(4.3 * 1.162)  # Approximate column width for 4.3cm
-                gap_cols = max(1, int(1.162))         # Gap between images
-                total_spacing = image_width_cols + gap_cols
-                target_col = 1 + (self._global_image_counter * total_spacing)
-                self._global_image_counter += 1
-                print(f"📍 {image_type.upper()} IMAGE: Placing at row={target_row}, col={target_col} (size: {width_cm}x{height_cm}cm)")
+                # Calculate column position with spacing (each image takes ~6 columns width)
+                spacing_between_images = 6
+                target_col = 1 + (row_41_counter * spacing_between_images)
+                # Other images are smaller (4.3cm x 4.3cm)
+                img.width = int(4.3 * 37.8)
+                img.height = int(4.3 * 37.8)
+                print(f"📍 {image_type.upper()} IMAGE: Placing at row={target_row}, col={target_col} (4.3x4.3cm)")
 
             # Set image position and add to worksheet
             cell_coord = f"{get_column_letter(target_col)}{target_row}"
@@ -392,8 +364,8 @@ class ImageExtractor:
         
         if area_type == 'current':
             # Current images should go to a specific location
-            target_column = 20  # Column C
-            target_row = 3     # Row 6
+            target_column = 3  # Column C
+            target_row = 6     # Row 6
         else:
             # Other images go to row 41 with spacing
             target_column = type_columns.get(area_type, 2)
@@ -424,8 +396,8 @@ class ImageExtractor:
             
             if image_type == 'current':
                 # Current images should go to specific location
-                target_col = 20  # Column C
-                start_row = 3   # Row 6
+                target_col = 3  # Column C
+                start_row = 6   # Row 6
             else:
                 target_col = type_columns.get(image_type, 2)
                 start_row = 41
