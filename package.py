@@ -295,11 +295,10 @@ class ImageExtractor:
                         print(f"Is current check: {image_type == 'current'}")
                     
                         # Create a dummy area for the placement function
-                        dummy_area = {
-                            'type': image_type,
-                            'column': 1,  # Will be overridden by placement logic
-                            'row': 41 if image_type != 'current' else 2
-                        }
+                        matching_area = next(
+                            (a for a in image_areas if a['type'] == image_type),
+                            {'type': image_type, 'column': 1, 'row': 2 if image_type == 'current' else 41}
+                        )
                     
                         added_images += self._place_single_image(
                             worksheet, img_key, img_data, dummy_area, width_cm, height_cm, 
