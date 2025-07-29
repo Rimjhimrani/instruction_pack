@@ -291,11 +291,22 @@ class ImageExtractor:
                         area = matching_areas[idx]
                     else:
                         # Fallback if too many images of one type
-                        area = {
-                            'type': image_type,
-                            'column': 1,
-                            'row': 2 if image_type == 'current' else 41
-                        }
+                        if image_type == 'current':
+                            print("⚠️ No matched area for current packaging image. Falling back to C6.")
+                            area = {
+                                'type': 'current',
+                                'column': 3,  # Column C
+                                'row': 6      # Row 6
+
+                            }
+                        else:
+                            # Others go to row 41 spaced horizontally
+                            area = {
+                                'type': image_type,
+                                'column': 1,
+                                'row': 41
+                            }
+                            
                     added_images += self._place_single_image(
                         worksheet, img_key, img_data, area, width_cm, height_cm,
                         temp_image_paths, used_images,
