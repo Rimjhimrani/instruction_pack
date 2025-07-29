@@ -258,7 +258,7 @@ class ImageExtractor:
             return type_order[index % len(type_order)]
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with improved matching and proper placement"""
+        """Add uploaded images to template with sequential horizontal placement"""
         try:
             added_images = 0
             temp_image_paths = []
@@ -268,83 +268,37 @@ class ImageExtractor:
             print(f"Available images: {len(uploaded_images)}")
             print(f"Image areas found: {len(image_areas)}")
             
-            # Reset placement counters for this operation
-            self._placement_counters = defaultdict(int)
+            # Reset global image counter for sequential placement
+            self._global_image_counter = 0
             
-            # Group areas by type for better processing
-            areas_by_type = defaultdict(list)
-            for area in image_areas:
-                areas_by_type[area['type']].append(area)
+            # Process images in order: current, primary, secondary, label
+            image_order = ['current', 'primary', 'secondary', 'label']
             
-            print(f"Areas by type: {dict(areas_by_type)}")
-            
-            # Separate current and primary images handling
-            current_images = {k: v for k, v in uploaded_images.items() 
-                            if v.get('type', '').lower() == 'current'}
-            primary_images = {k: v for k, v in uploaded_images.items() 
-                            if v.get('type', '').lower() == 'primary'}
-            
-            # Handle current packaging images (8.3cm) - place in dedicated current area or primary area
-            if current_images:
-                print(f"\n--- Processing current packaging images (8.3cm) ---")
-                current_areas = areas_by_type.get('current', [])
-                
-                # If no dedicated current areas, check if we can use primary area for large images
-                if not current_areas and 'primary' in areas_by_type:
-                    print("No dedicated current area found, using primary area for large images")
-                    current_areas = areas_by_type['primary'][:1]  # Use first primary area
-                
-                for idx, (img_key, img_data) in enumerate(current_images.items()):
-                    if idx >= len(current_areas):
-                        print(f"No more space for current image {img_key}")
-                        break
-                        
-                    area = current_areas[idx]
-                    added_images += self._place_single_image(
-                        worksheet, img_key, img_data, area, 8.3, 8.3, 
-                        temp_image_paths, used_images, is_current=True
-                    )
-            
-            # Handle primary packaging images (4.3cm)
-            if primary_images:
-                print(f"\n--- Processing primary packaging images (4.3cm) ---")
-                primary_areas = areas_by_type.get('primary', [])
-                
-                # Skip areas already used by current images
-                used_current_areas = len(current_images) if current_images and not areas_by_type.get('current') else 0
-                available_primary_areas = primary_areas[used_current_areas:]
-                
-                for idx, (img_key, img_data) in enumerate(primary_images.items()):
-                    if idx < len(available_primary_areas):
-                        area = available_primary_areas[idx]
-                    else:
-                        # Create additional placement in primary column with spacing
-                        area = self._create_additional_placement_area('primary', idx, available_primary_areas)
-                    
-                    added_images += self._place_single_image(
-                        worksheet, img_key, img_data, area, 4.3, 4.3, 
-                        temp_image_paths, used_images, image_index=idx
-                    )
-            
-            # Handle other image types (secondary, label)
-            for area_type in ['secondary', 'label']:
+            for image_type in image_order:
                 type_images = {k: v for k, v in uploaded_images.items() 
-                             if v.get('type', '').lower() == area_type and k not in used_images}
+                             if v.get('type', '').lower() == image_type and k not in used_images}
                 
                 if type_images:
-                    print(f"\n--- Processing {area_type} images (4.3cm) ---")
-                    areas = areas_by_type.get(area_type, [])
+                    print(f"\n--- Processing {image_type} images ---")
                     
-                    for idx, (img_key, img_data) in enumerate(type_images.items()):
-                        if idx < len(areas):
-                            area = areas[idx]
-                        else:
-                            # Create additional placement with spacing
-                            area = self._create_additional_placement_area(area_type, idx, areas)
+                    # Determine image size based on type
+                    if image_type == 'current':
+                        width_cm = height_cm = 8.3  # Large images
+                    else:
+                        width_cm = height_cm = 4.3  # Regular images
+                    
+                    for img_key, img_data in type_images.items():
+                        # Create a dummy area for the placement function
+                        dummy_area = {
+                            'type': image_type,
+                            'column': 1,  # Will be overridden by sequential logic
+                            'row': 41
+                        }
                         
                         added_images += self._place_single_image(
-                            worksheet, img_key, img_data, area, 4.3, 4.3, 
-                            temp_image_paths, used_images, image_index=idx
+                            worksheet, img_key, img_data, dummy_area, width_cm, height_cm, 
+                            temp_image_paths, used_images, 
+                            is_current=(image_type == 'current')
                         )
                     
             print(f"\nTotal images added: {added_images}")
@@ -355,8 +309,9 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
 
-    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place a single image on row 41, moving horizontally from column A"""
+    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, 
+                           temp_image_paths, used_images, is_current=False, image_index=0):
+        """Place images sequentially on row 41, moving horizontally from column A"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -365,34 +320,43 @@ class ImageExtractor:
                 tmp_img_path = tmp_img.name
             
             img = OpenpyxlImage(tmp_img_path)
-            img.width = int(width_cm * 37.8)  # 1cm = ~37.8 pixels
+            img.width = int(width_cm * 37.8)  # Convert cm to pixels
             img.height = int(height_cm * 37.8)
 
-            # 🟢 Fixed row 41
+            # 🟢 Fixed row 41 for all images
             target_row = 41
 
-            # 🟢 Start at column 1 (A), then shift right for each image
-            # Horizontal spacing logic:
-            # 4.3cm width ≈ 5 columns (4.3 * 1.2)
-            # Add 2cm gap ≈ 2 columns (2.5 * 1.2)
-            image_width_cols = int(4.3 * 1.2)  # ≈ 3
-            gap_cols = int(2.5 * 1.2)            # ≈ 1
+            # 🟢 Sequential horizontal placement logic
+            # Use a class-level counter to track total images placed
+            if not hasattr(self, '_global_image_counter'):
+                self._global_image_counter = 0
+            
+            # Calculate horizontal spacing based on image size
+            if is_current or width_cm > 6:  # Large images (8.3cm)
+                image_width_cols = int(8.3 * 1.2)  # ≈ 10 columns
+                gap_cols = int(2.5 * 1.2)         # ≈ 3 columns gap
+            else:  # Regular images (4.3cm)
+                image_width_cols = int(4.3 * 1.2)  # ≈ 5 columns
+                gap_cols = int(2.5 * 1.2)         # ≈ 3 columns gap
+            
             total_spacing = image_width_cols + gap_cols
 
-            # Starting at column 1 (A), shift by image index
-            target_col = 1 + (image_index * total_spacing)
+            # Start at column 1 (A), then shift right for each image
+            target_col = 1 + (self._global_image_counter * total_spacing)
+            
+            # Increment counter for next image
+            self._global_image_counter += 1
 
-            # Convert to Excel cell format (e.g., A41, B41, etc.)
             cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
-
             worksheet.add_image(img)
+
             temp_image_paths.append(tmp_img_path)
             used_images.add(img_key)
 
-            print(f"✅ Added image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
-
+            print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm) [Global Index: {self._global_image_counter-1}]")
             return 1
+
         except Exception as e:
             print(f"❌ Could not add image {img_key}: {e}")
             st.warning(f"Could not add image {img_key}: {e}")
@@ -400,22 +364,15 @@ class ImageExtractor:
 
     def _create_additional_placement_area(self, area_type, index, existing_areas):
         """Create additional placement area when no predefined area exists"""
-        # Default column mapping for each type with horizontal spacing
-        type_base_columns = {
-            'primary': 1,    # Start at column A
-            'secondary': 7,  # Start at column G  
-            'label': 13      # Start at column M
+        # Simple single column per type
+        type_columns = {
+            'primary': 2,    # Column B
+            'secondary': 6,  # Column F
+            'label': 11      # Column K
         }
         
-        base_col = type_base_columns.get(area_type, 1)
-        
-        # Calculate column with proper horizontal spacing
-        image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-        gap_cols = int(2.5 * 1.2)         # 2cm gap in columns
-        total_spacing_per_image = image_width_cols + gap_cols
-        
-        target_column = base_col + (index * total_spacing_per_image)
-        target_row = 41  # Fixed row for all 4.3cm images
+        target_column = type_columns.get(area_type, 2)
+        target_row = 41 + (index * 12)  # Vertical spacing for multiple images of same type
         
         # Create a virtual area for additional placement
         return {
@@ -430,26 +387,19 @@ class ImageExtractor:
         }
 
     def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
-        """Place remaining images in available columns with proper horizontal spacing"""
+        """Place remaining images in available columns with proper spacing"""
         try:
-            # Base column for each type
-            type_base_columns = {
-                'primary': 1,    # Start at column A
-                'secondary': 7,  # Start at column G
-                'label': 13      # Start at column M
+            # Simple single column per type
+            type_columns = {
+                'primary': 2,    # Column B
+                'secondary': 6,  # Column F
+                'label': 11      # Column K
             }
             
-            base_col = type_base_columns.get(image_type, 1)
-            
-            # Calculate proper horizontal spacing
-            image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-            gap_cols = int(2.5 * 1.2)         # 2cm gap in columns
-            total_spacing_per_image = image_width_cols + gap_cols
-            
-            target_row = 41  # Fixed row for all images
+            target_col = type_columns.get(image_type, 2)
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
-                target_col = base_col + (idx * total_spacing_per_image)
+                target_row = 41 + (idx * 12)  # Vertical spacing
                 
                 try:
                     # Create and place image
@@ -469,7 +419,7 @@ class ImageExtractor:
                     temp_image_paths.append(tmp_img_path)
                     used_images.add(img_key)
                     
-                    print(f"✅ Placed remaining {image_type} image at {cell_coord} (spacing: {total_spacing_per_image} cols)")
+                    print(f"✅ Placed remaining {image_type} image at {cell_coord}")
                     
                 except Exception as e:
                     print(f"❌ Error placing remaining image: {e}")
