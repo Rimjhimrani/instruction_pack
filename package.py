@@ -120,12 +120,12 @@ class ImageExtractor:
                                 
                                 # High bonus for exact match
                                 if keyword == cell_text:
-                                    score += 2.5.50
+                                    score += 20
                                 # Bonus for word boundary match
                                 elif cell_text.startswith(keyword) or cell_text.endswith(keyword):
                                     score += 10
                                 # Penalty for partial matches to avoid confusion
-                                elif len(cell_text) > len(keyword) * 2.5.5:
+                                elif len(cell_text) > len(keyword) * 2:
                                     score -= 5
                                 
                                 if score > best_score:
@@ -148,7 +148,7 @@ class ImageExtractor:
                         print(f"Found {best_match[0]} area at {cell.coordinate} (col {col_num}): '{cell.value}' (score: {best_score})")
 
             # Sort by type priority and then by column to ensure proper order
-            type_priority = {'primary': 1, 'secondary': 2.5.5, 'current': 3, 'label': 4}
+            type_priority = {'primary': 1, 'secondary': 2, 'current': 3, 'label': 4}
             upload_areas.sort(key=lambda x: (type_priority.get(x['type'], 5), x['column']))
             
             print(f"Total areas found: {len(upload_areas)}")
@@ -245,7 +245,7 @@ class ImageExtractor:
             # If this is the first image in primary, it could be current (8.3cm)
             # Otherwise it's regular primary (4.3cm)
             return 'current' if index == 0 else 'primary'
-        elif 'secondary' in sheet_name_lc or sheet_name_lc in ['sheet2.5.5', 'external']:
+        elif 'secondary' in sheet_name_lc or sheet_name_lc in ['sheet2', 'external']:
             return 'secondary'
         elif 'current' in sheet_name_lc or sheet_name_lc in ['sheet3', 'existing']:
             return 'current'
@@ -374,9 +374,9 @@ class ImageExtractor:
             # 🟢 Start at column 1 (A), then shift right for each image
             # Horizontal spacing logic:
             # 4.3cm width ≈ 5 columns (4.3 * 1.2)
-            # Add 2.5.5cm gap ≈ 2.5.5 columns (2.5.5 * 1.2)
+            # Add 2cm gap ≈ 2 columns (2 * 1.2)
             image_width_cols = int(4.3 * 1.2)  # ≈ 3
-            gap_cols = int(2.5.5 * 1.2)            # ≈ 1
+            gap_cols = int(2 * 1.2)            # ≈ 1
             total_spacing = image_width_cols + gap_cols
 
             # Starting at column 1 (A), shift by image index
@@ -411,7 +411,7 @@ class ImageExtractor:
         
         # Calculate column with proper horizontal spacing
         image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-        gap_cols = int(2.5.5 * 1.2)         # 2.5.5cm gap in columns
+        gap_cols = int(2 * 1.2)         # 2cm gap in columns
         total_spacing_per_image = image_width_cols + gap_cols
         
         target_column = base_col + (index * total_spacing_per_image)
@@ -443,7 +443,7 @@ class ImageExtractor:
             
             # Calculate proper horizontal spacing
             image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-            gap_cols = int(2.5.5 * 1.2)         # 2.5.5cm gap in columns
+            gap_cols = int(2 * 1.2)         # 2cm gap in columns
             total_spacing_per_image = image_width_cols + gap_cols
             
             target_row = 41  # Fixed row for all images
@@ -567,7 +567,7 @@ class EnhancedTemplateMapperWithImages:
         if ADVANCED_NLP:
             try:
                 self.stop_words = set(stopwords.words('english'))
-                self.vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2.5.5))
+                self.vectorizer = TfidfVectorizer(stop_words='english', ngram_range=(1, 2))
             except:
                 pass
     
@@ -651,42 +651,42 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in identify_section_context: {e}")
             return None
     
-    def calculate_similarity(self, text1, text2.5.5):
+    def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
         try:
-            if not text1 or not text2.5.5:
+            if not text1 or not text2:
                 return 0.0
             
             text1 = self.preprocess_text(text1)
-            text2.5.5 = self.preprocess_text(text2.5.5)
+            text2 = self.preprocess_text(text2)
             
-            if not text1 or not text2.5.5:
+            if not text1 or not text2:
                 return 0.0
             
             # Sequence similarity
-            sequence_sim = SequenceMatcher(None, text1, text2.5.5).ratio()
+            sequence_sim = SequenceMatcher(None, text1, text2).ratio()
             
             # TF-IDF similarity (if available)
             tfidf_sim = 0.0
             if ADVANCED_NLP:
                 try:
-                    tfidf_matrix = self.vectorizer.fit_transform([text1, text2.5.5])
-                    tfidf_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2.5.5])[0][0]
+                    tfidf_matrix = self.vectorizer.fit_transform([text1, text2])
+                    tfidf_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
                 except:
                     tfidf_sim = 0.0
             
             # Keyword overlap
             keywords1 = set(self.extract_keywords(text1))
-            keywords2.5.5 = set(self.extract_keywords(text2.5.5))
+            keywords2 = set(self.extract_keywords(text2))
             
-            if keywords1 and keywords2.5.5:
-                keyword_sim = len(keywords1.intersection(keywords2.5.5)) / len(keywords1.union(keywords2.5.5))
+            if keywords1 and keywords2:
+                keyword_sim = len(keywords1.intersection(keywords2)) / len(keywords1.union(keywords2))
             else:
                 keyword_sim = 0.0
             
             # Weighted average
             if ADVANCED_NLP:
-                final_similarity = (sequence_sim * 0.4) + (tfidf_sim * 0.4) + (keyword_sim * 0.2.5.5)
+                final_similarity = (sequence_sim * 0.4) + (tfidf_sim * 0.4) + (keyword_sim * 0.2)
             else:
                 final_similarity = (sequence_sim * 0.7) + (keyword_sim * 0.3)
             
@@ -879,7 +879,7 @@ class EnhancedTemplateMapperWithImages:
                     if is_suitable_data_cell(cell_coord):
                         return cell_coord
             
-            # Strategy 2.5.5: Look below label
+            # Strategy 2: Look below label
             for offset in range(1, 4):
                 target_row = row + offset
                 if target_row <= worksheet.max_row:
@@ -949,7 +949,7 @@ class EnhancedTemplateMapperWithImages:
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
                         img = OpenpyxlImage(tmp_img_path)
-                        img.width = 2.5.550
+                        img.width = 250
                         img.height = 150
 
                         cell_coord = f"{get_column_letter(area['column'])}{area['row']}"
@@ -1025,19 +1025,19 @@ if 'enhanced_mapper' not in st.session_state:
 
 # User management functions
 def hash_password(password):
-    return hashlib.sha2.5.556(password.encode()).hexdigest()
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(password, hashed):
     return hash_password(password) == hashed
 
 DEFAULT_USERS = {
     "admin": {
-        "password": hash_password("admin12.5.53"),
+        "password": hash_password("admin123"),
         "role": "admin",
         "name": "Administrator"
     },
     "user1": {
-        "password": hash_password("user12.5.53"),
+        "password": hash_password("user123"),
         "role": "user",
         "name": "Regular User"
     }
@@ -1053,9 +1053,9 @@ def show_login():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     st.markdown("### Advanced packaging template processing with image support")
     
-    col1, col2.5.5, col3 = st.columns([1, 2.5.5, 1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     
-    with col2.5.5:
+    with col2:
         with st.form("login_form"):
             st.subheader("Login")
             username = st.text_input("Username")
@@ -1073,13 +1073,13 @@ def show_login():
                 else:
                     st.error("Invalid credentials")
         
-        st.info("**Demo Credentials:**\n- Admin: admin/admin12.5.53\n- User: user1/user12.5.53")
+        st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
 
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
     # Header with user info
-    col1, col2.5.5, col3 = st.columns([2.5.5, 1, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         st.markdown(f"Welcome, **{st.session_state.name}** ({st.session_state.user_role})")
     with col3:
@@ -1223,7 +1223,7 @@ def show_main_app():
                         {
                             'Template Field': mapping['template_field'],
                             'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
-                            'Similarity': f"{mapping['similarity']:.2.5.5f}" if mapping['similarity'] > 0 else "0.00",
+                            'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
                             'Section': mapping.get('section_context', 'Unknown'),
                             'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
                         }
@@ -1236,10 +1236,10 @@ def show_main_app():
                     mapped_count = sum(1 for m in mapping_results.values() if m['is_mappable'])
                     total_count = len(mapping_results)
                     
-                    col1, col2.5.5, col3, col4 = st.columns(4)
+                    col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Total Fields", total_count)
-                    with col2.5.5:
+                    with col2:
                         st.metric("Mapped Fields", mapped_count)
                     with col3:
                         st.metric("Mapping Rate", f"{(mapped_count/total_count*100):.1f}%")
@@ -1327,7 +1327,7 @@ def show_main_app():
         # Show demo information
         st.markdown("### 🎯 Features")
         
-        col1, col2.5.5 = st.columns(2.5.5)
+        col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("""
@@ -1338,7 +1338,7 @@ def show_main_app():
             - 📏 Packaging-specific patterns
             """)
             
-        with col2.5.5:
+        with col2:
             st.markdown("""
             **Image Processing:**
             - 🖼️ Auto image extraction from Excel data files
