@@ -374,9 +374,9 @@ class ImageExtractor:
             # 🟢 Start at column 1 (A), then shift right for each image
             # Horizontal spacing logic:
             # 4.3cm width ≈ 5 columns (4.3 * 1.2)
-            # Add 2cm gap ≈ 2 columns (2 * 1.2)
+            # Add 2cm gap ≈ 2 columns (2.5 * 1.2)
             image_width_cols = int(4.3 * 1.2)  # ≈ 3
-            gap_cols = int(2 * 1.2)            # ≈ 1
+            gap_cols = int(2.5 * 1.2)            # ≈ 1
             total_spacing = image_width_cols + gap_cols
 
             # Starting at column 1 (A), shift by image index
@@ -411,7 +411,7 @@ class ImageExtractor:
         
         # Calculate column with proper horizontal spacing
         image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-        gap_cols = int(2 * 1.2)         # 2cm gap in columns
+        gap_cols = int(2.5 * 1.2)         # 2cm gap in columns
         total_spacing_per_image = image_width_cols + gap_cols
         
         target_column = base_col + (index * total_spacing_per_image)
@@ -443,7 +443,7 @@ class ImageExtractor:
             
             # Calculate proper horizontal spacing
             image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-            gap_cols = int(2 * 1.2)         # 2cm gap in columns
+            gap_cols = int(2.5 * 1.2)         # 2cm gap in columns
             total_spacing_per_image = image_width_cols + gap_cols
             
             target_row = 41  # Fixed row for all images
