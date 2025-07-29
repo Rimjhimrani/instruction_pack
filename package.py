@@ -237,25 +237,28 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
-        """Classify image type based on sheet name and position with better logic"""
-        sheet_name_lc = sheet_name.lower()
+        """Classify image type based on position and index, not sheet name"""
+        # Ignore sheet name completely - classify based on image order/position
+        # First image = current, then cycle through primary, secondary, label
         
-        # More specific classification rules
-        if 'primary' in sheet_name_lc or sheet_name_lc in ['sheet1', 'internal']:
-            # If this is the first image in primary, it could be current (8.3cm)
-            # Otherwise it's regular primary (4.3cm)
-            return 'current' if index == 0 else 'primary'
-        elif 'secondary' in sheet_name_lc or sheet_name_lc in ['sheet2', 'external']:
-            return 'secondary'
-        elif 'current' in sheet_name_lc or sheet_name_lc in ['sheet3', 'existing']:
-            return 'current'
-        elif 'label' in sheet_name_lc or sheet_name_lc in ['sheet4']:
-            return 'label'
+        print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
+        
+        # Simple classification based on image index only
+        if index == 0:
+            image_type = 'current'  # First image is always current packaging
+        elif index == 1:
+            image_type = 'primary'  # Second image is primary
+        elif index == 2:
+            image_type = 'secondary'  # Third image is secondary
+        elif index == 3:
+            image_type = 'label'  # Fourth image is label
         else:
-            # Fallback: distribute images across types
-            # First image as current (large), others as different types
-            type_order = ['current', 'primary', 'secondary', 'label']
-            return type_order[index % len(type_order)]
+            # For additional images, cycle through types
+            type_cycle = ['primary', 'secondary', 'label']
+            image_type = type_cycle[(index - 1) % len(type_cycle)]
+        
+        print(f"-> Classified as: {image_type}")
+        return image_type
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template with fixed positions"""
@@ -441,13 +444,58 @@ class ImageExtractor:
         except Exception as e:
             print(f"Error in _place_remaining_images: {e}")
 
-    def process_extracted_images_for_template(self, extracted_images):
-        """Convert extracted images to format expected by template filling"""
-        processed_images = {}
-        if extracted_images and 'all_sheets' in extracted_images:
-            for image_key, img_data in extracted_images['all_sheets'].items():
-                processed_images[image_key] = img_data
-        return processed_images
+    def reclassify_extracted_images(self, extracted_images, classification_rules=None):
+        """Reclassify extracted images based on new rules or manual assignment"""
+        if not extracted_images or 'all_sheets' not in extracted_images:
+            return extracted_images
+            
+        print("=== Reclassifying extracted images ===")
+        
+        # Default classification: first image = current, then cycle through others
+        default_rules = {
+            0: 'current',    # First image = current packaging
+            1: 'primary',    # Second image = primary
+            2: 'secondary',  # Third image = secondary  
+            3: 'label'       # Fourth image = label
+        }
+        
+        rules = classification_rules or default_rules
+        
+        # Sort images by their original index to maintain order
+        sorted_images = []
+        for img_key, img_data in extracted_images['all_sheets'].items():
+            # Extract original index from the key or image data
+            original_index = img_data.get('index', 0)
+            sorted_images.append((img_key, img_data, original_index))
+        
+        # Sort by original index
+        sorted_images.sort(key=lambda x: x[2])
+        
+        # Reclassify images
+        reclassified_images = {}
+        for position, (img_key, img_data, original_index) in enumerate(sorted_images):
+            # Determine new type based on position in sorted list
+            if position in rules:
+                new_type = rules[position]
+            else:
+                # For additional images, cycle through non-current types
+                type_cycle = ['primary', 'secondary', 'label']
+                new_type = type_cycle[(position - 1) % len(type_cycle)]
+            
+            # Update image data with new type
+            img_data['type'] = new_type
+            
+            # Create new key with correct type
+            parts = img_key.split('_')
+            if len(parts) >= 4:
+                new_key = f"{new_type}_{parts[1]}_{parts[2]}_{parts[3]}"
+            else:
+                new_key = f"{new_type}_{img_key.split('_', 1)[1] if '_' in img_key else img_key}"
+            
+            reclassified_images[new_key] = img_data
+            print(f"Reclassified: {img_key} -> {new_key} (type: {new_type})")
+        
+        return {'all_sheets': reclassified_images}
         
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
