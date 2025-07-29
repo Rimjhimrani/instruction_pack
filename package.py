@@ -79,20 +79,23 @@ class ImageExtractor:
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
+        self._placement_counters = defaultdict(int)
     
     def identify_image_upload_areas(self, worksheet):
-        """Identify areas in template designated for image uploads"""
+        """Identify areas in template designated for image uploads with better categorization"""
         upload_areas = []
         processed_cells = set()
         
         try:
-            # Enhanced image keywords with better matching
+            # More specific and non-overlapping image keywords
             image_keywords = {
                 'primary': ['primary packaging', 'primary pack', 'primary'],
-                'secondary': ['secondary packaging', 'secondary pack', 'secondary', 'sec'],
+                'secondary': ['secondary packaging', 'secondary pack', 'secondary'],
                 'current': ['current packaging', 'current', 'existing packaging', 'existing'],
                 'label': ['label', 'product label', 'labeling', 'labels']
             }
+            
+            print("=== Scanning for image upload areas ===")
             
             # Search through first few rows for column headers
             for row_num in range(1, min(15, worksheet.max_row + 1)):
@@ -105,28 +108,32 @@ class ImageExtractor:
                         
                     cell_text = str(cell.value).lower().strip()
                     
-                    # Find the best matching category
+                    # Find the best matching category with stricter matching
                     best_match = None
                     best_score = 0
                     
                     for category, keywords in image_keywords.items():
                         for keyword in keywords:
-                            # Calculate match score based on keyword length and position
+                            # More precise matching to avoid cross-category matches
                             if keyword in cell_text:
                                 score = len(keyword)
-                                # Bonus for exact match
+                                
+                                # High bonus for exact match
                                 if keyword == cell_text:
-                                    score += 10
+                                    score += 20
                                 # Bonus for word boundary match
-                                if cell_text.startswith(keyword) or cell_text.endswith(keyword):
-                                    score += 5
+                                elif cell_text.startswith(keyword) or cell_text.endswith(keyword):
+                                    score += 10
+                                # Penalty for partial matches to avoid confusion
+                                elif len(cell_text) > len(keyword) * 2:
+                                    score -= 5
                                 
                                 if score > best_score:
                                     best_match = (category, keyword)
                                     best_score = score
                     
-                    if best_match:
-                        upload_areas.append({
+                    if best_match and best_score > 0:
+                        area_info = {
                             'position': cell.coordinate,
                             'row': row_num + 1,  # Position image below header
                             'column': col_num,
@@ -135,12 +142,16 @@ class ImageExtractor:
                             'header_text': cell_text,
                             'matched_keyword': best_match[1],
                             'match_score': best_score
-                        })
+                        }
+                        upload_areas.append(area_info)
                         processed_cells.add(cell_coord)
-                        print(f"Found {best_match[0]} area at {cell.coordinate}: '{cell.value}' (score: {best_score})")
+                        print(f"Found {best_match[0]} area at {cell.coordinate} (col {col_num}): '{cell.value}' (score: {best_score})")
 
-            # Sort by match score (best matches first)
-            upload_areas.sort(key=lambda x: x['match_score'], reverse=True)
+            # Sort by type priority and then by column to ensure proper order
+            type_priority = {'primary': 1, 'secondary': 2, 'current': 3, 'label': 4}
+            upload_areas.sort(key=lambda x: (type_priority.get(x['type'], 5), x['column']))
+            
+            print(f"Total areas found: {len(upload_areas)}")
             return upload_areas
             
         except Exception as e:
@@ -148,11 +159,14 @@ class ImageExtractor:
             return []
 
     def extract_images_from_excel(self, excel_file_path):
-        """Extract unique images from Excel file with better deduplication"""
+        """Extract unique images from Excel file with better type classification"""
         try:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
-            image_hashes = set()  # Track image hashes to avoid duplicates
+            image_hashes = set()
+            
+            print("=== Extracting images from Excel ===")
+            
             for sheet_name in workbook.sheetnames:
                 worksheet = workbook[sheet_name]
                 print(f"Processing sheet: {sheet_name}")
@@ -190,19 +204,10 @@ class ImageExtractor:
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
 
-                            # Classify image type from sheet name
-                            sheet_name_lc = sheet_name.lower()
-                            if any(word in sheet_name_lc for word in ['primary', 'sheet1', 'internal']):
-                                image_type = 'primary'
-                            elif any(word in sheet_name_lc for word in ['secondary', 'sheet2', 'external']):
-                                image_type = 'secondary'
-                            elif any(word in sheet_name_lc for word in ['current', 'sheet3', 'existing']):
-                                image_type = 'current'
-                            elif any(word in sheet_name_lc for word in ['label', 'sheet4']):
-                                image_type = 'label'
-                            else:
-                                image_type = f'image_{len(images) + 1}'
-                            image_key = f"{image_type}_{sheet_name}_{position}"
+                            # Improved image type classification
+                            image_type = self._classify_image_type(sheet_name, position, idx)
+                            
+                            image_key = f"{image_type}_{sheet_name}_{position}_{idx}"
                             images[image_key] = {
                                 'data': img_str,
                                 'format': 'PNG',
@@ -214,19 +219,40 @@ class ImageExtractor:
                                 'hash': image_hash
                             }
 
-                            print(f"Extracted unique image: {image_key} at position {position}")
+                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position}")
+                            
                         except Exception as e:
                             print(f"Error extracting image {idx} from {sheet_name}: {e}")
                             continue
                 else:
                     print(f"No images found in sheet: {sheet_name}")
+                    
             workbook.close()
             print(f"Total unique extracted images: {len(images)}")
             return {'all_sheets': images}
+            
         except Exception as e:
             st.error(f"Error extracting images: {e}")
             print(f"Error in extract_images_from_excel: {e}")
             return {}
+
+    def _classify_image_type(self, sheet_name, position, index):
+        """Classify image type based on sheet name and position with better logic"""
+        sheet_name_lc = sheet_name.lower()
+        
+        # More specific classification rules
+        if 'primary' in sheet_name_lc or sheet_name_lc in ['sheet1', 'internal']:
+            return 'primary'
+        elif 'secondary' in sheet_name_lc or sheet_name_lc in ['sheet2', 'external']:
+            return 'secondary'
+        elif 'current' in sheet_name_lc or sheet_name_lc in ['sheet3', 'existing']:
+            return 'current'
+        elif 'label' in sheet_name_lc or sheet_name_lc in ['sheet4']:
+            return 'label'
+        else:
+            # Fallback: try to determine by index/position
+            type_order = ['primary', 'secondary', 'current', 'label']
+            return type_order[index % len(type_order)]
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template with improved matching and proper placement"""
@@ -234,119 +260,168 @@ class ImageExtractor:
             added_images = 0
             temp_image_paths = []
             used_images = set()
-
-            # Sort image areas by match score and column
-            image_areas_sorted = sorted(image_areas, key=lambda x: (x.get('match_score', 0), x['column']), reverse=True)
-
-            print(f"Processing {len(image_areas_sorted)} image areas")
-            print(f"Available images: {list(uploaded_images.keys())}")
-
-            # Initialize placement counters for grid-based types
-            if not hasattr(self, "_placement_counters"):
-                self._placement_counters = defaultdict(int)
-            def cell_range(start_col, end_col, start_row, end_row):
-                return [
-                    (column_index_from_string(col), row)
-                    for col in range(ord(start_col), ord(end_col)+1)
-                    for row in range(start_row, end_row+1)
-                ]
-
-            # Define cell grids (defined outside loop to avoid scope issues)
-            placement_grids = {
-                'primary': [(column_index_from_string(col), row) for col in ['A','B','C','D'] for row in range(41, 49)],     # A–D, rows 44–51
-                'secondary': [(column_index_from_string(col), row) for col in ['F','G','H','I','J'] for row in range(41, 49)],  # E–K, rows 44–51
-                'label': [(column_index_from_string(col), row) for col in ['K','L','M','N','O','P'] for row in range(41, 49)]      # M–R, rows 44–51
-            }
-
-            # Fixed placement logic - place images under their column headers
-            for area in image_areas_sorted:
-                area_type = area['type']
-                header_text = area.get('header_text', '').lower()
+            
+            print("=== Adding images to template ===")
+            print(f"Available images: {len(uploaded_images)}")
+            print(f"Image areas found: {len(image_areas)}")
+            
+            # Reset placement counters for this operation
+            self._placement_counters = defaultdict(int)
+            
+            # Group areas by type for better processing
+            areas_by_type = defaultdict(list)
+            for area in image_areas:
+                areas_by_type[area['type']].append(area)
+            
+            print(f"Areas by type: {dict(areas_by_type)}")
+            
+            # Process each type separately
+            for area_type, areas in areas_by_type.items():
+                print(f"\n--- Processing {area_type} areas ---")
                 
-                print(f"Processing area: {area_type} at {area['position']} (score: {area.get('match_score', 0)})")
+                # Get all images of this type
+                type_images = {k: v for k, v in uploaded_images.items() 
+                             if v.get('type', '').lower() == area_type.lower() and k not in used_images}
                 
-                matching_image = None
-                matching_key = None
+                # If no type-specific images, get any available images
+                if not type_images:
+                    type_images = {k: v for k, v in uploaded_images.items() if k not in used_images}
                 
-                # Match image by type (existing matching logic...)
-                for img_key, img_data in uploaded_images.items():
-                    if img_key in used_images:
-                        continue
-                    img_type = img_data.get('type', '').lower()
-                    img_key_lower = img_key.lower()
-                    
-                    if area_type == img_type:
-                        matching_image = img_data
-                        matching_key = img_key
+                print(f"Available {area_type} images: {len(type_images)}")
+                
+                # Sort areas by column for consistent placement
+                areas.sort(key=lambda x: x['column'])
+                
+                # Place images in available areas
+                for area in areas:
+                    if not type_images:
+                        print(f"No more images available for {area_type}")
                         break
-                # Fallback to first available
-                if not matching_image:
-                    for img_key, img_data in uploaded_images.items():
-                        if img_key not in used_images:
-                            matching_image = img_data
-                            matching_key = img_key
-                            break
-                            
-                if matching_image and matching_key:
+                        
+                    # Get the first available image
+                    img_key = next(iter(type_images))
+                    img_data = type_images.pop(img_key)
+                    
                     try:
+                        # Create temporary image file
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                            image_bytes = base64.b64decode(matching_image['data'])
+                            image_bytes = base64.b64decode(img_data['data'])
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
+                        
                         img = OpenpyxlImage(tmp_img_path)
                         
-                        # Set image size
-                        width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
+                        # Set image size based on type
+                        if area_type == 'current':
+                            width_cm, height_cm = 8.3, 8.3
+                        else:
+                            width_cm, height_cm = 4.3, 4.3
+                        
                         img.width = int(width_cm * 37.8)
                         img.height = int(height_cm * 37.8)
 
-                        # FIXED: Place image under the column header that was found
-                        # Use the column from the identified area, not from predefined grids
-                        header_column = area['column']
-            
-                        # Calculate row position - place image a few rows below the header
+                        # Calculate placement position
+                        target_col = area['column']
+                        
                         if area_type == 'current':
-                            # For current images, use the row specified in the are
+                            # Current images: place directly under header
                             target_row = area['row']
                         else:
-                            # For other types, place multiple images in a grid below the header
-                            images_per_column = 4  # Number of images you want per column
-                            base_row = 41  # Starting row for images
-                            # Get counter for this specific column header
-                            column_key = f"{area_type}_{header_column}"
-                            if column_key not in self._placement_counters:
-                                self._placement_counters[column_key] = 0
-                            if self._placement_counters[column_key] >= images_per_column:
-                                print(f"⚠️ Column {get_column_letter(header_column)} already has maximum images for {area_type}")
-                                continue
-                                
-                            # Calculate target row based on counter
-                            target_row = base_row + self._placement_counters[column_key]
-                            self._placement_counters[column_key] += 1
-                        cell_coord = f"{get_column_letter(header_column)}{target_row}"
+                            # Other images: use grid system under their respective columns
+                            base_row = 41
+                            col_key = f"{area_type}_{target_col}"
+                            target_row = base_row + self._placement_counters[col_key]
+                            self._placement_counters[col_key] += 1
+                        
+                        cell_coord = f"{get_column_letter(target_col)}{target_row}"
                         img.anchor = cell_coord
                         worksheet.add_image(img)
 
                         temp_image_paths.append(tmp_img_path)
-                        used_images.add(matching_key)
+                        used_images.add(img_key)
                         added_images += 1
 
-                        print(f"✅ Added {area_type} image at {cell_coord} under column {get_column_letter(header_column)} ({width_cm}x{height_cm} cm)")
+                        print(f"✅ Added {area_type} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
 
                     except Exception as e:
                         print(f"❌ Could not add {area_type} image: {e}")
                         st.warning(f"Could not add {area_type} image: {e}")
                         continue
-                else:
-                    print(f"⚠️ No matching image found for {area_type} at {area['position']}")
+                        
+                # If there are remaining images of this type and no more dedicated areas,
+                # try to place them in available columns
+                if type_images and area_type != 'current':
+                    print(f"Placing remaining {area_type} images in available columns...")
+                    self._place_remaining_images(worksheet, type_images, area_type, temp_image_paths, used_images)
+                    added_images += len(type_images)
                     
-            print(f"Total images added: {added_images}")
+            print(f"\nTotal images added: {added_images}")
             return added_images, temp_image_paths
 
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
             return 0, []
+
+    def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
+        """Place remaining images in available columns"""
+        try:
+            # Define column ranges for each type
+            type_columns = {
+                'primary': list(range(1, 5)),      # A-D
+                'secondary': list(range(6, 11)),   # F-J  
+                'label': list(range(11, 17))       # K-P
+            }
+            
+            available_columns = type_columns.get(image_type, list(range(1, 5)))
+            base_row = 41
+            
+            for img_key, img_data in list(remaining_images.items()):
+                # Find a column with space
+                best_col = None
+                min_count = float('inf')
+                
+                for col in available_columns:
+                    col_key = f"{image_type}_{col}"
+                    count = self._placement_counters.get(col_key, 0)
+                    if count < min_count and count < 4:  # Max 4 images per column
+                        min_count = count
+                        best_col = col
+                
+                if best_col is None:
+                    print(f"No space available for remaining {image_type} images")
+                    break
+                
+                try:
+                    # Create and place image
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                        image_bytes = base64.b64decode(img_data['data'])
+                        tmp_img.write(image_bytes)
+                        tmp_img_path = tmp_img.name
+                    
+                    img = OpenpyxlImage(tmp_img_path)
+                    img.width = int(4.3 * 37.8)
+                    img.height = int(4.3 * 37.8)
+                    
+                    col_key = f"{image_type}_{best_col}"
+                    target_row = base_row + self._placement_counters[col_key]
+                    self._placement_counters[col_key] += 1
+                    
+                    cell_coord = f"{get_column_letter(best_col)}{target_row}"
+                    img.anchor = cell_coord
+                    worksheet.add_image(img)
+                    
+                    temp_image_paths.append(tmp_img_path)
+                    used_images.add(img_key)
+                    
+                    print(f"✅ Placed remaining {image_type} image at {cell_coord}")
+                    
+                except Exception as e:
+                    print(f"❌ Error placing remaining image: {e}")
+                    continue
+                    
+        except Exception as e:
+            print(f"Error in _place_remaining_images: {e}")
 
     def process_extracted_images_for_template(self, extracted_images):
         """Convert extracted images to format expected by template filling"""
