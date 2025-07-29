@@ -258,54 +258,54 @@ class ImageExtractor:
             return type_order[index % len(type_order)]
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with sequential horizontal placement"""
+        """Add uploaded images to template with predefined column positions"""
         try:
             added_images = 0
             temp_image_paths = []
             used_images = set()
-            
+        
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             print(f"Image areas found: {len(image_areas)}")
-            
+        
             # Reset global image counter for sequential placement (excluding current images)
             self._global_image_counter = 0
-            
+        
             # Process images in order: current, primary, secondary, label
             image_order = ['current', 'primary', 'secondary', 'label']
-            
+        
             for image_type in image_order:
                 type_images = {k: v for k, v in uploaded_images.items() 
-                             if v.get('type', '').lower() == image_type and k not in used_images}
-                
+                               if v.get('type', '').lower() == image_type and k not in used_images}
+            
                 if type_images:
                     print(f"\n--- Processing {image_type} images ---")
                     print(f"Found {len(type_images)} images of type '{image_type}'")
-                    
+                
                     # Determine image size based on type
                     if image_type == 'current':
                         width_cm = height_cm = 8.3  # Large images
                     else:
                         width_cm = height_cm = 4.3  # Regular images
-                    
+                
+                    # Process all images of each type (not just the first one)
                     for img_key, img_data in type_images.items():
                         print(f"Processing image: {img_key}")
                         print(f"Image type from data: {img_data.get('type', 'unknown')}")
                         print(f"Is current check: {image_type == 'current'}")
-                        
+                    
                         # Create a dummy area for the placement function
                         dummy_area = {
                             'type': image_type,
                             'column': 1,  # Will be overridden by placement logic
-                            'row': 41
+                            'row': 41 if image_type != 'current' else 2
                         }
-                        
+                    
                         added_images += self._place_single_image(
                             worksheet, img_key, img_data, dummy_area, width_cm, height_cm, 
                             temp_image_paths, used_images, 
                             is_current=(image_type == 'current')
                         )
-                    
             print(f"\nTotal images added: {added_images}")
             return added_images, temp_image_paths
 
@@ -314,25 +314,23 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
 
-    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, 
-                           temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place images with specific logic: current image on row 2 column T, others sequentially on row 41"""
+    def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, is_current=False, image_index=0):
+        """Place images with specific logic: current image on row 2 column T, others in predefined template positions"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
-            
             img = OpenpyxlImage(tmp_img_path)
             img.width = int(width_cm * 37.8)  # Convert cm to pixels
             img.height = int(height_cm * 37.8)
 
-            # 🟢 Double-check if this is a current image by checking both parameter and image data
+            # Double-check if this is a current image by checking both parameter and image data
             image_type = img_data.get('type', '').lower()
             is_current_image = is_current or image_type == 'current' or 'current' in img_key.lower()
 
-            # 🟢 Special placement for current image: Row 2, Column T
+            # Special placement for current image: Row 2, Column T
             if is_current_image:
                 target_row = 2
                 target_col = 20  # Column T (20th column)
@@ -342,23 +340,26 @@ class ImageExtractor:
                 print(f"   Image type: {image_type}")
                 print(f"   is_current param: {is_current}")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 41
+                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
                 target_row = 41
-                
-                # Calculate horizontal spacing based on image size
+            
+                # Use your defined spacing calculations
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
                 total_spacing = image_width_cols + gap_cols
 
                 # Start at column 1 (A), then shift right for each non-current image
                 target_col = 1 + (self._global_image_counter * total_spacing)
-                
+            
                 # Increment counter for next non-current image
                 self._global_image_counter += 1
 
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"📍 OTHER IMAGE: Placing {image_type} at sequential position: {cell_coord}")
-
+                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
+                print(f"   Image key: {img_key}")
+                print(f"   Image type: {image_type}")
+                print(f"   Global counter: {self._global_image_counter}")
+                print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
             img.anchor = cell_coord
             worksheet.add_image(img)
 
@@ -367,7 +368,6 @@ class ImageExtractor:
 
             print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({width_cm}x{height_cm} cm)")
             return 1
-
         except Exception as e:
             print(f"❌ Could not add image {img_key}: {e}")
             st.warning(f"Could not add image {img_key}: {e}")
