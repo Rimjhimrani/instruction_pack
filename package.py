@@ -376,11 +376,11 @@ class ImageExtractor:
                 target_row = area['row']
             else:
                 # Smaller images (4.3cm) - calculate proper horizontal spacing
-                # Each image is 4.3cm width + 2.5cm gap = 6.8cm total spacing
-                # In Excel: 1cm ≈ 1.2 columns approximately
+                # Each image is 4.3cm width + 2cm gap = 6.8cm total spacing
+                # In Excel: 1cm ≈ 0.8 columns approximately
                 
-                image_width_cols = int(4.3 * 1.2)  # 4.3cm ≈ 5 columns
-                gap_cols = int(2.5 * 1.2)         # 2.5cm ≈ 3 columns
+                image_width_cols = int(4.3 * 0.8)  # 4.3cm ≈ 5 columns
+                gap_cols = int(2 * 0.8)         # 2cm ≈ 3 columns
                 total_spacing_per_image = image_width_cols + gap_cols  # ≈ 8 columns
                 
                 # Get base column from area type
@@ -422,8 +422,8 @@ class ImageExtractor:
         base_col = type_base_columns.get(area_type, 1)
         
         # Calculate column with proper horizontal spacing
-        image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-        gap_cols = int(2.5 * 1.2)         # 2.5cm gap in columns
+        image_width_cols = int(4.3 * 0.8)  # 4.3cm in columns
+        gap_cols = int(2 * 0.8)         # 2cm gap in columns
         total_spacing_per_image = image_width_cols + gap_cols
         
         target_column = base_col + (index * total_spacing_per_image)
@@ -454,8 +454,8 @@ class ImageExtractor:
             base_col = type_base_columns.get(image_type, 1)
             
             # Calculate proper horizontal spacing
-            image_width_cols = int(4.3 * 1.2)  # 4.3cm in columns
-            gap_cols = int(2.5 * 1.2)         # 2.5cm gap in columns
+            image_width_cols = int(4.3 * 0.8)  # 4.3cm in columns
+            gap_cols = int(2 * 0.8)         # 2cm gap in columns
             total_spacing_per_image = image_width_cols + gap_cols
             
             target_row = 41  # Fixed row for all images
