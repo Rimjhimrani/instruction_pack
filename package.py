@@ -258,27 +258,28 @@ class ImageExtractor:
             return type_order[index % len(type_order)]
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with predefined column positions"""
+        """Add uploaded images to template with matched locations"""
         try:
             added_images = 0
             temp_image_paths = []
             used_images = set()
-        
+            
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             print(f"Image areas found: {len(image_areas)}")
-        
-            # Reset global image counter for sequential placement (excluding current images)
-            self._global_image_counter = 0
-        
-            # Process images in order: current, primary, secondary, label
-            image_order = ['current', 'primary', 'secondary', 'label']
-        
-            for image_type in image_order:
-                type_images = {k: v for k, v in uploaded_images.items() 
-                               if v.get('type', '').lower() == image_type and k not in used_images}
             
-                if type_images:
+            self._global_image_counter = 0
+
+            # Group image areas by type
+            areas_by_type = defaultdict(list)
+            for area in image_areas:
+                areas_by_type[area['type']].append(area)
+            for image_type in ['current', 'primary', 'secondary', 'label']:
+                type_images = {
+                    k: v for k, v in uploaded_images.items()
+                    if v.get('type', '').lower() == image_type and k not in used_images
+                }
+                if not type_images:
                     continue
                 print(f"\n--- Processing {image_type} images ---")
                 width_cm = height_cm = 8.3 if image_type == 'current' else 4.3
@@ -289,8 +290,12 @@ class ImageExtractor:
                     if idx < len(matching_areas):
                         area = matching_areas[idx]
                     else:
-                        # Fallback: dummy area to avoid crash, but will still space it out
-                        area = {'type': image_type, 'column': 1, 'row': 2 if image_type == 'current' else 41}
+                        # Fallback if too many images of one type
+                        area = {
+                            'type': image_type,
+                            'column': 1,
+                            'row': 2 if image_type == 'current' else 41
+                        }
                     added_images += self._place_single_image(
                         worksheet, img_key, img_data, area, width_cm, height_cm,
                         temp_image_paths, used_images,
@@ -305,7 +310,7 @@ class ImageExtractor:
             return 0, []
                     
     def _place_single_image(self, worksheet, img_key, img_data, area, width_cm, height_cm, temp_image_paths, used_images, is_current=False, image_index=0):
-        """Place an image either in matched location (for current) or at row 41 horizontally"""
+        """Place image at matched location for current, or row 41 with spacing for others"""
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
@@ -319,19 +324,17 @@ class ImageExtractor:
             is_current_image = is_current or image_type == 'current' or 'current' in img_key.lower()
 
             if is_current_image:
-                # ✅ Place at detected location from area
                 target_row = area.get('row', 2)
                 target_col = area.get('column', 20)
-                print(f"🎯 CURRENT IMAGE: using matched area row={target_row}, col={target_col}")
+                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col}")
             else:
-                # 🟢 Place on row 41, spaced horizontally
                 target_row = 41
                 image_width_cols = int(4.3 * 1.162)
                 gap_cols = int(1.162 * 1.162)
                 total_spacing = image_width_cols + gap_cols
                 target_col = 1 + (self._global_image_counter * total_spacing)
                 self._global_image_counter += 1
-                print(f"📍 {image_type.upper()} IMAGE: row={target_row}, col={target_col}")
+                print(f"📍 {image_type.upper()} IMAGE: Placing at row={target_row}, col={target_col}")
             cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
             worksheet.add_image(img)
