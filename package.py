@@ -258,22 +258,23 @@ class ImageExtractor:
                 'label': [(column_index_from_string(col), row) for col in ['K','L','M','N','O','P'] for row in range(41, 49)]      # M–R, rows 44–51
             }
 
+            # Fixed placement logic - place images under their column headers
             for area in image_areas_sorted:
                 area_type = area['type']
                 header_text = area.get('header_text', '').lower()
-
+                
                 print(f"Processing area: {area_type} at {area['position']} (score: {area.get('match_score', 0)})")
-
+                
                 matching_image = None
                 matching_key = None
-
-                # Match image by type
+                
+                # Match image by type (existing matching logic...)
                 for img_key, img_data in uploaded_images.items():
                     if img_key in used_images:
                         continue
                     img_type = img_data.get('type', '').lower()
                     img_key_lower = img_key.lower()
-
+                    
                     if area_type == img_type:
                         matching_image = img_data
                         matching_key = img_key
@@ -285,7 +286,7 @@ class ImageExtractor:
                             matching_image = img_data
                             matching_key = img_key
                             break
-
+                            
                 if matching_image and matching_key:
                     try:
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -293,32 +294,36 @@ class ImageExtractor:
                             tmp_img.write(image_bytes)
                             tmp_img_path = tmp_img.name
                         img = OpenpyxlImage(tmp_img_path)
-
+                        
                         # Set image size
                         width_cm, height_cm = (8.3, 8.3) if area_type == 'current' else (4.3, 4.3)
                         img.width = int(width_cm * 37.8)
                         img.height = int(height_cm * 37.8)
 
-                        # Placement logic
-                        if area_type in placement_grids:
-                            index = self._placement_counters[area_type]
-                            grid = placement_grids[area_type]
-                            if index < len(grid):
-                                col, row = grid[index]
-                                cell_coord = f"{get_column_letter(col)}{row}"
-                                self._placement_counters[area_type] += 1
-                            else:
-                                print(f"⚠️ No more space left for {area_type} images. Skipping.")
-                                continue
-                        elif area_type == 'current':
-                            current_area = next((a for a in image_areas if a['type'] == 'current'), None)
-                            if current_area:
-                                cell_coord = f"{get_column_letter(current_area['column'])}{current_area['row']}"
-                            else:
-                                print("⚠️ No valid header found for current packaging image. Skipping.")
-                                continue
+                        # FIXED: Place image under the column header that was found
+                        # Use the column from the identified area, not from predefined grids
+                        header_column = area['column']
+            
+                        # Calculate row position - place image a few rows below the header
+                        if area_type == 'current':
+                            # For current images, use the row specified in the are
+                            target_row = area['row']
                         else:
-                            cell_coord = "A1"  # fallback
+                            # For other types, place multiple images in a grid below the header
+                            images_per_column = 4  # Number of images you want per column
+                            base_row = 44  # Starting row for images
+                            # Get counter for this specific column header
+                            column_key = f"{area_type}_{header_column}"
+                            if column_key not in self._placement_counters:
+                                self._placement_counters[column_key] = 0
+                            if self._placement_counters[column_key] >= images_per_column:
+                                print(f"⚠️ Column {get_column_letter(header_column)} already has maximum images for {area_type}")
+                                continue
+                                
+                            # Calculate target row based on counter
+                            target_row = base_row + self._placement_counters[column_key]
+                            self._placement_counters[column_key] += 1
+                        cell_coord = f"{get_column_letter(header_column)}{target_row}"
                         img.anchor = cell_coord
                         worksheet.add_image(img)
 
@@ -326,7 +331,7 @@ class ImageExtractor:
                         used_images.add(matching_key)
                         added_images += 1
 
-                        print(f"✅ Added {area_type} image at {cell_coord} ({width_cm}x{height_cm} cm)")
+                        print(f"✅ Added {area_type} image at {cell_coord} under column {get_column_letter(header_column)} ({width_cm}x{height_cm} cm)")
 
                     except Exception as e:
                         print(f"❌ Could not add {area_type} image: {e}")
@@ -334,8 +339,10 @@ class ImageExtractor:
                         continue
                 else:
                     print(f"⚠️ No matching image found for {area_type} at {area['position']}")
+                    
             print(f"Total images added: {added_images}")
             return added_images, temp_image_paths
+
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
