@@ -334,10 +334,10 @@ class ImageExtractor:
             # Calculate horizontal spacing based on image size
             if is_current or width_cm > 6:  # Large images (8.3cm)
                 image_width_cols = int(8.3 * 1.2)  # ≈ 10 columns
-                gap_cols = int(2 * 1.2)         # ≈ 3 columns gap
+                gap_cols = int(2.5 * 1.2)         # ≈ 3 columns gap
             else:  # Regular images (4.3cm)
                 image_width_cols = int(4.3 * 1.2)  # ≈ 5 columns
-                gap_cols = int(2 * 1.2)         # ≈ 3 columns gap
+                gap_cols = int(2.5 * 1.2)         # ≈ 3 columns gap
             
             total_spacing = image_width_cols + gap_cols
 
