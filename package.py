@@ -329,6 +329,9 @@ class ImageExtractor:
                 
             else:
                 target_row = 41
+                # Initialize counter if not already done (add this to your class __init__ method)
+                if not hasattr(self, '_global_image_counter') or self._global_image_counter is None:
+                    self._global_image_counter = 0
                 # Define consistent spacing parameters
                 image_width_cm = 4.3
                 image_width_cols = int(image_width_cm * 1.162)  # ≈ 5 columns for regular images
