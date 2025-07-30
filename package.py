@@ -328,52 +328,27 @@ class ImageExtractor:
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
                 
             else:
+                # PRIMARY, SECONDARY, LABEL: Always at row 41 with horizontal spacing
                 target_row = 41
-                # Safely initialize and get counter value
-                current_counter = getattr(self, '_global_image_counter', 0)
-                if current_counter is None:
-                    current_counter = 0
-                # Define consistent spacing parameters
-                image_width_cm = 4.3
-                image_width_cols = int(image_width_cm * 1.162)  # ≈ 5 columns for regular images
-                gap_cols = int(1.162 * 1.162)                   # ≈ 1-2 columns gap between images
-                total_spacing = image_width_cols + gap_cols     # Total space per image position
-
-                # Alternative simpler approach (use one of these):
-                # spacing_between_images = 6  # Simple fixed spacing in columns
-
-                # Calculate column position with consistent spacing
-                target_col = 1 + (current_counter * total_spacing)
-
-                # Alternative calculation using simpler spacing:
-                # target_col = 1 + (self._global_image_counter * spacing_between_images)
-
-                # Set image dimensions (4.3cm x 4.3cm)
-                img.width = int(4.3 * 37.8)   # Convert cm to pixels (37.8 pixels per cm)
+                # Calculate column position with spacing (each image takes ~6 columns width)
+                spacing_between_images = 4
+                target_col = 1 + (row_41_counter * spacing_between_images)
+                # Other images are smaller (4.3cm x 4.3cm)
+                img.width = int(4.3 * 37.8)
                 img.height = int(4.3 * 37.8)
+                print(f"📍 {image_type.upper()} IMAGE: Placing at row={target_row}, col={target_col} (4.3x4.3cm)")
 
-                # Create cell coordinate and place image
-                cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                img.anchor = cell_coord
-                worksheet.add_image(img)
+            # Set image position and add to worksheet
+            cell_coord = f"{get_column_letter(target_col)}{target_row}"
+            img.anchor = cell_coord
+            worksheet.add_image(img)
 
-                # Increment counter for next image (safe assignment)
-                self._global_image_counter = current_counter + 1
+            # Track temporary files and used images
+            temp_image_paths.append(tmp_img_path)
+            used_images.add(img_key)
 
-                # Debug output
-                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
-                print(f"   Image key: {img_key}")
-                print(f"   Image type: {image_type}")
-                print(f"   Global counter: {current_counter} -> {self._global_image_counter}")
-                print(f"   Column calculation: start_col=1 + (counter={current_counter} * spacing={total_spacing}) = {target_col}")
-                print(f"   Spacing breakdown: image_width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
-
-                # Track temporary files and used images
-                temp_image_paths.append(tmp_img_path)
-                used_images.add(img_key)
-
-                print(f"✅ Added {img_data.get('type', 'unknown')} image '{img_key}' at {cell_coord} ({image_width_cm}x{image_width_cm} cm)")
-                return 1
+            print(f"✅ Successfully added {image_type} image '{img_key}' at {cell_coord}")
+            return 1
             
         except Exception as e:
             print(f"❌ Could not add image {img_key}: {e}")
