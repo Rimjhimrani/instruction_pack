@@ -861,6 +861,10 @@ class EnhancedTemplateMapperWithImages:
             text = str(text).lower().strip()
             if not text:
                 return False
+		    
+	    # ✅ Force map fields starting with "procedure step"
+            if text.startswith("procedure step"):
+                return True
             
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
