@@ -1146,54 +1146,56 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
-        """Fill template with mapped data and images"""
-        try:
-            workbook = openpyxl.load_workbook(template_file)
-            worksheet = workbook.active
-            
-            filled_count = 0
-            images_added = 0
-            temp_image_paths = []
-            
-            # Fill data fields
-            for coord, mapping in mapping_results.items():
-                try:
-                    if mapping['data_column'] is not None and mapping['is_mappable']:
-                        field_info = mapping['field_info']
-                        
-                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                        
-                        if target_cell and len(data_df) > 0:
-                            data_value = data_df.iloc[0][mapping['data_column']]
-                            
-                            cell_obj = worksheet[target_cell]
-                            if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                                for merged_range in worksheet.merged_cells.ranges:
-                                    if target_cell in merged_range:
-                                        anchor_cell = merged_range.start_cell
-                                        anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                        break
-                            else:
-                                cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                            filled_count += 1
-                            
-                except Exception as e:
-                    st.error(f"Error filling mapping {coord}: {e}")
-                    continue
-            
-            # Add images if provided
-            if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-                
-            return workbook, filled_count, images_added, temp_image_paths
-            
-        except Exception as e:
-            st.error(f"Error filling template: {e}")
-            return None, 0, 0, []
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, extracted_images=None):
+        workbook = openpyxl.load_workbook(template_file)
+        worksheet = workbook.active
+        temp_image_paths = []
+        filled_count = 0
+        images_added = 0
 
+        # ✅ Auto-fill Procedure Step labels into B28–B38 if numeric
+        for i in range(1, 12):
+            cell = f"B{27 + i}"  # B28 to B38
+            current = worksheet[cell].value
+            if not current or str(current).strip() == str(i):
+                worksheet[cell] = f"Procedure Step {i}"
+
+        # ✅ Fill values from first row of data_df
+        data_row = data_df.iloc[0].to_dict()
+
+        for data_key, data_value in data_row.items():
+            matched_cell = None
+
+            for coord, mapping in mapping_results.items():
+                template_field = mapping.get("template_field", "").strip().lower()
+                if template_field == data_key.strip().lower():
+                    matched_cell = coord
+                    break
+
+            if matched_cell:
+                worksheet[matched_cell] = data_value
+                filled_count += 1
+            else:
+                print(f"{data_key} was NOT mapped. It will be skipped.")
+
+        # ✅ Insert extracted images (if any)
+        if extracted_images:
+            for key, img_info in extracted_images.items():
+                try:
+                    sheet_name, position = key.split("_", 1)
+                    image_data = base64.b64decode(img_info["data"])
+                    temp_image_path = f"/tmp/temp_image_{uuid.uuid4().hex}.png"
+                    with open(temp_image_path, "wb") as f:
+                        f.write(image_data)
+                    temp_image_paths.append(temp_image_path)
+
+                    img = openpyxl.drawing.image.Image(temp_image_path)
+                    worksheet.add_image(img, position)
+                    images_added += 1
+                except Exception as e:
+                    print(f"⚠️ Failed to insert image: {e}")
+        return workbook, filled_count, images_added, temp_image_paths
+            
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
