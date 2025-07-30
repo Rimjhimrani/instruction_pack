@@ -307,20 +307,20 @@ class ImageExtractor:
                     
     def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
         """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
+        if not hasattr(self, '_global_image_counter'):
+            self._global_image_counter = 0
         try:
             # Create temporary image file
-            # Initialize global counter if it doesn't exist
-            if not hasattr(self, '_global_image_counter'):
-                self._global_image_counter = 0
-                
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
-                
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
-            
+        
+            # Initialize cell_coord variable
+            cell_coord = None
+        
             # FIXED PLACEMENT LOGIC - NO MIXING
             if image_type == 'current':
                 # CURRENT PACKAGING: Always at row 2, column 20
@@ -329,9 +329,12 @@ class ImageExtractor:
                 # Current images are larger (8.3cm x 8.3cm)
                 img.width = int(8.3 * 37.8)
                 img.height = int(8.3 * 37.8)
+                cell_coord = f"{get_column_letter(target_col)}{target_row}"
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
-                
             else:
+                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
+                target_row = 41
+            
                 # Use your defined spacing calculations
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
@@ -353,6 +356,10 @@ class ImageExtractor:
                 print(f"   Image type: {image_type}")
                 print(f"   Global counter: {self._global_image_counter}")
                 print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
+            # Ensure cell_coord was set
+            if cell_coord is None:
+                raise ValueError(f"Could not determine cell coordinate for image type: {image_type}")
+            
             # Set image position and add to worksheet
             img.anchor = cell_coord
             worksheet.add_image(img)
