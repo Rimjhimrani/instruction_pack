@@ -309,6 +309,10 @@ class ImageExtractor:
         """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
         try:
             # Create temporary image file
+            # Initialize global counter if it doesn't exist
+            if not hasattr(self, '_global_image_counter'):
+                self._global_image_counter = 0
+                
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
