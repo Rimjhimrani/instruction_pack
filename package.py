@@ -328,25 +328,34 @@ class ImageExtractor:
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
                 
             else:
-                # PRIMARY, SECONDARY, LABEL: Always at row 41 with horizontal spacing
-                target_row = 41
-                # Calculate column position with spacing (each image takes ~6 columns width)
-                spacing_between_images = 6
-                target_col = 1 + (row_41_counter * spacing_between_images)
+                # Use your defined spacing calculations
+                image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
+                gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
+                total_spacing = image_width_cols + gap_cols
+            
+                # Start at column 1 (A), then shift right for each non-current image
+                target_col = 1 + (self._global_image_counter * total_spacing)
+            
+                # Increment counter for next non-current image
+                self._global_image_counter += 1
+            
                 # Other images are smaller (4.3cm x 4.3cm)
                 img.width = int(4.3 * 37.8)
                 img.height = int(4.3 * 37.8)
-                print(f"📍 {image_type.upper()} IMAGE: Placing at row={target_row}, col={target_col} (4.3x4.3cm)")
-
+            
+                cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
+                print(f"   Image key: {img_key}")
+                print(f"   Image type: {image_type}")
+                print(f"   Global counter: {self._global_image_counter}")
+                print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
             # Set image position and add to worksheet
-            cell_coord = f"{get_column_letter(target_col)}{target_row}"
             img.anchor = cell_coord
             worksheet.add_image(img)
-
+        
             # Track temporary files and used images
             temp_image_paths.append(tmp_img_path)
             used_images.add(img_key)
-
             print(f"✅ Successfully added {image_type} image '{img_key}' at {cell_coord}")
             return 1
             
