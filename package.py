@@ -920,10 +920,10 @@ class EnhancedTemplateMapperWithImages:
         """Find template fields and image upload areas"""
         fields = {}
         image_areas = []
+
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-
             merged_ranges = worksheet.merged_cells.ranges
 
             for row in worksheet.iter_rows():
@@ -932,23 +932,20 @@ class EnhancedTemplateMapperWithImages:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
 
-                            # ✅ Add support for Procedure Step fields
+                            # ✅ Include procedure steps
                             is_procedure_step = cell_value.lower().startswith("procedure step")
-                            if cell_value and (self.is_mappable_field(cell_value) or is_procedure_step):
-                                cell_coord = cell.coordinate
+                            if self.is_mappable_field(cell_value) or is_procedure_step:
                                 merged_range = None
-
                                 for merge_range in merged_ranges:
                                     if cell.coordinate in merge_range:
                                         merged_range = str(merge_range)
                                         break
 
-                                # Context detection (if any logic exists)
                                 section_context = self.identify_section_context(
                                     worksheet, cell.row, cell.column
                                 )
 
-                                fields[cell_coord] = {
+                                fields[cell.coordinate] = {
                                     'value': cell_value,
                                     'row': cell.row,
                                     'column': cell.column,
@@ -958,7 +955,7 @@ class EnhancedTemplateMapperWithImages:
                                 }
                     except Exception:
                         continue
-            # ✅ Find image upload areas
+
             image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
             workbook.close()
 
