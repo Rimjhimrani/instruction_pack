@@ -1444,7 +1444,6 @@ def show_main_app():
                         )
                         for i, step in enumerate(procedures, 1):
                             data_df.loc[0, f"Procedure Step {i}"] = step
-                        data_df.loc[0, "Primary Packaging Type"] = procedure_type
                         st.success("✅ Packaging procedure steps added to the template data")
                         # 🔄 Force map them manually to guarantee they are filled
                         for i in range(1, 12):
