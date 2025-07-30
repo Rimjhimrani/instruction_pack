@@ -329,9 +329,10 @@ class ImageExtractor:
                 
             else:
                 target_row = 41
-                # Initialize counter if not already done (add this to your class __init__ method)
-                if not hasattr(self, '_global_image_counter') or self._global_image_counter is None:
-                    self._global_image_counter = 0
+                # Safely initialize and get counter value
+                current_counter = getattr(self, '_global_image_counter', 0)
+                if current_counter is None:
+                    current_counter = 0
                 # Define consistent spacing parameters
                 image_width_cm = 4.3
                 image_width_cols = int(image_width_cm * 1.162)  # ≈ 5 columns for regular images
@@ -342,7 +343,7 @@ class ImageExtractor:
                 # spacing_between_images = 6  # Simple fixed spacing in columns
 
                 # Calculate column position with consistent spacing
-                target_col = 1 + (self._global_image_counter * total_spacing)
+                target_col = 1 + (current_counter * total_spacing)
 
                 # Alternative calculation using simpler spacing:
                 # target_col = 1 + (self._global_image_counter * spacing_between_images)
@@ -356,15 +357,15 @@ class ImageExtractor:
                 img.anchor = cell_coord
                 worksheet.add_image(img)
 
-                # Increment counter for next image
-                self._global_image_counter += 1
+                # Increment counter for next image (safe assignment)
+                self._global_image_counter = current_counter + 1
 
                 # Debug output
                 print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
                 print(f"   Image key: {img_key}")
                 print(f"   Image type: {image_type}")
-                print(f"   Global counter: {self._global_image_counter}")
-                print(f"   Column calculation: start_col=1 + (counter={self._global_image_counter-1} * spacing={total_spacing}) = {target_col}")
+                print(f"   Global counter: {current_counter} -> {self._global_image_counter}")
+                print(f"   Column calculation: start_col=1 + (counter={current_counter} * spacing={total_spacing}) = {target_col}")
                 print(f"   Spacing breakdown: image_width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
 
                 # Track temporary files and used images
