@@ -1442,20 +1442,7 @@ def show_main_app():
                             data_df.loc[0, f'Procedure Step {i}'] = step
                         data_df.loc[0, 'Primary Packaging Type'] = procedure_type
                         st.success("✅ Packaging procedure steps added to the template data")
-			# 🔄 Force map them manually to guarantee they are filled
-	                for i in range(1, 12):
-			    step_label = f"Procedure Step {i}"
-                            for coord, field in template_fields.items():
-			        if field["value"].strip() == step_label:
-				    mapping_results[coord] = {
-					'template_field': step_label,
-                                        'data_column': step_label,
-                                        'similarity': 1.0,
-                                        'field_info': field,
-                                        'section_context': None,
-                                        'is_mappable': True
-				    }
-                    
+		
                     # Fill template
                     st.subheader("📝 Fill Template")
                     
