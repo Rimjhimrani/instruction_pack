@@ -587,14 +587,14 @@ class EnhancedTemplateMapperWithImages:
             "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": [
                 "Pick up {Qty/Veh} parts and apply bubble wrapping over it (individually)",
                 "Apply tape and Put bubble wrapped part into a carton box. Apply part separator &  filler material between two parts to arrest part movement during handling",															
-		"Seal carton box and put Traceability label as per PMSPL standard guideline",														
+                "Seal carton box and put Traceability label as per PMSPL standard guideline",														
                 "Prepare additional carton boxes in line with procurement schedule ( multiple of  primary pack quantity – {Qty/Pack})",														
-		"Load carton boxes on base wooden pallet – {Layer} boxes per layer & max {Level} level",														
+                "Load carton boxes on base wooden pallet – {Layer} boxes per layer & max {Level} level",														
                 "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",															
-		"Put corner / edge protector and apply pet strap ( 2 times – cross way)",															
+                "Put corner / edge protector and apply pet strap ( 2 times – cross way)",															
                 "Apply traceability label on complete pack",														
                 "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",															
-		"Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only",
+                "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only",
             ],
 
             "INDIVIDUAL PROTECTION FOR EACH PART": [
@@ -861,8 +861,7 @@ class EnhancedTemplateMapperWithImages:
             text = str(text).lower().strip()
             if not text:
                 return False
-		    
-	    # ✅ Force map fields starting with "procedure step"
+            # ✅ Force map fields starting with "procedure step"
             if text.startswith("procedure step"):
                 return True
             
@@ -934,7 +933,7 @@ class EnhancedTemplateMapperWithImages:
                     try:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
-			    is_procedure_step = cell_value.lower().startswith("procedure step")
+                            is_procedure_step = cell_value.lower().startswith("procedure step") 
                             
                             if cell_value and self.is_mappable_field(cell_value):
                                 cell_coord = cell.coordinate
@@ -1460,7 +1459,7 @@ def show_main_app():
                                         'section_context': None,
                                         'is_mappable': True
                                     }
-			# ✅ Optional Debugging
+                        # ✅ Optional Debugging
                         with st.expander("🔍 Procedure Step Mapping Debug"):
                             for i in range(1, 12):
                                 step = f"Procedure Step {i}"
