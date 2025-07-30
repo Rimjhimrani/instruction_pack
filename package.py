@@ -934,6 +934,7 @@ class EnhancedTemplateMapperWithImages:
                     try:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
+			    is_procedure_step = cell_value.lower().startswith("procedure step")
                             
                             if cell_value and self.is_mappable_field(cell_value):
                                 cell_coord = cell.coordinate
