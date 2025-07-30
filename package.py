@@ -331,7 +331,7 @@ class ImageExtractor:
                 # PRIMARY, SECONDARY, LABEL: Always at row 41 with horizontal spacing
                 target_row = 41
                 # Calculate column position with spacing (each image takes ~6 columns width)
-                spacing_between_images = 4
+                spacing_between_images = 5
                 target_col = 1 + (row_41_counter * spacing_between_images)
                 # Other images are smaller (4.3cm x 4.3cm)
                 img.width = int(4.3 * 37.8)
