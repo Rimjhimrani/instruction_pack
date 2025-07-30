@@ -1414,9 +1414,7 @@ def show_main_app():
                     
                     # 📦 Packaging procedure tab
                     st.subheader("📋 Update Packaging Procedures")
-
                     col1, col2 = st.columns([1, 2])
-
                     with col1:
                         st.write("**Select Packaging Type:**")
                         procedure_type = st.selectbox(
@@ -1424,24 +1422,39 @@ def show_main_app():
                             ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
                             help="Select a packaging type to auto-populate procedure steps"
                         )
-
                     with col2:
                         if procedure_type and procedure_type != "Select Packaging Procedure":
                             st.info(f"Selected: {procedure_type}")
                             if procedure_type in st.session_state.enhanced_mapper.packaging_procedures:
-                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
+                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(
+                                    procedure_type, data_df.iloc[0].to_dict()
+                                )
                                 st.write("**Procedure Steps Preview:**")
                                 for i, step in enumerate(procedures, 1):
                                     if step.strip():
                                         st.write(f"{i}. {step}")
-
-                    # Inject steps into data_df
+                    # Inject into data_df
                     if procedure_type and procedure_type != "Select Packaging Procedure":
-                        procedure_steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
-                        for i, step in enumerate(procedure_steps, 1):
-                            data_df.loc[0, f'Procedure Step {i}'] = step
-                        data_df.loc[0, 'Primary Packaging Type'] = procedure_type
+                        procedures = st.session_state.enhanced_mapper.get_procedure_steps(
+                            procedure_type, data_df.iloc[0].to_dict()
+                        )
+                        for i, step in enumerate(procedures, 1):
+                            data_df.loc[0, f"Procedure Step {i}"] = step
+                        data_df.loc[0, "Primary Packaging Type"] = procedure_type
                         st.success("✅ Packaging procedure steps added to the template data")
+                        # 🔄 Force map them manually to guarantee they are filled
+                        for i in range(1, 12):
+                            step_label = f"Procedure Step {i}"
+                            for coord, field in template_fields.items():
+                                if field["value"].strip() == step_label:
+                                    mapping_results[coord] = {
+                                        'template_field': step_label,
+                                        'data_column': step_label,
+                                        'similarity': 1.0,
+                                        'field_info': field,
+                                        'section_context': None,
+                                        'is_mappable': True
+                                    }
 		
                     # Fill template
                     st.subheader("📝 Fill Template")
