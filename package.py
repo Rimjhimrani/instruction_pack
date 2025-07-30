@@ -920,35 +920,34 @@ class EnhancedTemplateMapperWithImages:
         """Find template fields and image upload areas"""
         fields = {}
         image_areas = []
-        
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-            
+
             merged_ranges = worksheet.merged_cells.ranges
-            
-            # Find mappable fields
+
             for row in worksheet.iter_rows():
                 for cell in row:
                     try:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
-                            is_procedure_step = cell_value.lower().startswith("procedure step") 
-                            
-                            if cell_value and self.is_mappable_field(cell_value):
+
+                            # ✅ Add support for Procedure Step fields
+                            is_procedure_step = cell_value.lower().startswith("procedure step")
+                            if cell_value and (self.is_mappable_field(cell_value) or is_procedure_step):
                                 cell_coord = cell.coordinate
                                 merged_range = None
-                                
+
                                 for merge_range in merged_ranges:
                                     if cell.coordinate in merge_range:
                                         merged_range = str(merge_range)
                                         break
-                                
-                                # Identify section context
+
+                                # Context detection (if any logic exists)
                                 section_context = self.identify_section_context(
                                     worksheet, cell.row, cell.column
                                 )
-                                
+
                                 fields[cell_coord] = {
                                     'value': cell_value,
                                     'row': cell.row,
@@ -957,17 +956,15 @@ class EnhancedTemplateMapperWithImages:
                                     'section_context': section_context,
                                     'is_mappable': True
                                 }
-                    except Exception as e:
+                    except Exception:
                         continue
-            
-            # Find image upload areas
+            # ✅ Find image upload areas
             image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
-            
             workbook.close()
-            
+
         except Exception as e:
             st.error(f"Error reading template: {e}")
-        
+
         return fields, image_areas
     
     def map_data_with_section_context(self, template_fields, data_df):
@@ -1444,6 +1441,7 @@ def show_main_app():
                         )
                         for i, step in enumerate(procedures, 1):
                             data_df.loc[0, f"Procedure Step {i}"] = step
+                        data_df.loc[0, "Primary Packaging Type"] = procedure_type
                         st.success("✅ Packaging procedure steps added to the template data")
                         # 🔄 Force map them manually to guarantee they are filled
                         for i in range(1, 12):
