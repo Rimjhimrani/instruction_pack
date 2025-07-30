@@ -1455,6 +1455,15 @@ def show_main_app():
                                         'section_context': None,
                                         'is_mappable': True
                                     }
+			# ✅ Optional Debugging
+                        with st.expander("🔍 Procedure Step Mapping Debug"):
+                            for i in range(1, 12):
+                                step = f"Procedure Step {i}"
+                                matched = [m for m in mapping_results.values() if m["template_field"].strip() == step]
+                                if matched:
+                                    st.success(f"{step} → mapped to → {matched[0]['data_column']}")
+                                else:
+                                    st.error(f"{step} was NOT mapped. It will be skipped.")
 		
                     # Fill template
                     st.subheader("📝 Fill Template")
