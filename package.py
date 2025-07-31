@@ -20,7 +20,6 @@ from collections import defaultdict
 import zipfile
 from PIL import Image
 import base64
-from openpyxl.cell.cell import MergedCell
 
 # Configure Streamlit page
 st.set_page_config(
@@ -271,8 +270,8 @@ class ImageExtractor:
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Initialize counter for row 42 images (primary, secondary, label)
-            row_42_counter = 0
+            # Initialize counter for row 41 images (primary, secondary, label)
+            row_41_counter = 0
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -290,13 +289,13 @@ class ImageExtractor:
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
                     added_images += self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx, row_42_counter,
+                        worksheet, img_key, img_data, image_type, idx, row_41_counter,
                         temp_image_paths, used_images
                     )
                     
-                    # Increment row 42 counter for non-current images
+                    # Increment row 41 counter for non-current images
                     if image_type != 'current':
-                        row_42_counter += 1
+                        row_41_counter += 1
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -306,8 +305,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
                     
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
-        """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
+        """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
         if not hasattr(self, '_global_image_counter'):
             self._global_image_counter = 0
         try:
@@ -333,8 +332,8 @@ class ImageExtractor:
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 42 with your defined spacing
-                target_row = 42
+                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
+                target_row = 41
             
                 # Use your defined spacing calculations
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
@@ -391,9 +390,9 @@ class ImageExtractor:
             target_column = 3  # Column C
             target_row = 6     # Row 6
         else:
-            # Other images go to row 42 with spacing
+            # Other images go to row 41 with spacing
             target_column = type_columns.get(area_type, 2)
-            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
+            target_row = 41 + (index * 12)  # Vertical spacing for multiple images of same type
         
         # Create a virtual area for additional placement
         return {
@@ -424,7 +423,7 @@ class ImageExtractor:
                 start_row = 6   # Row 6
             else:
                 target_col = type_columns.get(image_type, 2)
-                start_row = 42
+                start_row = 41
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
                 if image_type == 'current':
@@ -965,7 +964,7 @@ class EnhancedTemplateMapperWithImages:
 
         return fields, image_areas
     
-    def map_data_with_section_context(self, template_fields, data_df, procedure_type=None):
+    def map_data_with_section_context(self, template_fields, data_df):
         """Enhanced mapping with procedure step support and section-aware logic"""
         mapping_results = {}
     
@@ -1280,23 +1279,12 @@ class EnhancedTemplateMapperWithImages:
                             }
                             data_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
                             if data_cell_coord:
-                                cell_obj = worksheet[data_cell_coord]
-                                current_value = cell_obj.value
+                                current_value = worksheet[data_cell_coord].value
                                 if not current_value or str(current_value).strip() == "":
-                                    value_to_write = data_row[step_key]
-                                    if isinstance(cell_obj, MergedCell):
-                                        # Redirect to the top-left cell of the merged range
-                                        for merged_range in worksheet.merged_cells.ranges:
-                                            if data_cell_coord in merged_range:
-                                                top_left = worksheet.cell(merged_range.min_row, merged_range.min_col)
-                                                top_left.value = value_to_write
-                                                break
-                                    else:
-                                        worksheet[data_cell_coord] = value_to_write
+                                    worksheet[data_cell_coord] = data_row[step_key]
                                     filled_count += 1
                                     found_and_filled = True
                                     print(f"✅ Direct fill {step_key} → {data_cell_coord}")
-                                   
                             break
                     if found_and_filled:
                         break
@@ -1331,19 +1319,37 @@ class EnhancedTemplateMapperWithImages:
             if extracted_images:
                 for key, img_info in extracted_images.items():
                     try:
-                        sheet_name, position = key.split("_", 1)
-                        image_data = base64.b64decode(img_info["data"])
-                        temp_image_path = f"/tmp/temp_image_{uuid.uuid4().hex}.png"
-                        with open(temp_image_path, "wb") as f:
-                            f.write(image_data)
-                        temp_image_paths.append(temp_image_path)
+                        # Safer key split (expecting format like "Sheet1_F42")
+                        parts = key.rsplit("_", 1)
+                        if len(parts) != 2:
+                            print(f"⚠️ Invalid image key format: {key}")
+                            continue
 
-                        img = openpyxl.drawing.image.Image(temp_image_path)
+                        sheet_name, position = parts
+                        if sheet_name not in workbook.sheetnames:
+                            print(f"⚠️ Sheet '{sheet_name}' not found in workbook.")
+                            continue
+
+                        worksheet = workbook[sheet_name]
+
+                        # Clear placeholder text like "Upload Image"
+                        if worksheet[position].value and "Upload Image" in str(worksheet[position].value):
+                            worksheet[position].value = ""
+
+                        # Decode and insert image
+                        image_data = base64.b64decode(img_info["data"])
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                            tmp.write(image_data)
+                            tmp_path = tmp.name
+
+                        img = XLImage(tmp_path)
                         worksheet.add_image(img, position)
+                        temp_image_paths.append(tmp_path)  # Track for cleanup
                         images_added += 1
+                        print(f"✅ Image added on '{sheet_name}' at '{position}'")
+                        
                     except Exception as e:
-                        print(f"⚠️ Failed to insert image: {e}")
-            return workbook, filled_count, images_added, temp_image_paths
+                        print(f"❌ Failed to add image at {key}: {e}")
             
 # Initialize session state
 if 'authenticated' not in st.session_state:
