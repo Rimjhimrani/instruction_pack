@@ -965,50 +965,83 @@ class EnhancedTemplateMapperWithImages:
         return fields, image_areas
     
     def map_data_with_section_context(self, template_fields, data_df):
-        """Enhanced mapping with better section-aware logic"""
+        """Enhanced mapping with procedure step support and section-aware logic"""
         mapping_results = {}
-        
+    
         try:
+            # First, add procedure steps to data_df if procedure_type is selected
+            if procedure_type and procedure_type != "Select Packaging Procedure":
+                procedures = self.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
+                for i, step in enumerate(procedures, 1):
+                    if step.strip():  # Only add non-empty steps
+                        step_key = f"Procedure Step {i}"
+                    data_df.loc[0, step_key] = step
+                    print(f"✅ Added {step_key}: {step}")
+        
             data_columns = data_df.columns.tolist()
-            
+        
             for coord, field in template_fields.items():
                 try:
                     best_match = None
                     best_score = 0.0
                     field_value = field['value'].lower().strip()
                     section_context = field.get('section_context')
-                    
-                    # Try section-based mapping first
-                    if section_context and section_context in self.section_mappings:
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
+                
+                    # Special handling for procedure steps
+                    if 'procedure step' in field_value:
+                        # Extract step number
+                        step_match = re.search(r'procedure step (\d+)', field_value)
+                        if step_match:
+                            step_num = step_match.group(1)
+                            exact_match = f"Procedure Step {step_num}"
                         
-                        # Look for direct field matches within section
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            if template_field_key in field_value or field_value in template_field_key:
-                                # Look for exact match first
+                            # Look for exact match in data columns
+                            if exact_match in data_columns:
+                                best_match = exact_match
+                                best_score = 1.0
+                                print(f"✅ Mapped {field['value']} → {exact_match}")
+                            else:
+                                # Look for similar matches
                                 for data_col in data_columns:
-                                    if data_column_pattern.lower() == data_col.lower():
+                                    if f"procedure step {step_num}" in data_col.lower():
                                         best_match = data_col
                                         best_score = 1.0
+                                        print(f"✅ Mapped {field['value']} → {data_col}")
                                         break
-                                
-                                # If no exact match, try similarity matching
-                                if not best_match:
-                                    for data_col in data_columns:
-                                        similarity = self.calculate_similarity(data_column_pattern, data_col)
-                                        if similarity > best_score and similarity >= self.similarity_threshold:
-                                            best_score = similarity
-                                            best_match = data_col
-                                break
-                    
-                    # Fallback to general similarity matching
+                
+                    # If not a procedure step or no match found, use regular mapping
                     if not best_match:
-                        for data_col in data_columns:
-                            similarity = self.calculate_similarity(field_value, data_col)
-                            if similarity > best_score and similarity >= self.similarity_threshold:
-                                best_score = similarity
-                                best_match = data_col
+                        # Try section-based mapping first
+                        if section_context and section_context in self.section_mappings:
+                            section_mappings = self.section_mappings[section_context]['field_mappings']
+                        
+                            # Look for direct field matches within section
+                            for template_field_key, data_column_pattern in section_mappings.items():
+                                if template_field_key in field_value or field_value in template_field_key:
+                                    # Look for exact match first
+                                    for data_col in data_columns:
+                                        if data_column_pattern.lower() == data_col.lower():
+                                            best_match = data_col
+                                            best_score = 1.0
+                                            break
+                                
+                                    # If no exact match, try similarity matching
+                                    if not best_match:
+                                        for data_col in data_columns:
+                                            similarity = self.calculate_similarity(data_column_pattern, data_col)
+                                            if similarity > best_score and similarity >= self.similarity_threshold:
+                                                best_score = similarity
+                                                best_match = data_col
+                                    break
                     
+                        # Fallback to general similarity matching
+                        if not best_match:
+                            for data_col in data_columns:
+                                similarity = self.calculate_similarity(field_value, data_col)
+                                if similarity > best_score and similarity >= self.similarity_threshold:
+                                    best_score = similarity
+                                    best_match = data_col
+                
                     mapping_results[coord] = {
                         'template_field': field['value'],
                         'data_column': best_match,
@@ -1017,73 +1050,101 @@ class EnhancedTemplateMapperWithImages:
                         'section_context': section_context,
                         'is_mappable': best_match is not None
                     }
-                        
+                
+                    # Debug output for procedure steps
+                    if 'procedure step' in field_value.lower():
+                        status = "✅" if best_match else "❌"
+                        print(f"{status} Procedure Step Mapping: {field['value']} → {best_match}")
+                    
                 except Exception as e:
                     st.error(f"Error mapping field {coord}: {e}")
                     continue
-                    
+                
         except Exception as e:
             st.error(f"Error in map_data_with_section_context: {e}")
-            
+        
         return mapping_results
     
     def find_data_cell_for_label(self, worksheet, field_info):
-        """Find data cell for a label with improved merged cell handling"""
+        """Find data cell for a label with improved merged cell handling and procedure step support"""
         try:
             row = field_info['row']
             col = field_info['column']
+            field_value = field_info.get('value', '').lower()
             merged_ranges = list(worksheet.merged_cells.ranges)
-        
+    
             def is_suitable_data_cell(cell_coord):
-                """Check if a cell is suitable for data entry"""
+                """Enhanced check for data cells"""
                 try:
                     cell = worksheet[cell_coord]
                     if hasattr(cell, '__class__') and cell.__class__.__name__ == 'MergedCell':
                         return False
+                
+                    # Check if cell is empty or has placeholder content
                     if cell.value is None or str(cell.value).strip() == "":
                         return True
+                
                     # Check for data placeholder patterns
                     cell_text = str(cell.value).lower().strip()
-                    data_patterns = [r'^_+$', r'^\.*$', r'^-+$', r'enter', r'fill', r'data']
+                    data_patterns = [
+                        r'^_+$', r'^\.*$', r'^-+$', r'enter', r'fill', r'data',
+                        r'^\d+$',  # Just numbers (common placeholder)
+                        r'^[a-z]+$'  # Just lowercase letters
+                    ]
+                
+                    # Special case: if it's a procedure step label, it's not a data cell
+                    if 'procedure step' in cell_text:
+                        return False
+                    
                     return any(re.search(pattern, cell_text) for pattern in data_patterns)
                 except:
                     return False
-            
-            # Strategy 1: Look right of label (most common pattern)
-            for offset in range(1, 6):
+        
+            # Strategy 1: Look right of label (most common for procedure steps)
+            for offset in range(1, 10):  # Extended search range for procedure steps
                 target_col = col + offset
                 if target_col <= worksheet.max_column:
                     cell_coord = worksheet.cell(row=row, column=target_col).coordinate
                     if is_suitable_data_cell(cell_coord):
                         return cell_coord
-            
-            # Strategy 2: Look below label
-            for offset in range(1, 4):
+        
+            # Strategy 2: Look below label (alternative layout)
+            for offset in range(1, 5):
                 target_row = row + offset
                 if target_row <= worksheet.max_row:
                     cell_coord = worksheet.cell(row=target_row, column=col).coordinate
                     if is_suitable_data_cell(cell_coord):
                         return cell_coord
+        
+            # Strategy 3: Look in nearby area with preference for right side
+            search_offsets = [(0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (-1, 1), (0, 4), (0, 5), (0, 6), (0, 7)]
+        
+            for r_offset, c_offset in search_offsets:
+                target_row = row + r_offset
+                target_col = col + c_offset
             
-            # Strategy 3: Look in nearby area
-            for r_offset in range(-1, 3):
-                for c_offset in range(-1, 6):
-                    if r_offset == 0 and c_offset == 0:
-                        continue
-                    target_row = row + r_offset
-                    target_col = col + c_offset
-                
-                    if (target_row > 0 and target_row <= worksheet.max_row and 
-                        target_col > 0 and target_col <= worksheet.max_column):
-                            cell_coord = worksheet.cell(row=target_row, column=target_col).coordinate
-                            if is_suitable_data_cell(cell_coord):
-                                return cell_coord
-            
+                if (target_row > 0 and target_row <= worksheet.max_row and 
+                    target_col > 0 and target_col <= worksheet.max_column):
+                    cell_coord = worksheet.cell(row=target_row, column=target_col).coordinate
+                    if is_suitable_data_cell(cell_coord):
+                        return cell_coord
+        
+            # Strategy 4: For procedure steps, look for large merged cells to the right
+            if 'procedure step' in field_value:
+                for offset in range(1, 20):  # Very wide search for procedure steps
+                    target_col = col + offset
+                    if target_col <= worksheet.max_column:
+                        target_cell = worksheet.cell(row=row, column=target_col)
+                        # Check if this might be a large merged cell for procedure text
+                        if target_cell.value is None or str(target_cell.value).strip() == "":
+                            return target_cell.coordinate
+        
             return None
-            
+        
         except Exception as e:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
+
     
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template in designated areas"""
@@ -1144,6 +1205,7 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, extracted_images=None):
+        """Enhanced version with better procedure step handling"""
         workbook = openpyxl.load_workbook(template_file)
         worksheet = workbook.active
         temp_image_paths = []
@@ -1160,38 +1222,116 @@ class EnhancedTemplateMapperWithImages:
         # ✅ Fill values from first row of data_df
         data_row = data_df.iloc[0].to_dict()
 
-        for data_key, data_value in data_row.items():
-            matched_cell = None
+        # First pass: Fill mapped fields using mapping_results
+        for coord, mapping in mapping_results.items():
+            if mapping.get('is_mappable') and mapping.get('data_column'):
+                data_column = mapping['data_column']
+                if data_column in data_row:
+                    try:
+                        field_info = mapping.get('field_info', {})
+                    
+                        # For procedure steps, find the data cell next to the label
+                        if 'procedure step' in mapping['template_field'].lower():
+                            data_cell = self.find_data_cell_for_label(worksheet, field_info)
+                            if data_cell:
+                                worksheet[data_cell] = data_row[data_column]
+                                filled_count += 1
+                                print(f"✅ Filled {mapping['template_field']} → {data_cell} with: {data_row[data_column][:50]}...")
+                            else:
+                                # Fallback: use the coordinate itself or try adjacent cells
+                                for offset in range(1, 15):
+                                    try:
+                                        fallback_col = field_info['column'] + offset
+                                        fallback_coord = worksheet.cell(row=field_info['row'], column=fallback_col).coordinate
+                                        if not worksheet[fallback_coord].value:
+                                            worksheet[fallback_coord] = data_row[data_column]
+                                            filled_count += 1
+                                            print(f"✅ Fallback filled {mapping['template_field']} → {fallback_coord}")
+                                            break
+                                    except:
+                                        continue
+                        else:
+                            # For regular fields, try to find data cell or use coordinate
+                            data_cell = self.find_data_cell_for_label(worksheet, field_info)
+                            target_cell = data_cell if data_cell else coord
+                            worksheet[target_cell] = data_row[data_column]
+                            filled_count += 1
+                            print(f"✅ Filled {mapping['template_field']} → {target_cell}")
+                        
+                    except Exception as e:
+                        print(f"❌ Error filling {mapping['template_field']}: {e}")
+                        continue
 
-            for coord, mapping in mapping_results.items():
-                template_field = mapping.get("template_field", "").strip().lower()
-                if template_field == data_key.strip().lower():
-                    matched_cell = coord
-                    break
+        # Second pass: Fill any unmapped procedure steps directly by searching the worksheet
+        for i in range(1, 12):
+            step_key = f"Procedure Step {i}"
+            if step_key in data_row and data_row[step_key]:
+                # Look for corresponding cells in the worksheet
+                found_and_filled = False
+                for row in worksheet.iter_rows():
+                    for cell in row:
+                        if cell.value and str(cell.value).strip() == step_key:
+                            # Found the label, now find the data cell
+                            field_info = {
+                                'row': cell.row,
+                                'column': cell.column,
+                                'value': step_key
+                            }
+                            data_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
+                            if data_cell_coord:
+                                current_value = worksheet[data_cell_coord].value
+                                if not current_value or str(current_value).strip() == "":
+                                    worksheet[data_cell_coord] = data_row[step_key]
+                                    filled_count += 1
+                                    found_and_filled = True
+                                    print(f"✅ Direct fill {step_key} → {data_cell_coord}")
+                            break
+                    if found_and_filled:
+                        break
 
-            if matched_cell:
-                worksheet[matched_cell] = data_value
-                filled_count += 1
-            else:
-                print(f"{data_key} was NOT mapped. It will be skipped.")
+        # Third pass: Brute force approach for procedure steps - look for empty cells in typical procedure step areas
+        for i in range(1, 12):
+            step_key = f"Procedure Step {i}"
+            if step_key in data_row and data_row[step_key]:
+                # Check if we already filled this step
+                already_filled = False
+                for coord, mapping in mapping_results.items():
+                    if (mapping.get('template_field', '').strip() == step_key and 
+                        mapping.get('is_mappable')):
+                        already_filled = True
+                        break
+            
+                if not already_filled:
+                    # Look for empty cells in rows 28-38 (typical procedure step area)
+                    target_row = 27 + i  # B28 to B38 area
+                    for col_offset in range(2, 20):  # Start from column C onwards
+                        try:
+                            target_coord = worksheet.cell(row=target_row, column=col_offset).coordinate
+                            if not worksheet[target_coord].value:
+                                worksheet[target_coord] = data_row[step_key]
+                                filled_count += 1
+                                print(f"✅ Brute force fill {step_key} → {target_coord}")
+                                break
+                        except:
+                            continue
 
-        # ✅ Insert extracted images (if any)
-        if extracted_images:
-            for key, img_info in extracted_images.items():
-                try:
-                    sheet_name, position = key.split("_", 1)
-                    image_data = base64.b64decode(img_info["data"])
-                    temp_image_path = f"/tmp/temp_image_{uuid.uuid4().hex}.png"
-                    with open(temp_image_path, "wb") as f:
-                        f.write(image_data)
-                    temp_image_paths.append(temp_image_path)
+            # ✅ Insert extracted images (if any)
+            if extracted_images:
+                for key, img_info in extracted_images.items():
+                    try:
+                        sheet_name, position = key.split("_", 1)
+                        image_data = base64.b64decode(img_info["data"])
+                        temp_image_path = f"/tmp/temp_image_{uuid.uuid4().hex}.png"
+                        with open(temp_image_path, "wb") as f:
+                            f.write(image_data)
+                        temp_image_paths.append(temp_image_path)
 
-                    img = openpyxl.drawing.image.Image(temp_image_path)
-                    worksheet.add_image(img, position)
-                    images_added += 1
-                except Exception as e:
-                    print(f"⚠️ Failed to insert image: {e}")
-        return workbook, filled_count, images_added, temp_image_paths
+                        img = openpyxl.drawing.image.Image(temp_image_path)
+                        worksheet.add_image(img, position)
+                        images_added += 1
+                    except Exception as e:
+                        print(f"⚠️ Failed to insert image: {e}")
+            return workbook, filled_count, images_added, temp_image_paths
             
 # Initialize session state
 if 'authenticated' not in st.session_state:
@@ -1389,9 +1529,6 @@ def show_main_app():
                     else:
                         st.info("CSV files don't contain images. Use Excel files to include images.")
                 
-                # Data mapping
-                st.subheader("🔗 Field Mapping")
-                
                 # 📦 Packaging procedure selection (moved before mapping)
                 st.subheader("📋 Select Packaging Procedures")
                 col1, col2 = st.columns([1, 2])
@@ -1402,91 +1539,93 @@ def show_main_app():
                         ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
                         help="Select a packaging type to auto-populate procedure steps"
                     )
-                
+
                 with col2:
                     if procedure_type and procedure_type != "Select Packaging Procedure":
                         st.info(f"Selected: {procedure_type}")
-                        if procedure_type in st.session_state.enhanced_mapper.packaging_procedures:
-                            procedures = st.session_state.enhanced_mapper.get_procedure_steps(
-                                procedure_type, data_df.iloc[0].to_dict()
-                            )
-                            st.write("**Procedure Steps Preview:**")
-                            for i, step in enumerate(procedures, 1):
-                                if step.strip():
-                                    st.write(f"{i}. {step}")
-                
-                # Enhanced mapping with procedure steps
-                with st.spinner("Mapping template fields to data columns with procedure steps..."):
-                    # Use the enhanced mapping function
-                    mapping_results = st.session_state.enhanced_mapper.enhanced_procedure_step_mapping(
-                        template_fields, data_df, procedure_type
-                    )
-                
-                if mapping_results:
-                    # Show mapping results with better formatting
-                    mapping_data = []
-                    procedure_mappings = []
-                    regular_mappings = []
-                    
-                    for coord, mapping in mapping_results.items():
-                        mapping_info = {
-                            'Coordinate': coord,
-                            'Template Field': mapping['template_field'],
-                            'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
-                            'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
-                            'Section': mapping.get('section_context', 'Unknown'),
-                            'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
-                        }
-                        
-                        if 'procedure step' in mapping['template_field'].lower():
-                            procedure_mappings.append(mapping_info)
-                        else:
-                            regular_mappings.append(mapping_info)
-                    
-                    # Display procedure step mappings separately
-                    if procedure_mappings:
-                        st.write("**📋 Procedure Step Mappings:**")
-                        procedure_df = pd.DataFrame(procedure_mappings)
-                        st.dataframe(procedure_df, use_container_width=True)
-                        
-                        # Show mapping status for procedure steps
-                        mapped_procedures = len([m for m in procedure_mappings if m['Status'] == '✅ Mapped'])
-                        total_procedures = len(procedure_mappings)
-                        
-                        if mapped_procedures == total_procedures:
-                            st.success(f"✅ All {total_procedures} procedure steps mapped successfully!")
-                        elif mapped_procedures > 0:
-                            st.warning(f"⚠️ {mapped_procedures}/{total_procedures} procedure steps mapped")
-                        else:
-                            st.error(f"❌ No procedure steps mapped")
-                    
-                    # Display regular field mappings
-                    if regular_mappings:
-                        st.write("**📊 Regular Field Mappings:**")
-                        regular_df = pd.DataFrame(regular_mappings)
-                        st.dataframe(regular_df, use_container_width=True)
-                    
-                    # Enhanced debugging section
-                    with st.expander("🔍 Detailed Mapping Debug", expanded=False):
-                        st.write("**Data Columns Available:**")
-                        st.write(data_df.columns.tolist())
-                        
-                        st.write("**Template Fields Found:**")
-                        for coord, field in template_fields.items():
-                            if 'procedure step' in field['value'].lower():
-                                mapping = mapping_results.get(coord, {})
-                                status = "✅" if mapping.get('is_mappable') else "❌"
-                                st.write(f"{status} {field['value']} (Row: {field['row']}, Col: {field['column']})")
-                        
-                        if procedure_type and procedure_type != "Select Packaging Procedure":
-                            st.write("**Procedure Steps in Data:**")
-                            for i in range(1, 12):
-                                step_key = f"Procedure Step {i}"
-                                if step_key in data_df.columns:
-                                    value = data_df.iloc[0][step_key] if not pd.isna(data_df.iloc[0][step_key]) else "Empty"
-                                    st.write(f"✅ {step_key}: {value}")
-                                else:
-                                    st.write(f"❌ {step_key}: Not found in data")
+                        procedures = st.session_state.enhanced_mapper.get_procedure_steps(
+                            procedure_type, data_df.iloc[0].to_dict()
+                        )
+                        st.write("**Procedure Steps Preview:**")
+                        for i, step in enumerate(procedures, 1):
+                            if step.strip():
+                                st.write(f"{i}. {step}")
+
+            # Data mapping with procedure type
+            st.subheader("🔗 Field Mapping")
+
+            with st.spinner("Mapping template fields to data columns with procedure steps..."):
+                # Use the updated mapping method with procedure_type parameter
+                mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(
+                    template_fields, data_df, procedure_type
+                )
+            if mapping_results:
+                # Show mapping results with better formatting
+                mapping_data = []
+                procedure_mappings = []
+                regular_mappings = []
+    
+                for coord, mapping in mapping_results.items():
+                    mapping_info = {
+                        'Coordinate': coord,
+                        'Template Field': mapping['template_field'],
+                        'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
+                        'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
+                        'Section': mapping.get('section_context', 'Unknown'),
+                        'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
+                    }
+        
+                    if 'procedure step' in mapping['template_field'].lower():
+                        procedure_mappings.append(mapping_info)
+                    else:
+                        regular_mappings.append(mapping_info)
+    
+                # Display procedure step mappings separately
+                if procedure_mappings:
+                    st.write("**📋 Procedure Step Mappings:**")
+                    procedure_df = pd.DataFrame(procedure_mappings)
+                    st.dataframe(procedure_df, use_container_width=True)
+        
+                    # Show mapping status for procedure steps
+                    mapped_procedures = len([m for m in procedure_mappings if m['Status'] == '✅ Mapped'])
+                    total_procedures = len(procedure_mappings)
+        
+                    if mapped_procedures == total_procedures:
+                        st.success(f"✅ All {total_procedures} procedure steps mapped successfully!")
+                    elif mapped_procedures > 0:
+                        st.warning(f"⚠️ {mapped_procedures}/{total_procedures} procedure steps mapped")
+                    else:
+                        st.error(f"❌ No procedure steps mapped - will use fallback methods")
+    
+                # Display regular field mappings
+                if regular_mappings:
+                    st.write("**📊 Regular Field Mappings:**")
+                    regular_df = pd.DataFrame(regular_mappings)
+                    st.dataframe(regular_df, use_container_width=True)
+    
+                # Enhanced debugging section
+                with st.expander("🔍 Detailed Mapping Debug", expanded=False):
+                    st.write("**Data Columns Available:**")
+                    st.write(data_df.columns.tolist())
+                    st.write("**Template Fields Found:**")
+                    for coord, field in template_fields.items():
+                        if 'procedure step' in field['value'].lower():
+                            mapping = mapping_results.get(coord, {})
+                            status = "✅" if mapping.get('is_mappable') else "❌"
+                            st.write(f"{status} {field['value']} (Row: {field['row']}, Col: {field['column']})")
+        
+                    if procedure_type and procedure_type != "Select Packaging Procedure":
+                        st.write("**Procedure Steps in Data:**")
+                        for i in range(1, 12):
+                            step_key = f"Procedure Step {i}"
+                            if step_key in data_df.columns:
+                                value = data_df.iloc[0][step_key] if not pd.isna(data_df.iloc[0][step_key]) else "Empty"
+                                st.write(f"✅ {step_key}: {value[:100]}..." if len(str(value)) > 100 else f"✅ {step_key}: {value}")
+                            else:
+                                st.write(f"❌ {step_key}: Not found in data")
+
+                    # The rest of your fill template logic remains the same
+                    # Just make sure to use the updated fill_template_with_data_and_images method
                     
                     # Fill template section
                     st.subheader("📝 Fill Template")
@@ -1560,9 +1699,8 @@ def show_main_app():
                             except Exception as e:
                                 st.error(f"Error filling template: {e}")
                                 st.exception(e)
-                
-                else:
-                    st.warning("No mapping results generated")
+                    else:
+                        st.warning("No mapping results generated")
             
             else:
                 st.warning("No mappable fields found in template")
