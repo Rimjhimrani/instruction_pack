@@ -271,8 +271,8 @@ class ImageExtractor:
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Initialize counter for row 41 images (primary, secondary, label)
-            row_41_counter = 0
+            # Initialize counter for row 42 images (primary, secondary, label)
+            row_42_counter = 0
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -290,13 +290,13 @@ class ImageExtractor:
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
                     added_images += self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx, row_41_counter,
+                        worksheet, img_key, img_data, image_type, idx, row_42_counter,
                         temp_image_paths, used_images
                     )
                     
-                    # Increment row 41 counter for non-current images
+                    # Increment row 42 counter for non-current images
                     if image_type != 'current':
-                        row_41_counter += 1
+                        row_42_counter += 1
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -306,8 +306,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
                     
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
-        """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
+        """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
         if not hasattr(self, '_global_image_counter'):
             self._global_image_counter = 0
         try:
@@ -333,8 +333,8 @@ class ImageExtractor:
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
-                target_row = 41
+                # 🟢 Sequential horizontal placement for other images on row 42 with your defined spacing
+                target_row = 42
             
                 # Use your defined spacing calculations
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
@@ -391,9 +391,9 @@ class ImageExtractor:
             target_column = 3  # Column C
             target_row = 6     # Row 6
         else:
-            # Other images go to row 41 with spacing
+            # Other images go to row 42 with spacing
             target_column = type_columns.get(area_type, 2)
-            target_row = 41 + (index * 12)  # Vertical spacing for multiple images of same type
+            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
         
         # Create a virtual area for additional placement
         return {
@@ -424,7 +424,7 @@ class ImageExtractor:
                 start_row = 6   # Row 6
             else:
                 target_col = type_columns.get(image_type, 2)
-                start_row = 41
+                start_row = 42
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
                 if image_type == 'current':
