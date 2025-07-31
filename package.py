@@ -20,6 +20,7 @@ from collections import defaultdict
 import zipfile
 from PIL import Image
 import base64
+from openpyxl.cell.cell import MergedCell
 
 # Configure Streamlit page
 st.set_page_config(
