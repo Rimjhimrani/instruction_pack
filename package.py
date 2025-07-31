@@ -1206,7 +1206,7 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, extracted_images=None):
-       """Enhanced version with better procedure step handling"""
+        """Enhanced version with better procedure step handling"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
