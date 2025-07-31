@@ -1392,80 +1392,103 @@ def show_main_app():
                 # Data mapping
                 st.subheader("🔗 Field Mapping")
                 
-                with st.spinner("Mapping template fields to data columns..."):
-                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(
-                        template_fields, data_df
+                # 📦 Packaging procedure selection (moved before mapping)
+                st.subheader("📋 Select Packaging Procedures")
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.write("**Select Packaging Type:**")
+                    procedure_type = st.selectbox(
+                        "Packaging Procedure Type",
+                        ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
+                        help="Select a packaging type to auto-populate procedure steps"
+                    )
+                
+                with col2:
+                    if procedure_type and procedure_type != "Select Packaging Procedure":
+                        st.info(f"Selected: {procedure_type}")
+                        if procedure_type in st.session_state.enhanced_mapper.packaging_procedures:
+                            procedures = st.session_state.enhanced_mapper.get_procedure_steps(
+                                procedure_type, data_df.iloc[0].to_dict()
+                            )
+                            st.write("**Procedure Steps Preview:**")
+                            for i, step in enumerate(procedures, 1):
+                                if step.strip():
+                                    st.write(f"{i}. {step}")
+                
+                # Enhanced mapping with procedure steps
+                with st.spinner("Mapping template fields to data columns with procedure steps..."):
+                    # Use the enhanced mapping function
+                    mapping_results = st.session_state.enhanced_mapper.enhanced_procedure_step_mapping(
+                        template_fields, data_df, procedure_type
                     )
                 
                 if mapping_results:
-                    # Show mapping results
-                    mapping_df = pd.DataFrame([
-                        {
+                    # Show mapping results with better formatting
+                    mapping_data = []
+                    procedure_mappings = []
+                    regular_mappings = []
+                    
+                    for coord, mapping in mapping_results.items():
+                        mapping_info = {
+                            'Coordinate': coord,
                             'Template Field': mapping['template_field'],
                             'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
                             'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
                             'Section': mapping.get('section_context', 'Unknown'),
                             'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
                         }
-                        for mapping in mapping_results.values()
-                    ])
+                        
+                        if 'procedure step' in mapping['template_field'].lower():
+                            procedure_mappings.append(mapping_info)
+                        else:
+                            regular_mappings.append(mapping_info)
                     
-                    st.dataframe(mapping_df, use_container_width=True)
+                    # Display procedure step mappings separately
+                    if procedure_mappings:
+                        st.write("**📋 Procedure Step Mappings:**")
+                        procedure_df = pd.DataFrame(procedure_mappings)
+                        st.dataframe(procedure_df, use_container_width=True)
+                        
+                        # Show mapping status for procedure steps
+                        mapped_procedures = len([m for m in procedure_mappings if m['Status'] == '✅ Mapped'])
+                        total_procedures = len(procedure_mappings)
+                        
+                        if mapped_procedures == total_procedures:
+                            st.success(f"✅ All {total_procedures} procedure steps mapped successfully!")
+                        elif mapped_procedures > 0:
+                            st.warning(f"⚠️ {mapped_procedures}/{total_procedures} procedure steps mapped")
+                        else:
+                            st.error(f"❌ No procedure steps mapped")
                     
-                    # 📦 Packaging procedure tab
-                    st.subheader("📋 Update Packaging Procedures")
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        st.write("**Select Packaging Type:**")
-                        procedure_type = st.selectbox(
-                            "Packaging Procedure Type",
-                            ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
-                            help="Select a packaging type to auto-populate procedure steps"
-                        )
-                    with col2:
+                    # Display regular field mappings
+                    if regular_mappings:
+                        st.write("**📊 Regular Field Mappings:**")
+                        regular_df = pd.DataFrame(regular_mappings)
+                        st.dataframe(regular_df, use_container_width=True)
+                    
+                    # Enhanced debugging section
+                    with st.expander("🔍 Detailed Mapping Debug", expanded=False):
+                        st.write("**Data Columns Available:**")
+                        st.write(data_df.columns.tolist())
+                        
+                        st.write("**Template Fields Found:**")
+                        for coord, field in template_fields.items():
+                            if 'procedure step' in field['value'].lower():
+                                mapping = mapping_results.get(coord, {})
+                                status = "✅" if mapping.get('is_mappable') else "❌"
+                                st.write(f"{status} {field['value']} (Row: {field['row']}, Col: {field['column']})")
+                        
                         if procedure_type and procedure_type != "Select Packaging Procedure":
-                            st.info(f"Selected: {procedure_type}")
-                            if procedure_type in st.session_state.enhanced_mapper.packaging_procedures:
-                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(
-                                    procedure_type, data_df.iloc[0].to_dict()
-                                )
-                                st.write("**Procedure Steps Preview:**")
-                                for i, step in enumerate(procedures, 1):
-                                    if step.strip():
-                                        st.write(f"{i}. {step}")
-                    # Inject into data_df
-                    if procedure_type and procedure_type != "Select Packaging Procedure":
-                        procedures = st.session_state.enhanced_mapper.get_procedure_steps(
-                            procedure_type, data_df.iloc[0].to_dict()
-                        )
-                        for i, step in enumerate(procedures, 1):
-                            data_df.loc[0, f"Procedure Step {i}"] = step
-                        data_df.loc[0, "Primary Packaging Type"] = procedure_type
-                        st.success("✅ Packaging procedure steps added to the template data")
-                        # 🔄 Force map them manually to guarantee they are filled
-                        for i in range(1, 12):
-                            step_label = f"Procedure Step {i}"
-                            for coord, field in template_fields.items():
-                                if field["value"].strip() == step_label:
-                                    mapping_results[coord] = {
-                                        'template_field': step_label,
-                                        'data_column': step_label,
-                                        'similarity': 1.0,
-                                        'field_info': field,
-                                        'section_context': None,
-                                        'is_mappable': True
-                                    }
-                        # ✅ Optional Debugging
-                        with st.expander("🔍 Procedure Step Mapping Debug"):
+                            st.write("**Procedure Steps in Data:**")
                             for i in range(1, 12):
-                                step = f"Procedure Step {i}"
-                                matched = [m for m in mapping_results.values() if m["template_field"].strip() == step]
-                                if matched:
-                                    st.success(f"{step} → mapped to → {matched[0]['data_column']}")
+                                step_key = f"Procedure Step {i}"
+                                if step_key in data_df.columns:
+                                    value = data_df.iloc[0][step_key] if not pd.isna(data_df.iloc[0][step_key]) else "Empty"
+                                    st.write(f"✅ {step_key}: {value}")
                                 else:
-                                    st.error(f"{step} was NOT mapped. It will be skipped.")
-		
-                    # Fill template
+                                    st.write(f"❌ {step_key}: Not found in data")
+                    
+                    # Fill template section
                     st.subheader("📝 Fill Template")
                     
                     if st.button("Generate Filled Template", type="primary", use_container_width=True):
@@ -1476,10 +1499,10 @@ def show_main_app():
                                 if extracted_images:
                                     for sheet_name, sheet_images in extracted_images.items():
                                         for position, img_data in sheet_images.items():
-                                            # Create a unique key for each image
                                             image_key = f"{sheet_name}_{position}"
                                             processed_images[image_key] = img_data
                                 
+                                # Use the enhanced fill function
                                 workbook, filled_count, images_added, temp_image_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
                                     template_path, mapping_results, data_df, processed_images
                                 )
@@ -1488,18 +1511,33 @@ def show_main_app():
                                     # Save filled template
                                     output_buffer = io.BytesIO()
                                     workbook.save(output_buffer)
+                                    
+                                    # Clean up temp files
                                     for path in temp_image_paths:
                                         try:
                                             os.unlink(path)
                                         except Exception as e:
                                             st.warning(f"Failed to delete temp file {path}: {e}")
+                                    
                                     output_buffer.seek(0)
                                     
-                                    # Success message
+                                    # Success message with detailed stats
                                     st.success(f"Template filled successfully!")
-                                    st.info(f"📊 Filled {filled_count} data fields")
+                                    
+                                    # Show detailed statistics
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Data Fields Filled", filled_count)
+                                    with col2:
+                                        st.metric("Images Added", images_added)
+                                    with col3:
+                                        procedure_count = len([m for m in mapping_results.values() 
+                                                             if 'procedure step' in m['template_field'].lower() 
+                                                             and m['is_mappable']])
+                                        st.metric("Procedure Steps", procedure_count)
+                                    
                                     if images_added > 0:
-                                        st.info(f"🖼️ Added {images_added} images from data file")
+                                        st.info(f"🖼️ Successfully added {images_added} images from data file")
                                     elif processed_images:
                                         st.warning("Images were found but could not be placed in template areas")
                                     
