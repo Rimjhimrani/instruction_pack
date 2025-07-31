@@ -964,7 +964,7 @@ class EnhancedTemplateMapperWithImages:
 
         return fields, image_areas
     
-    def map_data_with_section_context(self, template_fields, data_df):
+    def map_data_with_section_context(self, template_fields, data_df, procedure_type=None):
         """Enhanced mapping with procedure step support and section-aware logic"""
         mapping_results = {}
     
