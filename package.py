@@ -1206,85 +1206,82 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, extracted_images=None):
-        """Enhanced version with better procedure step handling"""
-        workbook = openpyxl.load_workbook(template_file)
-        worksheet = workbook.active
-        temp_image_paths = []
-        filled_count = 0
-        images_added = 0
+       """Enhanced version with better procedure step handling"""
+        try:
+            workbook = openpyxl.load_workbook(template_file)
+            worksheet = workbook.active
+            temp_image_paths = []
+            filled_count = 0
+            images_added = 0
+            
+            # ✅ Auto-fill Procedure Step labels into B28–B38 if numeric
+            for i in range(1, 12):
+                cell = f"B{27 + i}"  # B28 to B38
+                current = worksheet[cell].value
+                if not current or str(current).strip() == str(i):
+                    worksheet[cell] = f"Procedure Step {i}"
+            # ✅ Fill values from first row of data_df
+            data_row = data_df.iloc[0].to_dict()
 
-        # ✅ Auto-fill Procedure Step labels into B28–B38 if numeric
-        for i in range(1, 12):
-            cell = f"B{27 + i}"  # B28 to B38
-            current = worksheet[cell].value
-            if not current or str(current).strip() == str(i):
-                worksheet[cell] = f"Procedure Step {i}"
-
-        # ✅ Fill values from first row of data_df
-        data_row = data_df.iloc[0].to_dict()
-
-        # First pass: Fill mapped fields using mapping_results
-        for coord, mapping in mapping_results.items():
-            if mapping.get('is_mappable') and mapping.get('data_column'):
-                data_column = mapping['data_column']
-                if data_column in data_row:
-                    try:
-                        field_info = mapping.get('field_info', {})
-                    
-                        # For procedure steps, find the data cell next to the label
-                        if 'procedure step' in mapping['template_field'].lower():
-                            data_cell = self.find_data_cell_for_label(worksheet, field_info)
-                            if data_cell:
-                                worksheet[data_cell] = data_row[data_column]
-                                filled_count += 1
-                                print(f"✅ Filled {mapping['template_field']} → {data_cell} with: {data_row[data_column][:50]}...")
+            # First pass: Fill mapped fields using mapping_results
+            for coord, mapping in mapping_results.items():
+                if mapping.get('is_mappable') and mapping.get('data_column'):
+                    data_column = mapping['data_column']
+                    if data_column in data_row:
+                        try:
+                            field_info = mapping.get('field_info', {})
+                            # For procedure steps, find the data cell next to the label
+                            if 'procedure step' in mapping['template_field'].lower():
+                                data_cell = self.find_data_cell_for_label(worksheet, field_info)
+                                if data_cell:
+                                    worksheet[data_cell] = data_row[data_column]
+                                    filled_count += 1
+                                    print(f"✅ Filled {mapping['template_field']} → {data_cell} with: {data_row[data_column][:50]}...")
+                                else:
+                                    # Fallback: use the coordinate itself or try adjacent cells
+                                    for offset in range(1, 15):
+                                        try:
+                                            fallback_col = field_info['column'] + offset
+                                            fallback_coord = worksheet.cell(row=field_info['row'], column=fallback_col).coordinate
+                                            if not worksheet[fallback_coord].value:
+                                                worksheet[fallback_coord] = data_row[data_column]
+                                                filled_count += 1
+                                                print(f"✅ Fallback filled {mapping['template_field']} → {fallback_coord}")
+                                                break
+                                        except:
+                                            continue
                             else:
-                                # Fallback: use the coordinate itself or try adjacent cells
-                                for offset in range(1, 15):
-                                    try:
-                                        fallback_col = field_info['column'] + offset
-                                        fallback_coord = worksheet.cell(row=field_info['row'], column=fallback_col).coordinate
-                                        if not worksheet[fallback_coord].value:
-                                            worksheet[fallback_coord] = data_row[data_column]
-                                            filled_count += 1
-                                            print(f"✅ Fallback filled {mapping['template_field']} → {fallback_coord}")
-                                            break
-                                    except:
-                                        continue
-                        else:
-                            # For regular fields, try to find data cell or use coordinate
-                            data_cell = self.find_data_cell_for_label(worksheet, field_info)
-                            target_cell = data_cell if data_cell else coord
-                            worksheet[target_cell] = data_row[data_column]
-                            filled_count += 1
-                            print(f"✅ Filled {mapping['template_field']} → {target_cell}")
-                        
-                    except Exception as e:
-                        print(f"❌ Error filling {mapping['template_field']}: {e}")
-                        continue
+                                # For regular fields, try to find data cell or use coordinate
+                                data_cell = self.find_data_cell_for_label(worksheet, field_info)
+                                target_cell = data_cell if data_cell else coord
+                                worksheet[target_cell] = data_row[data_column]
+                                filled_count += 1
+                                print(f"✅ Filled {mapping['template_field']} → {target_cell}")
+                        except Exception as e:
+                            print(f"❌ Error filling {mapping['template_field']}: {e}")
+                            continue
+            # Second pass: Fill any unmapped procedure steps directly by searching the worksheet
+            for i in range(1, 12):
+                step_key = f"Procedure Step {i}"
+                if step_key in data_row and data_row[step_key]:
+                    # Look for corresponding cells in the worksheet
+                    found_and_filled = False
+                    for row in worksheet.iter_rows():
+                        for cell in row:
+                            if cell.value and str(cell.value).strip() == step_key:
+                                # Found the label, now find the data cell
+                                field_info = {
+                                    'row': cell.row,
+                                    'column': cell.column,
+                                    'value': step_key
+                                }
+                                data_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
+                                if data_cell_coord:
+                                    cell_obj = worksheet[data_cell_coord]
+                                    current_value = cell_obj.value
 
-        # Second pass: Fill any unmapped procedure steps directly by searching the worksheet
-        for i in range(1, 12):
-            step_key = f"Procedure Step {i}"
-            if step_key in data_row and data_row[step_key]:
-                # Look for corresponding cells in the worksheet
-                found_and_filled = False
-                for row in worksheet.iter_rows():
-                    for cell in row:
-                        if cell.value and str(cell.value).strip() == step_key:
-                            # Found the label, now find the data cell
-                            field_info = {
-                                'row': cell.row,
-                                'column': cell.column,
-                                'value': step_key
-                            }
-                            data_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
-                            if data_cell_coord:
-                                cell_obj = worksheet[data_cell_coord]
-                                current_value = cell_obj.value
-
-                                if not current_value or str(current_value).strip() == "":
-                                    value_to_write = data_row[step_key]
+                                    if not current_value or str(current_value).strip() == "":
+                                         value_to_write = data_row[step_key]
                                     if isinstance(cell_obj, MergedCell):
                                         # Redirect to the top-left cell of the merged range
                                         for merged_range in worksheet.merged_cells.ranges:
@@ -1328,42 +1325,49 @@ class EnhancedTemplateMapperWithImages:
                         except:
                             continue
 
-            # ✅ Insert extracted images (if any)
-            if extracted_images:
-                for key, img_info in extracted_images.items():
-                    try:
-                        # Safer key split (expecting format like "Sheet1_F42")
-                        parts = key.rsplit("_", 1)
-                        if len(parts) != 2:
-                            print(f"⚠️ Invalid image key format: {key}")
-                            continue
+        # ✅ Insert extracted images (if any)
+        if extracted_images:
+            for key, img_info in extracted_images.items():
+                try:
+                    # Safer key split (expecting format like "Sheet1_F42")
+                    parts = key.rsplit("_", 1)
+                    if len(parts) != 2:
+                        print(f"⚠️ Invalid image key format: {key}")
+                        continue
 
-                        sheet_name, position = parts
-                        if sheet_name not in workbook.sheetnames:
-                            print(f"⚠️ Sheet '{sheet_name}' not found in workbook.")
-                            continue
+                    sheet_name, position = parts
+                    if sheet_name not in workbook.sheetnames:
+                        print(f"⚠️ Sheet '{sheet_name}' not found in workbook.")
+                        continue
 
-                        worksheet = workbook[sheet_name]
+                    target_worksheet = workbook[sheet_name]
 
-                        # Clear placeholder text like "Upload Image"
-                        if worksheet[position].value and "Upload Image" in str(worksheet[position].value):
-                            worksheet[position].value = ""
+                    # Clear placeholder text like "Upload Image"
+                    if target_worksheet[position].value and "Upload Image" in str(target_worksheet[position].value):
+                        target_worksheet[position].value = ""
 
-                        # Decode and insert image
-                        image_data = base64.b64decode(img_info["data"])
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                            tmp.write(image_data)
-                            tmp_path = tmp.name
+                    # Decode and insert image
+                    image_data = base64.b64decode(img_info["data"])
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                        tmp.write(image_data)
+                        tmp_path = tmp.name
 
-                        img = XLImage(tmp_path)
-                        worksheet.add_image(img, position)
-                        temp_image_paths.append(tmp_path)  # Track for cleanup
-                        images_added += 1
-                        print(f"✅ Image added on '{sheet_name}' at '{position}'")
-                        
-                    except Exception as e:
-                        print(f"❌ Failed to add image at {key}: {e}")
-            
+                    img = OpenpyxlImage(tmp_path)
+                    target_worksheet.add_image(img, position)
+                    temp_image_paths.append(tmp_path)  # Track for cleanup
+                    images_added += 1
+                    print(f"✅ Image added on '{sheet_name}' at '{position}'")
+                    
+                except Exception as e:
+                    print(f"❌ Failed to add image at {key}: {e}")
+
+        # ✅ IMPORTANT: Return the expected tuple
+        return workbook, filled_count, images_added, temp_image_paths
+        
+    except Exception as e:
+        print(f"❌ Error in fill_template_with_data_and_images: {e}")
+        st.error(f"Error filling template: {e}")
+        return None, 0, 0, []
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
