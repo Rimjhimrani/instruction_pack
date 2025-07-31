@@ -1279,9 +1279,21 @@ class EnhancedTemplateMapperWithImages:
                             }
                             data_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
                             if data_cell_coord:
-                                current_value = worksheet[data_cell_coord].value
+                                cell_obj = worksheet[data_cell_coord]
+                                current_value = cell_obj.value
+
                                 if not current_value or str(current_value).strip() == "":
-                                    worksheet[data_cell_coord] = data_row[step_key]
+                                    value_to_write = data_row[step_key]
+                                    if isinstance(cell_obj, MergedCell):
+                                        # Redirect to the top-left cell of the merged range
+                                        for merged_range in worksheet.merged_cells.ranges:
+                                            if data_cell_coord in merged_range:
+                                                top_left = worksheet.cell(merged_range.min_row, merged_range.min_col)
+                                                top_left.value = value_to_write
+                                                break
+                                    else:
+                                        worksheet[data_cell_coord] = value_to_write
+
                                     filled_count += 1
                                     found_and_filled = True
                                     print(f"✅ Direct fill {step_key} → {data_cell_coord}")
