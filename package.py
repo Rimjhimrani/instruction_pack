@@ -1145,8 +1145,7 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
-
-    
+  
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template in designated areas"""
         try:
@@ -1299,75 +1298,76 @@ class EnhancedTemplateMapperWithImages:
                     if found_and_filled:
                         break
 
-        # Third pass: Brute force approach for procedure steps - look for empty cells in typical procedure step areas
-        for i in range(1, 12):
-            step_key = f"Procedure Step {i}"
-            if step_key in data_row and data_row[step_key]:
-                # Check if we already filled this step
-                already_filled = False
-                for coord, mapping in mapping_results.items():
-                    if (mapping.get('template_field', '').strip() == step_key and 
-                        mapping.get('is_mappable')):
-                        already_filled = True
-                        break
+            # Third pass: Brute force approach for procedure steps - look for empty cells in typical procedure step areas
+            for i in range(1, 12):
+                step_key = f"Procedure Step {i}"
+                if step_key in data_row and data_row[step_key]:
+                    # Check if we already filled this step
+                    already_filled = False
+                    for coord, mapping in mapping_results.items():
+                        if (mapping.get('template_field', '').strip() == step_key and 
+                            mapping.get('is_mappable')):
+                            already_filled = True
+                            break
             
-                if not already_filled:
-                    # Look for empty cells in rows 28-38 (typical procedure step area)
-                    target_row = 27 + i  # B28 to B38 area
-                    for col_offset in range(2, 20):  # Start from column C onwards
-                        try:
-                            target_coord = worksheet.cell(row=target_row, column=col_offset).coordinate
-                            if not worksheet[target_coord].value:
-                                worksheet[target_coord] = data_row[step_key]
-                                filled_count += 1
-                                print(f"✅ Brute force fill {step_key} → {target_coord}")
-                                break
-                        except:
+                    if not already_filled:
+                        # Look for empty cells in rows 28-38 (typical procedure step area)
+                        target_row = 27 + i  # B28 to B38 area
+                        for col_offset in range(2, 20):  # Start from column C onwards
+                            try:
+                                target_coord = worksheet.cell(row=target_row, column=col_offset).coordinate
+                                if not worksheet[target_coord].value:
+                                    worksheet[target_coord] = data_row[step_key]
+                                    filled_count += 1
+                                    print(f"✅ Brute force fill {step_key} → {target_coord}")
+                                    break
+                            except:
+                                continue
+
+            # ✅ Insert extracted images (if any)
+            if extracted_images:
+                for key, img_info in extracted_images.items():
+                    try:
+                        # Safer key split (expecting format like "Sheet1_F42")
+                        parts = key.rsplit("_", 1)
+                        if len(parts) != 2:
+                            print(f"⚠️ Invalid image key format: {key}")
                             continue
 
-        # ✅ Insert extracted images (if any)
-        if extracted_images:
-            for key, img_info in extracted_images.items():
-                try:
-                    # Safer key split (expecting format like "Sheet1_F42")
-                    parts = key.rsplit("_", 1)
-                    if len(parts) != 2:
-                        print(f"⚠️ Invalid image key format: {key}")
-                        continue
+                        sheet_name, position = parts
+                        if sheet_name not in workbook.sheetnames:
+                            print(f"⚠️ Sheet '{sheet_name}' not found in workbook.")
+                            continue
 
-                    sheet_name, position = parts
-                    if sheet_name not in workbook.sheetnames:
-                        print(f"⚠️ Sheet '{sheet_name}' not found in workbook.")
-                        continue
+                        target_worksheet = workbook[sheet_name]
 
-                    target_worksheet = workbook[sheet_name]
+                        # Clear placeholder text like "Upload Image"
+                        if target_worksheet[position].value and "Upload Image" in str(target_worksheet[position].value):
+                            target_worksheet[position].value = ""
 
-                    # Clear placeholder text like "Upload Image"
-                    if target_worksheet[position].value and "Upload Image" in str(target_worksheet[position].value):
-                        target_worksheet[position].value = ""
+                        # Decode and insert image
+                        image_data = base64.b64decode(img_info["data"])
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                            tmp.write(image_data)
+                            tmp_path = tmp.name
 
-                    # Decode and insert image
-                    image_data = base64.b64decode(img_info["data"])
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                        tmp.write(image_data)
-                        tmp_path = tmp.name
-
-                    img = OpenpyxlImage(tmp_path)
-                    target_worksheet.add_image(img, position)
-                    temp_image_paths.append(tmp_path)  # Track for cleanup
-                    images_added += 1
-                    print(f"✅ Image added on '{sheet_name}' at '{position}'")
+                        img = OpenpyxlImage(tmp_path)
+                        target_worksheet.add_image(img, position)
+                        temp_image_paths.append(tmp_path)  # Track for cleanup
+                        images_added += 1
+                        print(f"✅ Image added on '{sheet_name}' at '{position}'")
                     
-                except Exception as e:
-                    print(f"❌ Failed to add image at {key}: {e}")
+                    except Exception as e:
+                        print(f"❌ Failed to add image at {key}: {e}")
 
-        # ✅ IMPORTANT: Return the expected tuple
-        return workbook, filled_count, images_added, temp_image_paths
+            # ✅ IMPORTANT: Return the expected tuple
+            return workbook, filled_count, images_added, temp_image_paths
         
-    except Exception as e:
-        print(f"❌ Error in fill_template_with_data_and_images: {e}")
-        st.error(f"Error filling template: {e}")
-        return None, 0, 0, []
+        except Exception as e:
+            print(f"❌ Error in fill_template_with_data_and_images: {e}")
+            st.error(f"Error filling template: {e}")
+            return None, 0, 0, []
+        
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
