@@ -899,81 +899,104 @@ class EnhancedTemplateMapperWithImages:
                 'step 1', 'step 2', 'step 3', 'step 4', 'step 5',
                 'step 6', 'step 7', 'step 8', 'step 9', 'step 10', 'step 11'
             ]
-            
+        
             # Search for procedure area indicators
             for row_num in range(1, min(50, worksheet.max_row + 1)):
                 for col_num in range(1, min(20, worksheet.max_column + 1)):
                     cell = worksheet.cell(row=row_num, column=col_num)
                     if not cell.value:
                         continue
-                    
+                
                     cell_text = str(cell.value).lower().strip()
-                    
+                
                     # Check for procedure keywords
                     for keyword in procedure_keywords:
                         if keyword in cell_text:
                             print(f"Found procedure area indicator at {cell.coordinate}: '{cell.value}'")
+                            # Return fixed position: Row 28, Column B (2)
                             return {
-                                'start_row': row_num + 1,  # Start writing steps below the header
-                                'start_col': col_num,
+                                'start_row': 28,
+                                'start_col': 2,  # Column B
                                 'header_text': cell.value,
                                 'header_position': cell.coordinate
                             }
-            
-            # If no specific procedure area found, use default location
-            print("No procedure area found, using default location")
+        
+            # If no specific procedure area found, use fixed default location
+            print("No procedure area found, using fixed default location (Row 28, Column B)")
             return {
-                'start_row': 50,  # Default row 50
-                'start_col': 1,   # Column A
+                'start_row': 28,  # Fixed row 28
+                'start_col': 2,   # Column B (2)
                 'header_text': 'Packaging Procedure Steps',
-                'header_position': 'A49'
+                'header_position': 'B27'  # Header one row above
             }
-            
         except Exception as e:
             st.error(f"Error finding procedure step area: {e}")
             return None
+
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write procedure steps to the Excel template"""
+        """Write procedure steps to the Excel template starting from Row 28, Columns B and P"""
         try:
             # Find where to write procedure steps
             procedure_area = self.find_procedure_step_area(worksheet)
             if not procedure_area:
                 return 0
-            
+        
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
-            
-            start_row = procedure_area['start_row']
-            start_col = procedure_area['start_col']
-            
-            # Write header if needed
-            header_cell = worksheet.cell(row=start_row - 1, column=start_col)
-            if not header_cell.value or 'procedure' not in str(header_cell.value).lower():
-                header_cell.value = f"Packaging Procedure Steps - {packaging_type}"
+        
+            start_row = procedure_area['start_row']  # Row 28
+            col_b = 2  # Column B
+            col_p = 16  # Column P
+        
+            # Write header in column B if needed
+            header_cell_b = worksheet.cell(row=start_row - 1, column=col_b)
+            if not header_cell_b.value or 'procedure' not in str(header_cell_b.value).lower():
+                header_cell_b.value = f"Packaging Procedure Steps - {packaging_type}"
                 # Make header bold if possible
                 try:
                     from openpyxl.styles import Font
-                    header_cell.font = Font(bold=True)
+                    header_cell_b.font = Font(bold=True)
                 except:
                     pass
-            
-            # Write each procedure step
+        
+            # Write header in column P as well
+            header_cell_p = worksheet.cell(row=start_row - 1, column=col_p)
+            if not header_cell_p.value or 'procedure' not in str(header_cell_p.value).lower():
+                header_cell_p.value = f"Packaging Procedure Steps - {packaging_type}"
+                # Make header bold if possible
+                try:
+                    from openpyxl.styles import Font
+                    header_cell_p.font = Font(bold=True)
+                except:
+                    pass
+        
+            # Write each procedure step alternating between columns B and P
             steps_written = 0
             for i, step in enumerate(steps):
                 if step.strip():  # Skip empty steps
-                    step_row = start_row + steps_written
-                    step_cell = worksheet.cell(row=step_row, column=start_col)
+                    step_row = start_row + (steps_written // 2)  # Two steps per row
+                
+                    # Alternate between column B and P
+                    if steps_written % 2 == 0:
+                        # Even steps go to column B
+                        step_cell = worksheet.cell(row=step_row, column=col_b)
+                    else:
+                        # Odd steps go to column P
+                        step_cell = worksheet.cell(row=step_row, column=col_p)
+                
                     step_cell.value = f"{steps_written + 1}. {step}"
                     steps_written += 1
-                    print(f"Written step {steps_written} at row {step_row}: {step[:50]}...")
-            
-            print(f"✅ Successfully wrote {steps_written} procedure steps to template")
+                
+                    column_letter = 'B' if steps_written % 2 == 1 else 'P'
+                    print(f"Written step {steps_written} at {column_letter}{step_row}: {step[:50]}...")
+        
+            print(f"✅ Successfully wrote {steps_written} procedure steps to template (Columns B and P starting from row 28)")
             return steps_written
-            
+        
         except Exception as e:
             st.error(f"Error writing procedure steps: {e}")
             print(f"Error in write_procedure_steps_to_template: {e}")
@@ -1234,7 +1257,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
         """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
