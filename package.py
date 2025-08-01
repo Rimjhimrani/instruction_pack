@@ -933,8 +933,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error finding procedure step area: {e}")
             return None
 
-    
-    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
+    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None, packaging_type=None):
         """Write procedure steps to the Excel template starting from Row 28, Columns B and P"""
         try:
             # Find where to write procedure steps
