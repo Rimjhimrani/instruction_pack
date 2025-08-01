@@ -1295,8 +1295,24 @@ class EnhancedTemplateMapperWithImages:
                     st.error(f"Error adding procedure steps: {e}")
                     print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-            
-            print(f"✅ Template filling complete: {filled_count} fields, {images_added} images, {procedure_steps_added} procedure steps")
+		    if packaging_type and packaging_type != "Select Packaging Procedure":
+                        try:
+                            # Create data dictionary for procedure step replacement
+                            data_dict = {}
+                            if len(data_df) > 0:
+                                for col in data_df.columns:
+                                    try:
+                                        data_dict[col] = data_df.iloc[0][col]
+                                    except:
+                                        data_dict[col] = 'XXX'
+                
+                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
+                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
+                        except Exception as e:
+                            st.error(f"Error adding procedure steps: {e}")
+                            print(f"Error adding procedure steps: {e}")
+                            procedure_steps_added = 0
+				
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
         
         except Exception as e:
