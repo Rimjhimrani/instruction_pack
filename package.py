@@ -1295,7 +1295,7 @@ class EnhancedTemplateMapperWithImages:
                     st.error(f"Error adding procedure steps: {e}")
                     print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-		    if packaging_type and packaging_type != "Select Packaging Procedure":
+                    if packaging_type and packaging_type != "Select Packaging Procedure":
                         try:
                             # Create data dictionary for procedure step replacement
                             data_dict = {}
@@ -1312,7 +1312,7 @@ class EnhancedTemplateMapperWithImages:
                             st.error(f"Error adding procedure steps: {e}")
                             print(f"Error adding procedure steps: {e}")
                             procedure_steps_added = 0
-				
+            
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
         
         except Exception as e:
