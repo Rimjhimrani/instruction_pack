@@ -933,69 +933,48 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error finding procedure step area: {e}")
             return None
 
+    
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write procedure steps to the Excel template starting from Row 28, Columns B and P"""
+        """Write procedure steps to the Excel template"""
         try:
             # Find where to write procedure steps
             procedure_area = self.find_procedure_step_area(worksheet)
             if not procedure_area:
                 return 0
-        
+            
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
-        
-            start_row = procedure_area['start_row']  # Row 28
-            col_b = 2  # Column B
-            col_p = 16  # Column P
-        
-            # Write header in column B if needed
-            header_cell_b = worksheet.cell(row=start_row - 1, column=col_b)
-            if not header_cell_b.value or 'procedure' not in str(header_cell_b.value).lower():
-                header_cell_b.value = f"Packaging Procedure Steps - {packaging_type}"
+            
+            start_row = procedure_area['start_row']
+            start_col = procedure_area['start_col']
+            
+            # Write header if needed
+            header_cell = worksheet.cell(row=start_row - 1, column=start_col)
+            if not header_cell.value or 'procedure' not in str(header_cell.value).lower():
+                header_cell.value = f"Packaging Procedure Steps - {packaging_type}"
                 # Make header bold if possible
                 try:
                     from openpyxl.styles import Font
-                    header_cell_b.font = Font(bold=True)
+                    header_cell.font = Font(bold=True)
                 except:
                     pass
-        
-            # Write header in column P as well
-            header_cell_p = worksheet.cell(row=start_row - 1, column=col_p)
-            if not header_cell_p.value or 'procedure' not in str(header_cell_p.value).lower():
-                header_cell_p.value = f"Packaging Procedure Steps - {packaging_type}"
-                # Make header bold if possible
-                try:
-                    from openpyxl.styles import Font
-                    header_cell_p.font = Font(bold=True)
-                except:
-                    pass
-        
-            # Write each procedure step alternating between columns B and P
+            
+            # Write each procedure step
             steps_written = 0
             for i, step in enumerate(steps):
                 if step.strip():  # Skip empty steps
-                    step_row = start_row + (steps_written // 2)  # Two steps per row
-                
-                    # Alternate between column B and P
-                    if steps_written % 2 == 0:
-                        # Even steps go to column B
-                        step_cell = worksheet.cell(row=step_row, column=col_b)
-                    else:
-                        # Odd steps go to column P
-                        step_cell = worksheet.cell(row=step_row, column=col_p)
-                
+                    step_row = start_row + steps_written
+                    step_cell = worksheet.cell(row=step_row, column=start_col)
                     step_cell.value = f"{steps_written + 1}. {step}"
                     steps_written += 1
-                
-                    column_letter = 'B' if steps_written % 2 == 1 else 'P'
-                    print(f"Written step {steps_written} at {column_letter}{step_row}: {step[:50]}...")
-        
-            print(f"✅ Successfully wrote {steps_written} procedure steps to template (Columns B and P starting from row 28)")
+                    print(f"Written step {steps_written} at row {step_row}: {step[:50]}...")
+            
+            print(f"✅ Successfully wrote {steps_written} procedure steps to template")
             return steps_written
-        
+            
         except Exception as e:
             st.error(f"Error writing procedure steps: {e}")
             print(f"Error in write_procedure_steps_to_template: {e}")
@@ -1256,17 +1235,17 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
         """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-    
+        
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-    
+        
             # Create data dictionary for procedure step replacement
             data_dict = {}
             if len(data_df) > 0:
@@ -1275,18 +1254,18 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = data_df.iloc[0][col]
                     except:
                         data_dict[col] = 'XXX'
-    
+        
             # Fill data fields
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
-                
+                    
                         target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                
+                    
                         if target_cell and len(data_df) > 0:
                             data_value = data_df.iloc[0][mapping['data_column']]
-                    
+                        
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1297,17 +1276,17 @@ class EnhancedTemplateMapperWithImages:
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
                             filled_count += 1
-                    
+                        
                 except Exception as e:
                     st.error(f"Error filling mapping {coord}: {e}")
                     continue
-    
+        
             # Add images if provided
             if uploaded_images:
                 # First, identify image upload areas
                 _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
-    
+                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
+        
             # Write procedure steps if packaging type is provided
             if packaging_type and packaging_type != "Select Packaging Procedure":
                 try:
@@ -1317,9 +1296,26 @@ class EnhancedTemplateMapperWithImages:
                     st.error(f"Error adding procedure steps: {e}")
                     print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-        
+                    if packaging_type and packaging_type != "Select Packaging Procedure":
+                        try:
+                            # Create data dictionary for procedure step replacement
+                            data_dict = {}
+                            if len(data_df) > 0:
+                                for col in data_df.columns:
+                                    try:
+                                        data_dict[col] = data_df.iloc[0][col]
+                                    except:
+                                        data_dict[col] = 'XXX'
+                
+                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
+                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
+                        except Exception as e:
+                            st.error(f"Error adding procedure steps: {e}")
+                            print(f"Error adding procedure steps: {e}")
+                            procedure_steps_added = 0
+            
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
-    
+        
         except Exception as e:
             st.error(f"Error filling template: {e}")
             return None, 0, 0, [], 0
@@ -1385,7 +1381,6 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
-        
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
