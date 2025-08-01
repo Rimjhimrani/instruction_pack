@@ -933,7 +933,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error finding procedure step area: {e}")
             return None
 
-    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None, packaging_type=None):
+    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write procedure steps to the Excel template starting from Row 28, Columns B and P"""
         try:
             # Find where to write procedure steps
@@ -1256,7 +1256,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
         """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
