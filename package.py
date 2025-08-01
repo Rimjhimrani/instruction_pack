@@ -889,6 +889,95 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             st.error(f"Error in is_mappable_field: {e}")
             return False
+    
+    def find_procedure_step_area(self, worksheet):
+        """Find area in template where procedure steps should be written"""
+        try:
+            procedure_keywords = [
+                'procedure', 'steps', 'process', 'instruction', 'method',
+                'packaging procedure', 'packing steps', 'process steps',
+                'step 1', 'step 2', 'step 3', 'step 4', 'step 5',
+                'step 6', 'step 7', 'step 8', 'step 9', 'step 10', 'step 11'
+            ]
+            
+            # Search for procedure area indicators
+            for row_num in range(1, min(50, worksheet.max_row + 1)):
+                for col_num in range(1, min(20, worksheet.max_column + 1)):
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    if not cell.value:
+                        continue
+                    
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    # Check for procedure keywords
+                    for keyword in procedure_keywords:
+                        if keyword in cell_text:
+                            print(f"Found procedure area indicator at {cell.coordinate}: '{cell.value}'")
+                            return {
+                                'start_row': row_num + 1,  # Start writing steps below the header
+                                'start_col': col_num,
+                                'header_text': cell.value,
+                                'header_position': cell.coordinate
+                            }
+            
+            # If no specific procedure area found, use default location
+            print("No procedure area found, using default location")
+            return {
+                'start_row': 50,  # Default row 50
+                'start_col': 1,   # Column A
+                'header_text': 'Packaging Procedure Steps',
+                'header_position': 'A49'
+            }
+            
+        except Exception as e:
+            st.error(f"Error finding procedure step area: {e}")
+            return None
+    
+    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
+        """Write procedure steps to the Excel template"""
+        try:
+            # Find where to write procedure steps
+            procedure_area = self.find_procedure_step_area(worksheet)
+            if not procedure_area:
+                return 0
+            
+            # Get the procedure steps for the packaging type
+            steps = self.get_procedure_steps(packaging_type, data_dict)
+            if not steps:
+                print(f"No procedure steps found for packaging type: {packaging_type}")
+                return 0
+            
+            start_row = procedure_area['start_row']
+            start_col = procedure_area['start_col']
+            
+            # Write header if needed
+            header_cell = worksheet.cell(row=start_row - 1, column=start_col)
+            if not header_cell.value or 'procedure' not in str(header_cell.value).lower():
+                header_cell.value = f"Packaging Procedure Steps - {packaging_type}"
+                # Make header bold if possible
+                try:
+                    from openpyxl.styles import Font
+                    header_cell.font = Font(bold=True)
+                except:
+                    pass
+            
+            # Write each procedure step
+            steps_written = 0
+            for i, step in enumerate(steps):
+                if step.strip():  # Skip empty steps
+                    step_row = start_row + steps_written
+                    step_cell = worksheet.cell(row=step_row, column=start_col)
+                    step_cell.value = f"{steps_written + 1}. {step}"
+                    steps_written += 1
+                    print(f"Written step {steps_written} at row {step_row}: {step[:50]}...")
+            
+            print(f"✅ Successfully wrote {steps_written} procedure steps to template")
+            return steps_written
+            
+        except Exception as e:
+            st.error(f"Error writing procedure steps: {e}")
+            print(f"Error in write_procedure_steps_to_template: {e}")
+            return 0
             
     def get_procedure_steps(self, packaging_type, data_dict=None):
         procedures = self.packaging_procedures.get(packaging_type, [""] * 11)
@@ -1254,7 +1343,6 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
-
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
@@ -1383,6 +1471,7 @@ def show_main_app():
                                         img_bytes = base64.b64decode(img_data['data'])
                                         st.image(img_bytes, width=150)
                                         st.write(f"Size: {img_data['size']}")
+                                        st.write(f"Type: {img_data.get('type', 'Unknown')}")
                 else:
                     if data_file.name.endswith(('.xlsx', '.xls')):
                         st.info("No images found in the data file")
@@ -1412,9 +1501,10 @@ def show_main_app():
                     
                     st.dataframe(mapping_df, use_container_width=True)
                     
-                    # 📦 Packaging procedure tab
-                    st.subheader("📋 Update Packaging Procedures")
+                    # ✨ ENHANCED PACKAGING PROCEDURE SECTION
+                    st.subheader("📋 Packaging Procedure Configuration")
 
+                    # Create two columns for better layout
                     col1, col2 = st.columns([1, 2])
 
                     with col1:
@@ -1424,30 +1514,103 @@ def show_main_app():
                             ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
                             help="Select a packaging type to auto-populate procedure steps"
                         )
+                        
+                        # Add option to preview steps without adding to data
+                        preview_only = st.checkbox(
+                            "Preview Only", 
+                            value=False, 
+                            help="Check to preview steps without adding them to the template"
+                        )
 
                     with col2:
                         if procedure_type and procedure_type != "Select Packaging Procedure":
-                            st.info(f"Selected: {procedure_type}")
-                            if procedure_type in st.session_state.enhanced_mapper.packaging_procedures:
-                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
+                            st.info(f"**Selected:** {procedure_type}")
+                            
+                            # Get procedure steps with data substitution
+                            try:
+                                data_dict = data_df.iloc[0].to_dict() if len(data_df) > 0 else {}
+                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
+                                
                                 st.write("**Procedure Steps Preview:**")
-                                for i, step in enumerate(procedures, 1):
-                                    if step.strip():
-                                        st.write(f"{i}. {step}")
-
-                    # Inject steps into data_df
-                    if procedure_type and procedure_type != "Select Packaging Procedure":
-                        procedure_steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
-                        for i, step in enumerate(procedure_steps, 1):
-                            data_df.loc[0, f'Procedure Step {i}'] = step
-                        data_df.loc[0, 'Primary Packaging Type'] = procedure_type
-                        st.success("✅ Packaging procedure steps added to the template data")
+                                
+                                # Display steps in a more organized way
+                                steps_container = st.container()
+                                with steps_container:
+                                    for i, step in enumerate(procedures, 1):
+                                        if step.strip():
+                                            # Color-code different types of steps
+                                            if any(keyword in step.lower() for keyword in ['pick up', 'apply', 'put']):
+                                                st.markdown(f"🟢 **{i}.** {step}")
+                                            elif any(keyword in step.lower() for keyword in ['seal', 'load', 'attach']):
+                                                st.markdown(f"🔵 **{i}.** {step}")
+                                            elif any(keyword in step.lower() for keyword in ['ensure', 'prepare']):
+                                                st.markdown(f"🟡 **{i}.** {step}")
+                                            else:
+                                                st.markdown(f"**{i}.** {step}")
+                                
+                                # Show statistics
+                                non_empty_steps = [step for step in procedures if step.strip()]
+                                st.write(f"**Total Steps:** {len(non_empty_steps)}")
+                                
+                            except Exception as e:
+                                st.error(f"Error generating procedure steps: {e}")
+                    
+                    # Only inject steps into data_df if not preview only
+                    if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
+                        try:
+                            # Get the first row of data for procedure step generation
+                            data_dict = data_df.iloc[0].to_dict() if len(data_df) > 0 else {}
+                            procedure_steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
+                            
+                            # Add procedure steps to the dataframe
+                            for i, step in enumerate(procedure_steps, 1):
+                                if step.strip():  # Only add non-empty steps
+                                    data_df.loc[0, f'Procedure Step {i}'] = step
+                            
+                            # Add packaging type to data
+                            data_df.loc[0, 'Primary Packaging Type'] = procedure_type
+                            
+                            st.success(f"✅ Added {len([s for s in procedure_steps if s.strip()])} packaging procedure steps to template data")
+                            
+                        except Exception as e:
+                            st.error(f"Error adding procedure steps to data: {e}")
 		
                     # Fill template
-                    st.subheader("📝 Fill Template")
+                    st.subheader("📝 Generate Filled Template")
+                    
+                    # Show what will be included in the template
+                    st.write("**Template will include:**")
+                    include_items = []
+                    
+                    # Count mapped fields
+                    mapped_count = sum(1 for mapping in mapping_results.values() if mapping['is_mappable'])
+                    if mapped_count > 0:
+                        include_items.append(f"📊 {mapped_count} mapped data fields")
+                    
+                    # Count images
+                    if extracted_images:
+                        total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
+                        if total_images > 0:
+                            include_items.append(f"🖼️ {total_images} extracted images")
+                    
+                    # Count procedure steps
+                    if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
+                        try:
+                            steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
+                            step_count = len([s for s in steps if s.strip()])
+                            if step_count > 0:
+                                include_items.append(f"📋 {step_count} packaging procedure steps")
+                        except:
+                            pass
+                    
+                    if include_items:
+                        for item in include_items:
+                            st.write(f"• {item}")
+                    else:
+                        st.warning("No items will be added to the template")
                     
                     if st.button("Generate Filled Template", type="primary", use_container_width=True):
-                        with st.spinner("Filling template with data and extracted images..."):
+                        with st.spinner("Filling template with data, images, and procedure steps..."):
                             try:
                                 # Convert extracted images to the format expected by fill_template_with_data_and_images
                                 processed_images = {}
@@ -1458,28 +1621,50 @@ def show_main_app():
                                             image_key = f"{sheet_name}_{position}"
                                             processed_images[image_key] = img_data
                                 
-                                workbook, filled_count, images_added, temp_image_paths = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                                    template_path, mapping_results, data_df, processed_images
+                                # Pass the packaging type to the fill function
+                                selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
+                                
+                                # Updated function call with procedure steps
+                                result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
+                                    template_path, mapping_results, data_df, processed_images, selected_packaging_type
                                 )
+                                
+                                workbook, filled_count, images_added, temp_image_paths, procedure_steps_added = result
                                 
                                 if workbook:
                                     # Save filled template
                                     output_buffer = io.BytesIO()
                                     workbook.save(output_buffer)
+                                    
+                                    # Clean up temporary image files
                                     for path in temp_image_paths:
                                         try:
                                             os.unlink(path)
                                         except Exception as e:
                                             st.warning(f"Failed to delete temp file {path}: {e}")
+                                    
                                     output_buffer.seek(0)
                                     
-                                    # Success message
-                                    st.success(f"Template filled successfully!")
-                                    st.info(f"📊 Filled {filled_count} data fields")
+                                    # Enhanced success message
+                                    st.success("🎉 Template filled successfully!")
+                                    
+                                    # Show detailed completion stats
+                                    col1, col2, col3 = st.columns(3)
+                                    with col1:
+                                        st.metric("Data Fields", filled_count)
+                                    with col2:
+                                        st.metric("Images Added", images_added)
+                                    with col3:
+                                        st.metric("Procedure Steps", procedure_steps_added)
+                                    
+                                    # Provide additional feedback
                                     if images_added > 0:
-                                        st.info(f"🖼️ Added {images_added} images from data file")
+                                        st.info(f"🖼️ Successfully placed {images_added} images from data file")
                                     elif processed_images:
-                                        st.warning("Images were found but could not be placed in template areas")
+                                        st.warning("⚠️ Images were found but could not be placed in template areas")
+                                    
+                                    if procedure_steps_added > 0:
+                                        st.info(f"📋 Added {procedure_steps_added} packaging procedure steps")
                                     
                                     # Download button
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1495,7 +1680,7 @@ def show_main_app():
                                     
                                     workbook.close()
                                 else:
-                                    st.error("Failed to fill template")
+                                    st.error("❌ Failed to fill template")
                                     
                             except Exception as e:
                                 st.error(f"Error filling template: {e}")
@@ -1554,8 +1739,14 @@ def show_main_app():
         - Supports multiple image formats (PNG, JPG, GIF, BMP)
         - Images are intelligently placed in designated template areas
         - No manual image upload required - everything is automated!
-        """)
         
+        ### 📋 Packaging Procedures
+        - **11+ Predefined Procedures**: Complete packaging workflows for different product types
+        - **Smart Substitution**: Automatically replaces placeholders with actual data values
+        - **Preview Mode**: Review steps before adding to template
+        - **Integrated Workflow**: Seamlessly adds procedure steps to your filled templates
+        """)
+
 # Main application logic
 def main():
     if not st.session_state.authenticated:
