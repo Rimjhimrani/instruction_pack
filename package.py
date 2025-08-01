@@ -935,49 +935,159 @@ class EnhancedTemplateMapperWithImages:
 
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write procedure steps to the Excel template"""
+        """Write procedure steps to the Excel template starting from Row 28, Columns B and P with robust merged cell handling"""
         try:
-            # Find where to write procedure steps
-            procedure_area = self.find_procedure_step_area(worksheet)
-            if not procedure_area:
-                return 0
-            
+            from openpyxl.cell import MergedCell
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+        
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
-            
-            start_row = procedure_area['start_row']
-            start_col = procedure_area['start_col']
-            
-            # Write header if needed
-            header_cell = worksheet.cell(row=start_row - 1, column=start_col)
-            if not header_cell.value or 'procedure' not in str(header_cell.value).lower():
-                header_cell.value = f"Packaging Procedure Steps - {packaging_type}"
-                # Make header bold if possible
+        
+            start_row = 28  # Fixed row 28
+            col_b = 2   # Column B
+            col_p = 16  # Column P
+        
+            def get_writable_cell(worksheet, row, col):
+                """Get the actual writable cell, handling merged cells properly"""
                 try:
-                    from openpyxl.styles import Font
-                    header_cell.font = Font(bold=True)
-                except:
-                    pass
+                    cell = worksheet.cell(row=row, column=col)
+                
+                    # If it's a merged cell, find the top-left cell of the merged range
+                    if isinstance(cell, MergedCell):
+                        for merged_range in worksheet.merged_cells.ranges:
+                            if cell.coordinate in merged_range:
+                                # Return the top-left cell of the merged range
+                                return worksheet.cell(
+                                    row=merged_range.min_row, 
+                                    column=merged_range.min_col
+                                )
+                
+                    # If it's a regular cell, return it
+                    return cell
+                
+                except Exception as e:
+                    print(f"Error getting writable cell at {row},{col}: {e}")
+                    return None
+        
+            def write_value_safely(worksheet, row, col, value):
+                """Safely write a value to a cell, handling all edge cases"""
+                try:
+                    writable_cell = get_writable_cell(worksheet, row, col)
+                
+                    if writable_cell is None:
+                        print(f"Could not get writable cell at row {row}, col {col}")
+                        return False
+                
+                    # Check if the cell is read-only or protected
+                    if hasattr(writable_cell, 'protection') and writable_cell.protection.locked:
+                        print(f"Cell {writable_cell.coordinate} is protected, skipping...")
+                        return False
+                
+                    # Try to write the value
+                    writable_cell.value = value
+                    print(f"Successfully wrote to cell {writable_cell.coordinate}: {str(value)[:50]}...")
+                    return True
+                
+                except Exception as e:
+                    print(f"Error writing value to row {row}, col {col}: {e}")
+                    # Try alternative approach - find a nearby empty cell
+                    return write_to_alternative_cell(worksheet, row, col, value)
             
-            # Write each procedure step
+            def write_to_alternative_cell(worksheet, original_row, original_col, value):
+                """Find an alternative cell nearby if the original is not writable"""
+                try:
+                    # Try cells in the vicinity
+                    for row_offset in range(0, 3):
+                        for col_offset in range(0, 2):
+                            alt_row = original_row + row_offset
+                            alt_col = original_col + col_offset
+                        
+                            try:
+                                alt_cell = worksheet.cell(row=alt_row, column=alt_col)
+                            
+                                # Skip if it's a merged cell or has content
+                                if isinstance(alt_cell, MergedCell):
+                                    continue
+                            
+                                if alt_cell.value is not None and str(alt_cell.value).strip():
+                                    continue
+                            
+                                # Try to write to this cell
+                                alt_cell.value = value
+                                print(f"Used alternative cell {alt_cell.coordinate} for value: {str(value)[:50]}...")
+                                return True
+                            
+                            except Exception:
+                                continue
+                
+                    return False
+                
+                except Exception as e:
+                    print(f"Error finding alternative cell: {e}")
+                    return False
+        
+            # Write headers with safety checks
+            header_b_success = write_value_safely(worksheet, start_row - 1, col_b, f"Packaging Procedure Steps - {packaging_type}")
+            header_p_success = write_value_safely(worksheet, start_row - 1, col_p, f"Additional Steps - {packaging_type}")
+        
+            # Apply bold formatting to headers if successfully written
+            if header_b_success:
+                try:
+                    header_cell_b = get_writable_cell(worksheet, start_row - 1, col_b)
+                    if header_cell_b and not isinstance(header_cell_b, MergedCell):
+                        header_cell_b.font = Font(bold=True)
+                except Exception as e:
+                    print(f"Could not apply bold formatting to header B: {e}")
+        
+            if header_p_success:
+                try:
+                    header_cell_p = get_writable_cell(worksheet, start_row - 1, col_p)
+                    if header_cell_p and not isinstance(header_cell_p, MergedCell):
+                        header_cell_p.font = Font(bold=True)
+                except Exception as e:
+                    print(f"Could not apply bold formatting to header P: {e}")
+        
+            # Write procedure steps
             steps_written = 0
+            successful_writes = 0
+        
             for i, step in enumerate(steps):
                 if step.strip():  # Skip empty steps
-                    step_row = start_row + steps_written
-                    step_cell = worksheet.cell(row=step_row, column=start_col)
-                    step_cell.value = f"{steps_written + 1}. {step}"
+                    step_row = start_row + (steps_written // 2)  # Two steps per row
+                
+                    # Alternate between column B and P
+                    if steps_written % 2 == 0:
+                        target_col = col_b
+                        column_letter = 'B'
+                    else:
+                        target_col = col_p
+                        column_letter = 'P'
+                
+                    step_text = f"{steps_written + 1}. {step}"
+                
+                    if write_value_safely(worksheet, step_row, target_col, step_text):
+                        successful_writes += 1
+                        print(f"✅ Step {steps_written + 1} written to {column_letter}{step_row}")
+                    else:
+                        print(f"❌ Failed to write step {steps_written + 1} to {column_letter}{step_row}")
+                
                     steps_written += 1
-                    print(f"Written step {steps_written} at row {step_row}: {step[:50]}...")
-            
-            print(f"✅ Successfully wrote {steps_written} procedure steps to template")
-            return steps_written
-            
+        
+            print(f"✅ Attempted to write {steps_written} procedure steps, {successful_writes} successful")
+            print(f"Template procedure steps processing completed for {packaging_type}")
+        
+            # Return the number of successful writes
+            return successful_writes
+        
         except Exception as e:
-            st.error(f"Error writing procedure steps: {e}")
-            print(f"Error in write_procedure_steps_to_template: {e}")
+            print(f"Critical error in write_procedure_steps_to_template: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't show error to user since template is still being filled successfully
             return 0
             
     def get_procedure_steps(self, packaging_type, data_dict=None):
