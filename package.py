@@ -1234,7 +1234,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
         """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
