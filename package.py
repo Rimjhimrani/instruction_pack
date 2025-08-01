@@ -1257,17 +1257,17 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None):
         """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-        
+    
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-        
+    
             # Create data dictionary for procedure step replacement
             data_dict = {}
             if len(data_df) > 0:
@@ -1276,18 +1276,18 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = data_df.iloc[0][col]
                     except:
                         data_dict[col] = 'XXX'
-        
+    
             # Fill data fields
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
-                    
+                
                         target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                    
+                
                         if target_cell and len(data_df) > 0:
                             data_value = data_df.iloc[0][mapping['data_column']]
-                        
+                    
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1298,17 +1298,17 @@ class EnhancedTemplateMapperWithImages:
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
                             filled_count += 1
-                        
+                    
                 except Exception as e:
                     st.error(f"Error filling mapping {coord}: {e}")
                     continue
-        
+    
             # Add images if provided
             if uploaded_images:
                 # First, identify image upload areas
                 _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-        
+                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
+    
             # Write procedure steps if packaging type is provided
             if packaging_type and packaging_type != "Select Packaging Procedure":
                 try:
@@ -1318,26 +1318,9 @@ class EnhancedTemplateMapperWithImages:
                     st.error(f"Error adding procedure steps: {e}")
                     print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-                    if packaging_type and packaging_type != "Select Packaging Procedure":
-                        try:
-                            # Create data dictionary for procedure step replacement
-                            data_dict = {}
-                            if len(data_df) > 0:
-                                for col in data_df.columns:
-                                    try:
-                                        data_dict[col] = data_df.iloc[0][col]
-                                    except:
-                                        data_dict[col] = 'XXX'
-                
-                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                        except Exception as e:
-                            st.error(f"Error adding procedure steps: {e}")
-                            print(f"Error adding procedure steps: {e}")
-                            procedure_steps_added = 0
-            
-            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
         
+            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+    
         except Exception as e:
             st.error(f"Error filling template: {e}")
             return None, 0, 0, [], 0
@@ -1403,6 +1386,7 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
+        
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
