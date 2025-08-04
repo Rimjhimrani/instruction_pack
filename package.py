@@ -1006,7 +1006,7 @@ class EnhancedTemplateMapperWithImages:
             # Fixed column and starting row
             start_row = 28      # Start from Row 28
             target_col = 2      # Column B (step content)
-        
+    
             # Filter out empty or blank steps
             non_empty_steps = [step for step in steps if step and step.strip()]
             steps_to_write = non_empty_steps
@@ -1034,6 +1034,16 @@ class EnhancedTemplateMapperWithImages:
                 target_cell.value = step_text
                 target_cell.font = Font(name='Calibri', size=10)
                 target_cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+                # 🔧 RE-MERGE ROW 37 AFTER WRITING CONTENT
+                if step_row == 37:
+                    try:
+                        # Merge B37 with adjacent cells (typically B37:P37 for procedure steps)
+                        merge_range = f"B37:P37"
+                        worksheet.merge_cells(merge_range)
+                        print(f"✅ Re-merged row 37: {merge_range}")
+                    except Exception as merge_error:
+                        print(f"⚠️ Warning: Could not re-merge B37: {merge_error}")
 
                 # Adjust height manually based on estimated lines
                 max_chars_per_line = 100
