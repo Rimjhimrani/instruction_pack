@@ -688,6 +688,7 @@ class EnhancedTemplateMapperWithImages:
                 'field_mappings': {
                     'secondary packaging type': 'Secondary Packaging Type',
                     'packaging type': 'Secondary Packaging Type',
+                    'type': 'Secondary Packaging Type',  # ← ADD THIS LINE
                     'l-mm': 'Secondary L-mm',
                     'l mm': 'Secondary L-mm',
                     'length': 'Secondary L-mm',
