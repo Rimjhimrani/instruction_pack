@@ -987,113 +987,115 @@ class EnhancedTemplateMapperWithImages:
             traceback.print_exc()
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Enhanced procedure steps writing with better error handling and debugging - writes only step text without numbers"""
+        """Enhanced procedure steps writing with better error handling and debugging"""
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font, Alignment
             import traceback
-        
+    
             print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
-        
+    
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"❌ No procedure steps found for packaging type: {packaging_type}")
                 return 0
-        
+    
             print(f"📋 Retrieved {len(steps)} procedure steps")
-        
+    
             # Fixed coordinates for procedure area
             start_row = 28  # Row 28
             end_row = 38    # Row 38
             col_b = 2       # Column B
             col_p = 16      # Column P
-        
+    
             # Calculate available space
             available_rows = end_row - start_row + 1  # 11 rows
             max_steps = available_rows * 2  # 2 steps per row = 22 steps max
-        
+    
             print(f"📊 Available rows: {available_rows}, Max steps: {max_steps}")
-        
+    
             # Filter non-empty steps
             non_empty_steps = [step for step in steps if step and step.strip()]
             steps_to_write = non_empty_steps[:max_steps]
-        
+    
             print(f"✏️  Will write {len(steps_to_write)} non-empty steps")
-        
+    
             def write_step_to_cell(row, col, step_text, step_number):
                 """Write a single step to a specific cell with error handling"""
                 try:
                     target_cell = worksheet.cell(row=row, column=col)
                     col_letter = 'B' if col == 2 else 'P'
-                
+            
                     print(f"📝 Writing step {step_number} to {col_letter}{row}: {step_text[:50]}...")
-                
+            
                     # Check if cell is in merged range
                     cell_is_merged = False
                     for merged_range in worksheet.merged_cells.ranges:
                         if target_cell.coordinate in merged_range:
                             cell_is_merged = True
                             print(f"⚠️  Cell {target_cell.coordinate} is in merged range {merged_range}")
-                        
+                    
                             # If it's not the top-left cell, unmerge the range
                             if not (row == merged_range.min_row and col == merged_range.min_col):
                                 print(f"🔧 Unmerging range {merged_range}")
                                 worksheet.unmerge_cells(str(merged_range))
                                 target_cell = worksheet.cell(row=row, column=col)
                             break
-                
-                    # Write ONLY the step text without numbering (template already has numbers in column A)
-                    target_cell.value = step_text  # No numbering prefix added here
-                
+            
+                    # Write only the step content (no numbering since template has it)
+                    target_cell.value = step_text
+            
                     # Apply formatting
                     target_cell.font = Font(name='Calibri', size=10)
                     target_cell.alignment = Alignment(wrap_text=True, vertical='top')
-                
+            
                     print(f"✅ Successfully wrote step {step_number} to {col_letter}{row}")
                     return True
-                
+            
                 except Exception as e:
                     print(f"❌ Error writing step {step_number} to row {row}, col {col}: {e}")
                     traceback.print_exc()
                     return False
-        
+    
             # Write procedure steps
             steps_written = 0
             successful_writes = 0
-        
+    
             for i, step in enumerate(steps_to_write):
-                step_row = start_row + (steps_written // 2)  # Two steps per row
-            
+                # Calculate which row this step goes to
+                # Step 1 & 2 go to row 28, Step 3 & 4 go to row 29, etc.
+                step_row = start_row + (steps_written // 2)
+        
                 # Check bounds
                 if step_row > end_row:
                     print(f"⛔ Reached maximum rows ({end_row}), stopping at step {steps_written + 1}")
                     break
-            
+        
                 # Alternate between columns B and P
+                # Even steps (0, 2, 4...) go to column B, odd steps (1, 3, 5...) go to column P
                 target_col = col_b if steps_written % 2 == 0 else col_p
             
-                # CHANGED: Write only the step text, no numbering prefix
-                # The template already has numbers in column A, so we don't need to add them
-                step_text = step  # Just the step text without "1. ", "2. ", etc.
-            
+                # Don't add step numbering - template already has it
+                step_text = step.strip()
+        
                 # Write the step
                 if write_step_to_cell(step_row, target_col, step_text, steps_written + 1):
                     successful_writes += 1
-            
-                steps_written += 1
         
+                steps_written += 1
+    
             print(f"\n📋 PROCEDURE STEPS SUMMARY:")
             print(f"   Total steps attempted: {steps_written}")
             print(f"   Successful writes: {successful_writes}")
             print(f"   Target area: Rows {start_row}-{end_row}, Columns B & P")
-            print(f"   Note: Writing only step text (no numbers) since template has numbering in column A")
-        
+            print(f"   Pattern: Step 1→B28, Step 2→P28, Step 3→B29, Step 4→P29...")
+    
             # Force worksheet to recalculate
             worksheet.formula_attributes = {}
-        
+    
             return successful_writes
-        
+    
         except Exception as e:
             print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
             import traceback
