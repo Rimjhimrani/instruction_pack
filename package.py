@@ -1110,7 +1110,7 @@ class EnhancedTemplateMapperWithImages:
                         
                         # Look for direct field matches within section
                         for template_field_key, data_column_pattern in section_mappings.items():
-                            if template_field_key in field_value or field_value in template_field_key:
+                            if field_value == template_field_key:
                                 # Look for exact match first
                                 for data_col in data_columns:
                                     if data_column_pattern.lower() == data_col.lower():
