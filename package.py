@@ -1032,7 +1032,7 @@ class EnhancedTemplateMapperWithImages:
 
                 # Write step content
                 target_cell.value = step_text
-                target_cell.font = Font(name='Calibri', size=10)
+                target_cell.font = Font(name='Calibri', size=11)
                 target_cell.alignment = Alignment(wrap_text=True, vertical='top')
 
                 # 🔧 RE-MERGE ROW 37 AFTER WRITING CONTENT
