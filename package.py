@@ -663,7 +663,7 @@ class EnhancedTemplateMapperWithImages:
                     'internal', '( primary / internal )', 'primary / internal'
                 ],
                 'field_mappings': {
-                    # STRICT: Only map to Primary columns when in Primary section
+                    'primary packaging type': 'Primary Packaging Type',
                     'packaging type': 'Primary Packaging Type',
                     'l-mm': 'Primary L-mm',
                     'l mm': 'Primary L-mm',
@@ -680,13 +680,13 @@ class EnhancedTemplateMapperWithImages:
                     'pack weight': 'Primary Pack Weight'
                 }
             },
-           'secondary_packaging': {
-               'section_keywords': [
-                   'secondary packaging instruction', 'secondary packaging', 'secondary', 
-                   'outer', 'external', '( outer / external )', 'outer / external'
+            'secondary_packaging': {
+                'section_keywords': [
+                    'secondary packaging instruction', 'secondary packaging', 'secondary', 
+                    'outer', 'external', '( outer / external )', 'outer / external'
                 ],
                 'field_mappings': {
-                    # STRICT: Only map to Secondary columns when in Secondary section
+                    'secondary packaging type': 'Secondary Packaging Type',
                     'packaging type': 'Secondary Packaging Type',
                     'l-mm': 'Secondary L-mm',
                     'l mm': 'Secondary L-mm',
@@ -708,7 +708,6 @@ class EnhancedTemplateMapperWithImages:
                     'part information', 'part', 'component', 'item'
                 ],
                 'field_mappings': {
-                    # Part fields remain separate
                     'l': 'Part L',
                     'length': 'Part L',
                     'w': 'Part W',
@@ -770,7 +769,7 @@ class EnhancedTemplateMapperWithImages:
             return []
     
     def identify_section_context(self, worksheet, row, col, max_search_rows=15):
-        """ENHANCED: More accurate section identification to prevent mapping errors"""
+        """ENHANCED: More accurate section identification"""
         try:
             # Search in expanded area for section headers
             for search_row in range(max(1, row - max_search_rows), row + 3):
@@ -779,6 +778,7 @@ class EnhancedTemplateMapperWithImages:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
+                            
                             # PRIMARY PACKAGING detection (strict)
                             primary_indicators = ['primary packaging', 'primary', 'internal packaging']
                             if any(indicator in cell_text for indicator in primary_indicators):
@@ -815,81 +815,11 @@ class EnhancedTemplateMapperWithImages:
                 return 'part_information'
         
             print(f"  ⚪ NO section context found for row {row}, col {col}")
-            return None
+            return 'general_fields'  # Default to general fields instead of None
         
         except Exception as e:
-            st.error(f"Error in identify_section_context: {e}")
-            return None
-        
-    def validate_mapping_results(self, mapping_results):
-        """Validate that mappings are correct and prevent cross-contamination"""
-        validated_results = {}
-    
-        for coord, mapping in mapping_results.items():
-            field_name = mapping['template_field'].lower()
-            data_column = mapping['data_column']
-            section_context = mapping['section_context']
-        
-            # Validation rules
-            is_valid = True
-        
-            if section_context == 'primary_packaging':
-                # Primary fields should only map to Primary columns
-                if data_column and not data_column.startswith('Primary'):
-                    print(f"❌ INVALID: Primary field '{field_name}' mapped to non-Primary column '{data_column}'")
-                    is_valid = False
-                
-            elif section_context == 'secondary_packaging':
-                # Secondary fields should only map to Secondary columns
-                if data_column and not data_column.startswith('Secondary'):
-                    print(f"❌ INVALID: Secondary field '{field_name}' mapped to non-Secondary column '{data_column}'")
-                    is_valid = False
-                
-            elif section_context == 'part_information':
-                # Part fields should only map to Part columns
-                if data_column and not data_column.startswith('Part'):
-                    print(f"❌ INVALID: Part field '{field_name}' mapped to non-Part column '{data_column}'")
-                    is_valid = False
-        
-            if is_valid:
-                validated_results[coord] = mapping
-                if data_column:
-                    print(f"✅ VALID: {field_name} -> {data_column} (Section: {section_context})")
-            else:
-                # Clear invalid mapping
-                mapping['data_column'] = None
-                mapping['is_mappable'] = False
-                validated_results[coord] = mapping
-    
-        return validated_results
-
-    # UPDATE 5: Fix packaging type extraction
-    # Add this method to correctly identify packaging types from data:
-
-    def extract_packaging_types_from_data(self, data_df):
-        """Extract only Primary and Secondary packaging types from data"""
-        packaging_types = []
-    
-        try:
-            if len(data_df) > 0:
-                row_data = data_df.iloc[0]
-                # Look for Primary Packaging Type
-                primary_type_columns = ['Primary Packaging Type', 'Primary Type', 'Primary_Packaging_Type']
-                for col in primary_type_columns:
-                    if col in data_df.columns and not pd.isna(row_data.get(col)):
-                        packaging_types.append(f"Primary: {row_data[col]}")
-            
-                # Look for Secondary Packaging Type  
-                secondary_type_columns = ['Secondary Packaging Type', 'Secondary Type', 'Secondary_Packaging_Type']
-                for col in secondary_type_columns:
-                    if col in data_df.columns and not pd.isna(row_data.get(col)):
-                        packaging_types.append(f"Secondary: {row_data[col]}")
-        
-            return packaging_types
-        
-        except Exception as e:
-            print(f"Error extracting packaging types: {e}")
-            return []
+            print(f"Error in identify_section_context: {e}")
+            return 'general_fields'
     
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -903,36 +833,18 @@ class EnhancedTemplateMapperWithImages:
             if not text1 or not text2:
                 return 0.0
             
-            # Sequence similarity
+            # Simple sequence similarity
+            from difflib import SequenceMatcher
             sequence_sim = SequenceMatcher(None, text1, text2).ratio()
             
-            # TF-IDF similarity (if available)
-            tfidf_sim = 0.0
-            if ADVANCED_NLP:
-                try:
-                    tfidf_matrix = self.vectorizer.fit_transform([text1, text2])
-                    tfidf_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-                except:
-                    tfidf_sim = 0.0
+            # Exact match bonus
+            if text1 == text2:
+                return 1.0
+                
+            return sequence_sim
             
-            # Keyword overlap
-            keywords1 = set(self.extract_keywords(text1))
-            keywords2 = set(self.extract_keywords(text2))
-            
-            if keywords1 and keywords2:
-                keyword_sim = len(keywords1.intersection(keywords2)) / len(keywords1.union(keywords2))
-            else:
-                keyword_sim = 0.0
-            
-            # Weighted average
-            if ADVANCED_NLP:
-                final_similarity = (sequence_sim * 0.4) + (tfidf_sim * 0.4) + (keyword_sim * 0.2)
-            else:
-                final_similarity = (sequence_sim * 0.7) + (keyword_sim * 0.3)
-            
-            return final_similarity
         except Exception as e:
-            st.error(f"Error in calculate_similarity: {e}")
+            print(f"Error in calculate_similarity: {e}")
             return 0.0
     
     def is_mappable_field(self, text):
@@ -957,7 +869,8 @@ class EnhancedTemplateMapperWithImages:
                 r'code', r'name', r'description',           # Basic info fields
                 r'vendor', r'supplier', r'customer',        # Entity fields
                 r'date', r'revision', r'reference',         # Document fields
-                r'part\s+no', r'part\s+number'              # Part identification
+                r'part\s+no', r'part\s+number',            # Part identification
+                r'problem\s+if\s+any', r'remark'           # Special fields
             ]
             
             for pattern in mappable_patterns:
@@ -970,7 +883,7 @@ class EnhancedTemplateMapperWithImages:
                 
             return False
         except Exception as e:
-            st.error(f"Error in is_mappable_field: {e}")
+            print(f"Error in is_mappable_field: {e}")
             return False
     
     def find_procedure_step_area(self, worksheet):
@@ -1223,8 +1136,91 @@ class EnhancedTemplateMapperWithImages:
         
         return fields, image_areas
     
+    def extract_color_from_cell(self, worksheet, row, col):
+        """Extract background color from cell"""
+        try:
+            cell = worksheet.cell(row=row, column=col)
+            if cell.fill and cell.fill.start_color:
+                color_rgb = cell.fill.start_color.rgb
+                if color_rgb and len(color_rgb) == 8:  # ARGB format
+                    rgb_hex = color_rgb[2:]  # Remove alpha channel
+                    
+                    # Convert common colors to names
+                    color_mapping = {
+                        'FF0000': 'red',
+                        'FFFF00': 'yellow', 
+                        '00FF00': 'green',
+                        'FFC000': 'yellow',  # Common Excel yellow
+                        '00B050': 'green',   # Common Excel green
+                        'C00000': 'red',     # Common Excel red
+                    }
+                    
+                    return color_mapping.get(rgb_hex.upper(), rgb_hex)
+            return None
+        except Exception as e:
+            print(f"Error extracting color: {e}")
+            return None
+    
+    def handle_special_fields(self, worksheet, mapping_results, data_df):
+        """Handle special fields like Problem If Any and Remark with color extraction"""
+        try:
+            if len(data_df) == 0:
+                return
+                
+            row_data = data_df.iloc[0]
+            
+            # Handle "Problem If Any" - extract value and put in cell below
+            problem_value = None
+            if 'Problem If Any' in data_df.columns:
+                problem_value = row_data['Problem If Any']
+                if not pd.isna(problem_value) and str(problem_value).strip():
+                    # Find Problem If Any field in template
+                    for coord, mapping in mapping_results.items():
+                        if mapping['template_field'].lower().strip() == 'problem if any':
+                            field_info = mapping['field_info']
+                            # Put value in cell below the label
+                            target_row = field_info['row'] + 1
+                            target_col = field_info['column']
+                            target_cell = worksheet.cell(row=target_row, column=target_col)
+                            target_cell.value = str(problem_value)
+                            print(f"✅ Problem If Any value '{problem_value}' written to row {target_row}")
+                            
+            # Handle "Remark" - extract color and value
+            remark_value = None
+            remark_color = None
+            if 'Remark' in data_df.columns:
+                remark_value = row_data['Remark']
+                # Extract color from data file (this would need to be implemented in data reading)
+                # For now, we'll handle the template side
+                
+                if not pd.isna(remark_value) and str(remark_value).strip():
+                    # Find Remark field in template
+                    for coord, mapping in mapping_results.items():
+                        if mapping['template_field'].lower().strip() == 'remark':
+                            field_info = mapping['field_info']
+                            # Put value in rows 25 and 26
+                            for target_row in [25, 26]:
+                                target_cell = worksheet.cell(row=target_row, column=field_info['column'])
+                                target_cell.value = str(remark_value)
+                                
+                                # Apply color if available
+                                if remark_color:
+                                    from openpyxl.styles import PatternFill
+                                    color_fills = {
+                                        'red': PatternFill(start_color='FF0000', end_color='FF0000', fill_type='solid'),
+                                        'yellow': PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid'),
+                                        'green': PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid')
+                                    }
+                                    if remark_color.lower() in color_fills:
+                                        target_cell.fill = color_fills[remark_color.lower()]
+                                        
+                            print(f"✅ Remark value '{remark_value}' written to rows 25-26")
+                            
+        except Exception as e:
+            print(f"Error handling special fields: {e}")
+    
     def map_data_with_section_context(self, template_fields, data_df):
-        """FIXED: Enhanced mapping with strict section-aware logic to prevent cross-contamination"""
+        """FIXED: Enhanced mapping with strict section-aware logic"""
         mapping_results = {}
         try:
             data_columns = data_df.columns.tolist()
@@ -1235,39 +1231,47 @@ class EnhancedTemplateMapperWithImages:
                     best_match = None
                     best_score = 0.0
                     field_value = field['value'].lower().strip()
-                    section_context = field.get('section_context')
+                    section_context = field.get('section_context', 'general_fields')
                 
                     print(f"\nProcessing field: '{field['value']}' in section: {section_context}")
                 
-                    # STRICT SECTION-BASED MAPPING
-                    if section_context and section_context in self.section_mappings:
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
+                    # SECTION-BASED MAPPING with fallback to general
+                    sections_to_check = [section_context]
+                    if section_context != 'general_fields':
+                        sections_to_check.append('general_fields')
                     
-                        # Look for exact field match in current section
-                        for template_field_key, expected_data_column in section_mappings.items():
-                            if template_field_key.strip() == field_value.strip():
-                                print(f"  Found exact template field match: {template_field_key} -> {expected_data_column}")
-                                # Look for exact data column match
-                                for data_col in data_columns:
-                                    if expected_data_column.lower() == data_col.lower():
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        print(f"  ✅ EXACT MATCH: {expected_data_column} -> {data_col}")
+                    for section in sections_to_check:
+                        if section in self.section_mappings:
+                            section_mappings = self.section_mappings[section]['field_mappings']
+                        
+                            # Look for exact field match in current section
+                            for template_field_key, expected_data_column in section_mappings.items():
+                                if template_field_key.strip() == field_value.strip():
+                                    print(f"  Found exact template field match: {template_field_key} -> {expected_data_column}")
+                                    # Look for exact data column match
+                                    for data_col in data_columns:
+                                        if expected_data_column.strip().lower() == data_col.strip().lower():
+                                            best_match = data_col
+                                            best_score = 1.0
+                                            print(f"  ✅ EXACT MATCH: {expected_data_column} -> {data_col}")
+                                            break
+                                
+                                    # If exact match found, stop searching
+                                    if best_match:
                                         break
                             
-                                # If exact match found, don't look further
-                                if best_match:
-                                    break
+                            if best_match:
+                                break
                 
-                    # ONLY if no section-based match, try general similarity (with lower threshold)
+                    # FUZZY MATCHING as last resort with very high threshold
                     if not best_match:
-                        print(f"  No section-based match found, trying general similarity...")
+                        print(f"  No exact match found, trying fuzzy matching...")
                         for data_col in data_columns:
                             similarity = self.calculate_similarity(field_value, data_col)
-                            if similarity > best_score and similarity >= 0.7:  # Higher threshold for general matching
+                            if similarity > best_score and similarity >= 0.85:  # Very high threshold
                                 best_score = similarity
                                 best_match = data_col
-                                print(f"  Similarity match: {data_col} (score: {similarity:.2f})")
+                                print(f"  Fuzzy match: {data_col} (score: {similarity:.2f})")
                 
                     mapping_results[coord] = {
                         'template_field': field['value'],
@@ -1284,21 +1288,19 @@ class EnhancedTemplateMapperWithImages:
                         print(f"  ❌ NO MAPPING: '{field['value']}' (Section: {section_context})")
                     
                 except Exception as e:
-                    st.error(f"Error mapping field {coord}: {e}")
+                    print(f"Error mapping field {coord}: {e}")
                     continue
                 
         except Exception as e:
-            st.error(f"Error in map_data_with_section_context: {e}")
+            print(f"Error in map_data_with_section_context: {e}")
         
         return mapping_results
-
     
     def find_data_cell_for_label(self, worksheet, field_info):
         """Find data cell for a label with improved merged cell handling"""
         try:
             row = field_info['row']
             col = field_info['column']
-            merged_ranges = list(worksheet.merged_cells.ranges)
         
             def is_suitable_data_cell(cell_coord):
                 """Check if a cell is suitable for data entry"""
@@ -1348,9 +1350,9 @@ class EnhancedTemplateMapperWithImages:
             return None
             
         except Exception as e:
-            st.error(f"Error in find_data_cell_for_label: {e}")
+            print(f"Error in find_data_cell_for_label: {e}")
             return None
-    
+        
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template in designated areas"""
         try:
@@ -1410,7 +1412,7 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
-        """Fill template with mapped data, images, and procedure steps"""
+        """Fill template with mapped data, images, and procedure steps - FIXED VERSION"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
@@ -1430,20 +1432,25 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = 'XXX'
     
             print(f"Starting template fill process...")
-            print(f"Data dictionary keys: {list(data_dict.keys())}")
+            print(f"Available data columns: {list(data_df.columns)}")
             print(f"Packaging type: {packaging_type}")
     
-            # Fill data fields
+            # Fill data fields with strict section awareness
             print("=== Filling data fields ===")
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
+                        data_column = mapping['data_column']
+                        
+                        # Find the appropriate data cell
                         target_cell = self.find_data_cell_for_label(worksheet, field_info)
                 
                         if target_cell and len(data_df) > 0:
-                            data_value = data_df.iloc[0][mapping['data_column']]
+                            # Get data value
+                            data_value = data_df.iloc[0][data_column]
                     
+                            # Handle merged cells
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1453,20 +1460,24 @@ class EnhancedTemplateMapperWithImages:
                                         break
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
+                                
                             filled_count += 1
-                            print(f"Filled {target_cell} with: {data_value}")
+                            print(f"✅ Filled {target_cell} with: {data_value} (from {data_column})")
                     
                 except Exception as e:
-                    print(f"Error filling mapping {coord}: {e}")
+                    print(f"❌ Error filling mapping {coord}: {e}")
                     continue
+    
+            # Handle special fields (Problem If Any, Remark)
+            print("=== Handling special fields ===")
+            self.handle_special_fields(worksheet, mapping_results, data_df)
     
             print(f"=== Data fields filled: {filled_count} ===")
     
             # Add images if provided
-            if uploaded_images:
+            if uploaded_images and self.image_extractor:
                 print("=== Adding images ===")
                 try:
-                    # First, identify image upload areas
                     _, image_areas = self.find_template_fields_with_context_and_images(template_file)
                     images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
                     print(f"Images added: {images_added}")
@@ -1478,24 +1489,11 @@ class EnhancedTemplateMapperWithImages:
             if packaging_type and packaging_type != "Select Packaging Procedure":
                 print(f"=== Writing procedure steps for {packaging_type} ===")
                 try:
-                    # Debug worksheet area before writing procedure steps
-                    self.debug_worksheet_procedure_area(worksheet)
-                
-                    # Write procedure steps
                     procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
                     print(f"✅ Successfully added {procedure_steps_added} procedure steps")
-                
-                    # Debug worksheet area after writing procedure steps
-                    print("After writing procedure steps:")
-                    self.debug_worksheet_procedure_area(worksheet)
-                
                 except Exception as e:
                     print(f"❌ Error adding procedure steps: {e}")
-                    import traceback
-                    traceback.print_exc()
                     procedure_steps_added = 0
-            else:
-                print("No packaging type provided or invalid packaging type")
         
             print(f"=== Template fill completed ===")
             print(f"Final results - Data fields: {filled_count}, Images: {images_added}, Procedure steps: {procedure_steps_added}")
