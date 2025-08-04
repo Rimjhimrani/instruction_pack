@@ -270,8 +270,8 @@ class ImageExtractor:
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Initialize counter for row 42 images (primary, secondary, label)
-            row_42_counter = 0
+            # Initialize counter for row 41 images (primary, secondary, label)
+            row_41_counter = 0
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -289,13 +289,13 @@ class ImageExtractor:
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
                     added_images += self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx, row_42_counter,
+                        worksheet, img_key, img_data, image_type, idx, row_41_counter,
                         temp_image_paths, used_images
                     )
                     
-                    # Increment row 42 counter for non-current images
+                    # Increment row 41 counter for non-current images
                     if image_type != 'current':
-                        row_42_counter += 1
+                        row_41_counter += 1
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -305,8 +305,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
                     
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
-        """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
+        """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
         if not hasattr(self, '_global_image_counter'):
             self._global_image_counter = 0
         try:
@@ -321,21 +321,21 @@ class ImageExtractor:
             # Initialize cell_coord variable
             cell_coord = None
         
-            # FIXED PLACEMENT LOGIC - CORRECTED POSITIONING
+            # FIXED PLACEMENT LOGIC - NO MIXING
             if image_type == 'current':
-                # CURRENT PACKAGING: Always at row 3, column 20 (T3)
+                # CURRENT PACKAGING: Always at row 2, column 20
                 target_row = 3
                 target_col = 20
                 # Current images are larger (8.3cm x 8.3cm)
                 img.width = int(8.3 * 37.8)
                 img.height = int(8.3 * 37.8)
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm) -> {cell_coord}")
+                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 42 with proper spacing
-                target_row = 42  # Changed from 41 to 42 as per your requirement
+                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
+                target_row = 41
             
-                # Use proper spacing calculations for row 42
+                # Use your defined spacing calculations
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
                 total_spacing = image_width_cols + gap_cols
@@ -351,12 +351,11 @@ class ImageExtractor:
                 img.height = int(4.3 * 37.8)
             
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"📍 {image_type.upper()} IMAGE: Placing at row 42, position: {cell_coord}")
+                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
                 print(f"   Image key: {img_key}")
                 print(f"   Image type: {image_type}")
                 print(f"   Global counter: {self._global_image_counter}")
                 print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
-            
             # Ensure cell_coord was set
             if cell_coord is None:
                 raise ValueError(f"Could not determine cell coordinate for image type: {image_type}")
@@ -391,9 +390,9 @@ class ImageExtractor:
             target_column = 3  # Column C
             target_row = 6     # Row 6
         else:
-            # Other images go to row 42 with spacing (changed from 41)
+            # Other images go to row 41 with spacing
             target_column = type_columns.get(area_type, 2)
-            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
+            target_row = 41 + (index * 12)  # Vertical spacing for multiple images of same type
         
         # Create a virtual area for additional placement
         return {
@@ -424,7 +423,7 @@ class ImageExtractor:
                 start_row = 6   # Row 6
             else:
                 target_col = type_columns.get(image_type, 2)
-                start_row = 42  # Changed from 41 to 42
+                start_row = 41
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
                 if image_type == 'current':
@@ -492,7 +491,7 @@ class ImageExtractor:
         # Sort by original index
         sorted_images.sort(key=lambda x: x[2])
         
-        # Reclassified images
+        # Reclassify images
         reclassified_images = {}
         for position, (img_key, img_data, original_index) in enumerate(sorted_images):
             # Determine new type based on position in sorted list
@@ -517,7 +516,7 @@ class ImageExtractor:
             print(f"Reclassified: {img_key} -> {new_key} (type: {new_type})")
         
         return {'all_sheets': reclassified_images}
-    
+        
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
         self.similarity_threshold = 0.3
@@ -769,57 +768,45 @@ class EnhancedTemplateMapperWithImages:
             return []
     
     def identify_section_context(self, worksheet, row, col, max_search_rows=15):
-        """ENHANCED: More accurate section identification"""
+        """Enhanced section identification with better pattern matching"""
         try:
-            # Search in expanded area for section headers
-            for search_row in range(max(1, row - max_search_rows), row + 3):
-                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
+            section_context = None
+            
+            # Search upwards and in nearby cells for section headers
+            for search_row in range(max(1, row - max_search_rows), row + 1):
+                for search_col in range(max(1, col - 10), min(worksheet.max_column + 1, col + 10)):
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
                             
-                            # PRIMARY PACKAGING detection (strict)
-                            primary_indicators = ['primary packaging', 'primary', 'internal packaging']
-                            if any(indicator in cell_text for indicator in primary_indicators):
-                                if 'secondary' not in cell_text and 'outer' not in cell_text:
-                                    print(f"  🟢 PRIMARY section detected at {cell.coordinate}: '{cell.value}'")
-                                    return 'primary_packaging'
-                        
-                            # SECONDARY PACKAGING detection (strict)
-                            secondary_indicators = ['secondary packaging', 'secondary', 'outer packaging', 'external packaging']
-                            if any(indicator in cell_text for indicator in secondary_indicators):
-                                if 'primary' not in cell_text and 'internal' not in cell_text:
-                                    print(f"  🔵 SECONDARY section detected at {cell.coordinate}: '{cell.value}'")
-                                    return 'secondary_packaging'
-                        
-                            # PART INFORMATION detection
-                            part_indicators = ['part information', 'part details', 'component details']
-                            if any(indicator in cell_text for indicator in part_indicators):
-                                print(f"  🟡 PART section detected at {cell.coordinate}: '{cell.value}'")
-                                return 'part_information'
-                            
+                            # Check for section keywords with more flexible matching
+                            for section_name, section_info in self.section_mappings.items():
+                                for keyword in section_info['section_keywords']:
+                                    keyword_processed = self.preprocess_text(keyword)
+                                    
+                                    # Exact match
+                                    if keyword_processed == cell_text:
+                                        return section_name
+                                    
+                                    # Partial match for key phrases
+                                    if keyword_processed in cell_text or cell_text in keyword_processed:
+                                        return section_name
+                                    
+                                    # Check for key words within the text
+                                    if section_name == 'primary_packaging' and ('primary' in cell_text and 'packaging' in cell_text):
+                                        return section_name
+                                    elif section_name == 'secondary_packaging' and ('secondary' in cell_text and 'packaging' in cell_text):
+                                        return section_name
+                                    elif section_name == 'part_information' and ('part' in cell_text and 'information' in cell_text):
+                                        return section_name
                     except:
                         continue
-        
-            # If no clear section found, analyze field name for hints
-            field_value = str(getattr(worksheet.cell(row=row, column=col), 'value', '')).lower()
-            if 'primary' in field_value:
-                print(f"  🟢 PRIMARY context inferred from field name")
-                return 'primary_packaging'
-            elif 'secondary' in field_value:
-                print(f"  🔵 SECONDARY context inferred from field name")
-                return 'secondary_packaging'
-            elif 'part' in field_value:
-                print(f"  🟡 PART context inferred from field name")
-                return 'part_information'
-        
-            print(f"  ⚪ NO section context found for row {row}, col {col}")
-            return 'general_fields'  # Default to general fields instead of None
-        
+            
+            return section_context
         except Exception as e:
-            print(f"Error in identify_section_context: {e}")
-            return 'general_fields'
+            st.error(f"Error in identify_section_context: {e}")
+            return None
     
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -833,18 +820,36 @@ class EnhancedTemplateMapperWithImages:
             if not text1 or not text2:
                 return 0.0
             
-            # Simple sequence similarity
-            from difflib import SequenceMatcher
+            # Sequence similarity
             sequence_sim = SequenceMatcher(None, text1, text2).ratio()
             
-            # Exact match bonus
-            if text1 == text2:
-                return 1.0
-                
-            return sequence_sim
+            # TF-IDF similarity (if available)
+            tfidf_sim = 0.0
+            if ADVANCED_NLP:
+                try:
+                    tfidf_matrix = self.vectorizer.fit_transform([text1, text2])
+                    tfidf_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+                except:
+                    tfidf_sim = 0.0
             
+            # Keyword overlap
+            keywords1 = set(self.extract_keywords(text1))
+            keywords2 = set(self.extract_keywords(text2))
+            
+            if keywords1 and keywords2:
+                keyword_sim = len(keywords1.intersection(keywords2)) / len(keywords1.union(keywords2))
+            else:
+                keyword_sim = 0.0
+            
+            # Weighted average
+            if ADVANCED_NLP:
+                final_similarity = (sequence_sim * 0.4) + (tfidf_sim * 0.4) + (keyword_sim * 0.2)
+            else:
+                final_similarity = (sequence_sim * 0.7) + (keyword_sim * 0.3)
+            
+            return final_similarity
         except Exception as e:
-            print(f"Error in calculate_similarity: {e}")
+            st.error(f"Error in calculate_similarity: {e}")
             return 0.0
     
     def is_mappable_field(self, text):
@@ -869,8 +874,7 @@ class EnhancedTemplateMapperWithImages:
                 r'code', r'name', r'description',           # Basic info fields
                 r'vendor', r'supplier', r'customer',        # Entity fields
                 r'date', r'revision', r'reference',         # Document fields
-                r'part\s+no', r'part\s+number',            # Part identification
-                r'problem\s+if\s+any', r'remark'           # Special fields
+                r'part\s+no', r'part\s+number'              # Part identification
             ]
             
             for pattern in mappable_patterns:
@@ -883,7 +887,7 @@ class EnhancedTemplateMapperWithImages:
                 
             return False
         except Exception as e:
-            print(f"Error in is_mappable_field: {e}")
+            st.error(f"Error in is_mappable_field: {e}")
             return False
     
     def find_procedure_step_area(self, worksheet):
@@ -928,136 +932,162 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             st.error(f"Error finding procedure step area: {e}")
             return None
-        
-    def debug_worksheet_procedure_area(self, worksheet):
-        """Debug function to inspect the procedure area of the worksheet"""
-        try:
-            print(f"\n=== DEBUGGING PROCEDURE AREA (Rows 25-40, Cols A-Q) ===")
-        
-            # Check for merged cells in the procedure area
-            procedure_merged_cells = []
-            for merged_range in worksheet.merged_cells.ranges:
-                if (merged_range.min_row <= 40 and merged_range.max_row >= 25 and merged_range.min_col <= 17 and merged_range.max_col >= 1):
-                    procedure_merged_cells.append(merged_range)
-        
-            print(f"Merged cells in procedure area: {len(procedure_merged_cells)}")
-            for merged_range in procedure_merged_cells:
-                print(f"  - {merged_range}")
-        
-            # Check specific procedure area (rows 28-38, columns B and P)
-            print(f"\nProcedure step target area inspection:")
-            for row in range(28, 39):  # rows 28-38
-                for col in [2, 16]:  # columns B(2) and P(16)
-                    cell = worksheet.cell(row=row, column=col)
-                    col_letter = 'B' if col == 2 else 'P'
-                
-                    # Check if cell is in a merged range
-                    is_merged = False
-                    merged_info = ""
-                    for merged_range in worksheet.merged_cells.ranges:
-                        if cell.coordinate in merged_range:
-                            is_merged = True
-                            merged_info = f" [MERGED: {merged_range}]"
-                            break
-                
-                    cell_value = cell.value if cell.value else "<empty>"
-                    print(f"  {col_letter}{row}: {cell_value}{merged_info}")
-        
-            # Check if cells are protected
-            print(f"\nWorksheet protection status:")
-            print(f"  Sheet protected: {worksheet.protection.sheet}")
-            print(f"  Password: {worksheet.protection.password}")
-        
-            # Check specific cells for protection
-            sample_cells = [worksheet.cell(row=28, column=2), worksheet.cell(row=28, column=16)]
-            for cell in sample_cells:
-                if hasattr(cell, 'protection'):
-                    print(f"  {cell.coordinate} locked: {cell.protection.locked}")
-        
-            print("=== END PROCEDURE AREA DEBUG ===\n")
-        
-        except Exception as e:
-            print(f"Error in debug_worksheet_procedure_area: {e}")
-            import traceback
-            traceback.print_exc()
+
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write packaging procedure steps in Column B starting from Row 28 (Step numbers already exist in Column A)"""
+        """Write procedure steps to the Excel template starting from Row 28, Columns B and P with robust merged cell handling"""
         try:
             from openpyxl.cell import MergedCell
-            from openpyxl.styles import Font, Alignment
-            import traceback
-
-            print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
-
-            # Get the procedure steps
+            from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
+        
+            # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
-                print(f"❌ No procedure steps found for packaging type: {packaging_type}")
+                print(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
-
-            print(f"📋 Retrieved {len(steps)} procedure steps")
-
-            # Fixed column and starting row
-            start_row = 28      # Start from Row 28
-            target_col = 2      # Column B (step content)
-    
-            # Filter out empty or blank steps
-            non_empty_steps = [step for step in steps if step and step.strip()]
-            steps_to_write = non_empty_steps
-
-            print(f"✏️  Will write {len(steps_to_write)} non-empty steps")
-
+        
+            start_row = 28  # Fixed row 28
+            col_b = 2   # Column B
+            col_p = 16  # Column P
+        
+            def get_writable_cell(worksheet, row, col):
+                """Get the actual writable cell, handling merged cells properly"""
+                try:
+                    cell = worksheet.cell(row=row, column=col)
+                
+                    # If it's a merged cell, find the top-left cell of the merged range
+                    if isinstance(cell, MergedCell):
+                        for merged_range in worksheet.merged_cells.ranges:
+                            if cell.coordinate in merged_range:
+                                # Return the top-left cell of the merged range
+                                return worksheet.cell(
+                                    row=merged_range.min_row, 
+                                    column=merged_range.min_col
+                                )
+                
+                    # If it's a regular cell, return it
+                    return cell
+                
+                except Exception as e:
+                    print(f"Error getting writable cell at {row},{col}: {e}")
+                    return None
+        
+            def write_value_safely(worksheet, row, col, value):
+                """Safely write a value to a cell, handling all edge cases"""
+                try:
+                    writable_cell = get_writable_cell(worksheet, row, col)
+                
+                    if writable_cell is None:
+                        print(f"Could not get writable cell at row {row}, col {col}")
+                        return False
+                
+                    # Check if the cell is read-only or protected
+                    if hasattr(writable_cell, 'protection') and writable_cell.protection.locked:
+                        print(f"Cell {writable_cell.coordinate} is protected, skipping...")
+                        return False
+                
+                    # Try to write the value
+                    writable_cell.value = value
+                    print(f"Successfully wrote to cell {writable_cell.coordinate}: {str(value)[:50]}...")
+                    return True
+                
+                except Exception as e:
+                    print(f"Error writing value to row {row}, col {col}: {e}")
+                    # Try alternative approach - find a nearby empty cell
+                    return write_to_alternative_cell(worksheet, row, col, value)
+            
+            def write_to_alternative_cell(worksheet, original_row, original_col, value):
+                """Find an alternative cell nearby if the original is not writable"""
+                try:
+                    # Try cells in the vicinity
+                    for row_offset in range(0, 3):
+                        for col_offset in range(0, 2):
+                            alt_row = original_row + row_offset
+                            alt_col = original_col + col_offset
+                        
+                            try:
+                                alt_cell = worksheet.cell(row=alt_row, column=alt_col)
+                            
+                                # Skip if it's a merged cell or has content
+                                if isinstance(alt_cell, MergedCell):
+                                    continue
+                            
+                                if alt_cell.value is not None and str(alt_cell.value).strip():
+                                    continue
+                            
+                                # Try to write to this cell
+                                alt_cell.value = value
+                                print(f"Used alternative cell {alt_cell.coordinate} for value: {str(value)[:50]}...")
+                                return True
+                            
+                            except Exception:
+                                continue
+                
+                    return False
+                
+                except Exception as e:
+                    print(f"Error finding alternative cell: {e}")
+                    return False
+        
+            # Write headers with safety checks
+            header_b_success = write_value_safely(worksheet, start_row - 1, col_b, f"Packaging Procedure Steps - {packaging_type}")
+            header_p_success = write_value_safely(worksheet, start_row - 1, col_p, f"Additional Steps - {packaging_type}")
+        
+            # Apply bold formatting to headers if successfully written
+            if header_b_success:
+                try:
+                    header_cell_b = get_writable_cell(worksheet, start_row - 1, col_b)
+                    if header_cell_b and not isinstance(header_cell_b, MergedCell):
+                        header_cell_b.font = Font(bold=True)
+                except Exception as e:
+                    print(f"Could not apply bold formatting to header B: {e}")
+        
+            if header_p_success:
+                try:
+                    header_cell_p = get_writable_cell(worksheet, start_row - 1, col_p)
+                    if header_cell_p and not isinstance(header_cell_p, MergedCell):
+                        header_cell_p.font = Font(bold=True)
+                except Exception as e:
+                    print(f"Could not apply bold formatting to header P: {e}")
+        
+            # Write procedure steps
             steps_written = 0
-
-            for i, step in enumerate(steps_to_write):
-                step_row = start_row + i
-                step_text = step.strip()
-                target_cell = worksheet.cell(row=step_row, column=target_col)
-                print(f"📝 Writing step {i + 1} to B{step_row}: {step_text[:50]}...")
-
-                # 🔧 HARD FIX ONLY FOR ROW 37 (Step 10)
-                if step_row == 37:
-                    for merged_range in worksheet.merged_cells.ranges:
-                        if "B37" in str(merged_range):
-                            print(f"🔧 Forcing unmerge of B37 range: {merged_range}")
-                            worksheet.unmerge_cells(str(merged_range))
-                            break
-                    target_cell = worksheet.cell(row=37, column=2)  # re-fetch after unmerge
-
-                # Write step content
-                target_cell.value = step_text
-                target_cell.font = Font(name='Calibri', size=10)
-                target_cell.alignment = Alignment(wrap_text=True, vertical='top')
-
-                # 🔧 RE-MERGE ROW 37 AFTER WRITING CONTENT
-                if step_row == 37:
-                    try:
-                        # Merge B37 with adjacent cells (typically B37:P37 for procedure steps)
-                        merge_range = f"B37:P37"
-                        worksheet.merge_cells(merge_range)
-                        print(f"✅ Re-merged row 37: {merge_range}")
-                    except Exception as merge_error:
-                        print(f"⚠️ Warning: Could not re-merge B37: {merge_error}")
-
-                # Adjust height manually based on estimated lines
-                max_chars_per_line = 100
-                num_lines = max(1, len(step_text) // max_chars_per_line + 1)
-                estimated_height = 15 + (num_lines - 1) * 15
-                worksheet.row_dimensions[step_row].height = estimated_height
-
-                steps_written += 1
-
-            print(f"\n✅ PROCEDURE STEPS COMPLETED")
-            print(f"   Total steps written: {steps_written}")
-            print(f"   Location: Column B, starting from Row 28")
-
-            return steps_written
-
+            successful_writes = 0
+        
+            for i, step in enumerate(steps):
+                if step.strip():  # Skip empty steps
+                    step_row = start_row + (steps_written // 2)  # Two steps per row
+                
+                    # Alternate between column B and P
+                    if steps_written % 2 == 0:
+                        target_col = col_b
+                        column_letter = 'B'
+                    else:
+                        target_col = col_p
+                        column_letter = 'P'
+                
+                    step_text = f"{steps_written + 1}. {step}"
+                
+                    if write_value_safely(worksheet, step_row, target_col, step_text):
+                        successful_writes += 1
+                        print(f"✅ Step {steps_written + 1} written to {column_letter}{step_row}")
+                    else:
+                        print(f"❌ Failed to write step {steps_written + 1} to {column_letter}{step_row}")
+                
+                    steps_written += 1
+        
+            print(f"✅ Attempted to write {steps_written} procedure steps, {successful_writes} successful")
+            print(f"Template procedure steps processing completed for {packaging_type}")
+        
+            # Return the number of successful writes
+            return successful_writes
+        
         except Exception as e:
-            print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
+            print(f"Critical error in write_procedure_steps_to_template: {e}")
             import traceback
             traceback.print_exc()
+            # Don't show error to user since template is still being filled successfully
             return 0
             
     def get_procedure_steps(self, packaging_type, data_dict=None):
@@ -1136,164 +1166,46 @@ class EnhancedTemplateMapperWithImages:
         
         return fields, image_areas
     
-    def extract_color_from_cell(self, worksheet, row, col):
-        """Extract background color from cell"""
-        try:
-            cell = worksheet.cell(row=row, column=col)
-            if cell.fill and cell.fill.start_color:
-                color_rgb = cell.fill.start_color.rgb
-                if color_rgb and len(color_rgb) == 8:  # ARGB format
-                    rgb_hex = color_rgb[2:]  # Remove alpha channel
-                    
-                    # Convert common colors to names
-                    color_mapping = {
-                        'FF0000': 'red',
-                        'FFFF00': 'yellow', 
-                        '00FF00': 'green',
-                        'FFC000': 'yellow',  # Common Excel yellow
-                        '00B050': 'green',   # Common Excel green
-                        'C00000': 'red',     # Common Excel red
-                    }
-                    
-                    return color_mapping.get(rgb_hex.upper(), rgb_hex)
-            return None
-        except Exception as e:
-            print(f"Error extracting color: {e}")
-            return None
-    
-    def handle_special_fields(self, worksheet, mapping_results, data_df):
-        """Handle special fields like Problem If Any and Remark with color extraction"""
-        try:
-            if len(data_df) == 0:
-                return
-                
-            row_data = data_df.iloc[0]
-            
-            # Handle "Problem If Any" - extract value and put in cell below
-            problem_value = None
-            if 'Problem If Any' in data_df.columns:
-                problem_value = row_data['Problem If Any']
-                if not pd.isna(problem_value) and str(problem_value).strip():
-                    # Find Problem If Any field in template
-                    for coord, mapping in mapping_results.items():
-                        if mapping['template_field'].lower().strip() == 'problem if any':
-                            field_info = mapping['field_info']
-                            # Put value in cell below the label
-                            target_row = field_info['row'] + 1
-                            target_col = field_info['column']
-                            target_cell = worksheet.cell(row=target_row, column=target_col)
-                            target_cell.value = str(problem_value)
-                            print(f"✅ Problem If Any value '{problem_value}' written to row {target_row}")
-                            
-            # Handle "Remark" - extract color and value
-            remark_value = None
-            remark_color = None
-            if 'Remark' in data_df.columns:
-                remark_value = row_data['Remark']
-                # Extract color from data file (this would need to be implemented in data reading)
-                # For now, we'll handle the template side
-                
-                if not pd.isna(remark_value) and str(remark_value).strip():
-                    # Find Remark field in template
-                    for coord, mapping in mapping_results.items():
-                        if mapping['template_field'].lower().strip() == 'remark':
-                            field_info = mapping['field_info']
-                            # Put value in rows 25 and 26
-                            for target_row in [25, 26]:
-                                target_cell = worksheet.cell(row=target_row, column=field_info['column'])
-                                target_cell.value = str(remark_value)
-                                
-                                # Apply color if available
-                                if remark_color:
-                                    from openpyxl.styles import PatternFill
-                                    color_fills = {
-                                        'red': PatternFill(start_color='FF0000', end_color='FF0000', fill_type='solid'),
-                                        'yellow': PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid'),
-                                        'green': PatternFill(start_color='00FF00', end_color='00FF00', fill_type='solid')
-                                    }
-                                    if remark_color.lower() in color_fills:
-                                        target_cell.fill = color_fills[remark_color.lower()]
-                                        
-                            print(f"✅ Remark value '{remark_value}' written to rows 25-26")
-                            
-        except Exception as e:
-            print(f"Error handling special fields: {e}")
-    
     def map_data_with_section_context(self, template_fields, data_df):
-        """FIXED: Enhanced mapping with strict section-aware logic"""
+        """NEW: Map template fields directly to CSV column headers with exact name match"""
         mapping_results = {}
         try:
             data_columns = data_df.columns.tolist()
-            print(f"Available data columns: {data_columns}")
-        
+            print(f"📄 Available data columns: {data_columns}")
+
+            # Build lowercase column name map for case-insensitive lookup
+            normalized_columns = {col.strip().lower(): col for col in data_columns}
+
             for coord, field in template_fields.items():
                 try:
-                    best_match = None
-                    best_score = 0.0
-                    field_value = field['value'].lower().strip()
+                    template_field_raw = field['value']
+                    template_field_clean = template_field_raw.strip().lower()
                     section_context = field.get('section_context', 'general_fields')
-                
-                    print(f"\nProcessing field: '{field['value']}' in section: {section_context}")
-                
-                    # SECTION-BASED MAPPING with fallback to general
-                    sections_to_check = [section_context]
-                    if section_context != 'general_fields':
-                        sections_to_check.append('general_fields')
-                    
-                    for section in sections_to_check:
-                        if section in self.section_mappings:
-                            section_mappings = self.section_mappings[section]['field_mappings']
-                        
-                            # Look for exact field match in current section
-                            for template_field_key, expected_data_column in section_mappings.items():
-                                if template_field_key.strip() == field_value.strip():
-                                    print(f"  Found exact template field match: {template_field_key} -> {expected_data_column}")
-                                    # Look for exact data column match
-                                    for data_col in data_columns:
-                                        if expected_data_column.strip().lower() == data_col.strip().lower():
-                                            best_match = data_col
-                                            best_score = 1.0
-                                            print(f"  ✅ EXACT MATCH: {expected_data_column} -> {data_col}")
-                                            break
-                                
-                                    # If exact match found, stop searching
-                                    if best_match:
-                                        break
-                            
-                            if best_match:
-                                break
-                
-                    # FUZZY MATCHING as last resort with very high threshold
-                    if not best_match:
-                        print(f"  No exact match found, trying fuzzy matching...")
-                        for data_col in data_columns:
-                            similarity = self.calculate_similarity(field_value, data_col)
-                            if similarity > best_score and similarity >= 0.85:  # Very high threshold
-                                best_score = similarity
-                                best_match = data_col
-                                print(f"  Fuzzy match: {data_col} (score: {similarity:.2f})")
-                
+
+                    # Try exact case-insensitive match
+                    matched_col = normalized_columns.get(template_field_clean)
+
                     mapping_results[coord] = {
-                        'template_field': field['value'],
-                        'data_column': best_match,
-                        'similarity': best_score,
+                        'template_field': template_field_raw,
+                        'data_column': matched_col if matched_col else None,
+                        'similarity': 1.0 if matched_col else 0.0,
                         'field_info': field,
                         'section_context': section_context,
-                        'is_mappable': best_match is not None
+                        'is_mappable': matched_col is not None
                     }
-                
-                    if best_match:
-                        print(f"  ✅ FINAL MAPPING: '{field['value']}' -> '{best_match}' (Section: {section_context})")
+
+                    if matched_col:
+                        print(f"✅ Exact match: '{template_field_raw}' → '{matched_col}'")
                     else:
-                        print(f"  ❌ NO MAPPING: '{field['value']}' (Section: {section_context})")
-                    
+                        print(f"❌ No match for: '{template_field_raw}'")
+
                 except Exception as e:
-                    print(f"Error mapping field {coord}: {e}")
+                    print(f"⚠️ Error mapping field {coord}: {e}")
                     continue
-                
+
         except Exception as e:
-            print(f"Error in map_data_with_section_context: {e}")
-        
+            print(f"🔥 Error in map_data_with_section_context: {e}")
+
         return mapping_results
     
     def find_data_cell_for_label(self, worksheet, field_info):
@@ -1301,6 +1213,7 @@ class EnhancedTemplateMapperWithImages:
         try:
             row = field_info['row']
             col = field_info['column']
+            merged_ranges = list(worksheet.merged_cells.ranges)
         
             def is_suitable_data_cell(cell_coord):
                 """Check if a cell is suitable for data entry"""
@@ -1350,9 +1263,9 @@ class EnhancedTemplateMapperWithImages:
             return None
             
         except Exception as e:
-            print(f"Error in find_data_cell_for_label: {e}")
+            st.error(f"Error in find_data_cell_for_label: {e}")
             return None
-        
+    
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template in designated areas"""
         try:
@@ -1412,16 +1325,16 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
-        """Fill template with mapped data, images, and procedure steps - FIXED VERSION"""
+        """Fill template with mapped data, images, and procedure steps"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-    
+        
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-    
+        
             # Create data dictionary for procedure step replacement
             data_dict = {}
             if len(data_df) > 0:
@@ -1430,27 +1343,18 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = data_df.iloc[0][col]
                     except:
                         data_dict[col] = 'XXX'
-    
-            print(f"Starting template fill process...")
-            print(f"Available data columns: {list(data_df.columns)}")
-            print(f"Packaging type: {packaging_type}")
-    
-            # Fill data fields with strict section awareness
-            print("=== Filling data fields ===")
+        
+            # Fill data fields
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
-                        data_column = mapping['data_column']
-                        
-                        # Find the appropriate data cell
-                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                
-                        if target_cell and len(data_df) > 0:
-                            # Get data value
-                            data_value = data_df.iloc[0][data_column]
                     
-                            # Handle merged cells
+                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
+                    
+                        if target_cell and len(data_df) > 0:
+                            data_value = data_df.iloc[0][mapping['data_column']]
+                        
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1460,52 +1364,51 @@ class EnhancedTemplateMapperWithImages:
                                         break
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                                
                             filled_count += 1
-                            print(f"✅ Filled {target_cell} with: {data_value} (from {data_column})")
-                    
+                        
                 except Exception as e:
-                    print(f"❌ Error filling mapping {coord}: {e}")
+                    st.error(f"Error filling mapping {coord}: {e}")
                     continue
-    
-            # Handle special fields (Problem If Any, Remark)
-            print("=== Handling special fields ===")
-            self.handle_special_fields(worksheet, mapping_results, data_df)
-    
-            print(f"=== Data fields filled: {filled_count} ===")
-    
+        
             # Add images if provided
-            if uploaded_images and self.image_extractor:
-                print("=== Adding images ===")
-                try:
-                    _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                    images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-                    print(f"Images added: {images_added}")
-                except Exception as e:
-                    print(f"Error adding images: {e}")
-                    images_added = 0
-    
+            if uploaded_images:
+                # First, identify image upload areas
+                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
+                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
+        
             # Write procedure steps if packaging type is provided
             if packaging_type and packaging_type != "Select Packaging Procedure":
-                print(f"=== Writing procedure steps for {packaging_type} ===")
                 try:
                     procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                    print(f"✅ Successfully added {procedure_steps_added} procedure steps")
+                    print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
                 except Exception as e:
-                    print(f"❌ Error adding procedure steps: {e}")
+                    st.error(f"Error adding procedure steps: {e}")
+                    print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-        
-            print(f"=== Template fill completed ===")
-            print(f"Final results - Data fields: {filled_count}, Images: {images_added}, Procedure steps: {procedure_steps_added}")
-        
+                    if packaging_type and packaging_type != "Select Packaging Procedure":
+                        try:
+                            # Create data dictionary for procedure step replacement
+                            data_dict = {}
+                            if len(data_df) > 0:
+                                for col in data_df.columns:
+                                    try:
+                                        data_dict[col] = data_df.iloc[0][col]
+                                    except:
+                                        data_dict[col] = 'XXX'
+                
+                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
+                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
+                        except Exception as e:
+                            st.error(f"Error adding procedure steps: {e}")
+                            print(f"Error adding procedure steps: {e}")
+                            procedure_steps_added = 0
+            
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
-    
-        except Exception as e:
-            print(f"Critical error in fill_template_with_data_and_images: {e}")
-            import traceback
-            traceback.print_exc()
-            return None, 0, 0, [], 0
         
+        except Exception as e:
+            st.error(f"Error filling template: {e}")
+            return None, 0, 0, [], 0
+
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -1567,7 +1470,6 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
-
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
