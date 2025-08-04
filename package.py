@@ -1025,7 +1025,7 @@ class EnhancedTemplateMapperWithImages:
                 # Check for merged cell and unmerge if necessary
                 for merged_range in worksheet.merged_cells.ranges:
                     if target_cell.coordinate in merged_range:
-		        print(f"🔧 Unmerging range {merged_range}")
+                        print(f"🔧 Unmerging merged range: {merged_range}")
                         worksheet.unmerge_cells(str(merged_range))
                         target_cell = worksheet.cell(row=step_row, column=target_col)
                         break
