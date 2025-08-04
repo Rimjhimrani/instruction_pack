@@ -708,18 +708,34 @@ class EnhancedTemplateMapperWithImages:
                     'part information', 'part', 'component', 'item'
                 ],
                 'field_mappings': {
-                    'l': 'Part L',
+                    'L': 'Part L',
                     'length': 'Part L',
-                    'w': 'Part W',
+                    'part l': 'Part L',
+                    'W': 'Part W',
                     'width': 'Part W',
-                    'h': 'Part H',
+                    'part w': 'Part W',
+                    'H': 'Part H',
                     'height': 'Part H',
+                    'part h': 'Part H',
                     'part no': 'Part No',
                     'part number': 'Part No',
                     'description': 'Part Description',
                     'unit weight': 'Part Unit Weight'
                 }
+            },
+            'vendor_information': {
+                'section_keywords': [
+                    'vendor information', 'vendor', 'supplier', 'supplier information'
+                ],
+                'field_mappings': {
+                    'vendor name': 'Vendor Name',
+                    'vendor code': 'Vendor Code',
+                    'vendor location': 'Vendor Location',
+                    'location': 'Vendor Location',
+                    'name': 'Vendor Name'
+                }
             }
+
         }
         
         if ADVANCED_NLP:
