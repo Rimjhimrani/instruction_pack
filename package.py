@@ -1213,6 +1213,44 @@ class EnhancedTemplateMapperWithImages:
                                             best_match = data_col
                                             print(f"DEBUG: SIMILARITY MATCH: {data_col} (score: {similarity})")  # ADD THIS
                                 break
+                    # 🔧 Fallback 1: If 'type' and no section, assume secondary packaging
+                    if not section_context and self.preprocess_text(field_value) == 'type':
+                        section_context = 'secondary_packaging'
+                        section_mappings = self.section_mappings[section_context]['field_mappings']
+                        print(f"⚠️ Fallback: Assuming 'secondary_packaging' for 'Type' at {coord}")
+
+                        for template_field_key, data_column_pattern in section_mappings.items():
+                            if self.preprocess_text(template_field_key) == 'type':
+                                expected_column = data_column_pattern
+                                for data_col in data_columns:
+                                    if data_col in used_columns:
+                                        continue
+                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
+                                        best_match = data_col
+                                        best_score = 1.0
+                                        break
+                                break
+
+                    # 🔧 Fallback 2: If 'L', 'W', 'H', etc. and no section, assume part_information
+                    if not section_context and self.preprocess_text(field_value) in ['l', 'w', 'h', 'length', 'width', 'height']:
+                        section_context = 'part_information'
+                        section_mappings = self.section_mappings[section_context]['field_mappings']
+                        print(f"⚠️ Fallback: Assuming 'part_information' for '{field_value}' at {coord}")
+
+                        for template_field_key, data_column_pattern in section_mappings.items():
+                            normalized_field_value = self.preprocess_text(field_value)
+                            normalized_template_key = self.preprocess_text(template_field_key)
+
+                            if normalized_field_value == normalized_template_key:
+                                expected_column = data_column_pattern
+                                for data_col in data_columns:
+                                    if data_col in used_columns:
+                                        continue
+                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
+                                        best_match = data_col
+                                        best_score = 1.0
+                                        break
+                                break
 
                     # Final fallback if section mapping didn't resolve
                     if not best_match:
