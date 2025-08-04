@@ -1034,9 +1034,12 @@ class EnhancedTemplateMapperWithImages:
                 # Write step content only (no step number)
                 target_cell.value = step_text
 
-                # Apply formatting
-                target_cell.font = Font(name='Calibri', size=10)
+                # Apply formatting and ensure wrapping
+                target_cell.font = Font(name='Calibri', size=11)
                 target_cell.alignment = Alignment(wrap_text=True, vertical='top')
+
+                # ✅ Ensure text wraps properly and row expands if needed
+                worksheet.row_dimensions[step_row].height = None
 
                 steps_written += 1
 
@@ -1145,10 +1148,8 @@ class EnhancedTemplateMapperWithImages:
                     # Try section-based mapping first
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
-                        
-                        # Look for direct field matches within section
                         for template_field_key, data_column_pattern in section_mappings.items():
-                            if template_field_key in field_value or field_value in template_field_key:
+                            if template_field_key.strip() == field_value.strip():  # 🔍 Exact match only
                                 # Look for exact match first
                                 for data_col in data_columns:
                                     if data_column_pattern.lower() == data_col.lower():
