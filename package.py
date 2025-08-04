@@ -663,7 +663,7 @@ class EnhancedTemplateMapperWithImages:
                     'internal', '( primary / internal )', 'primary / internal'
                 ],
                 'field_mappings': {
-                    'primary packaging type': 'Primary Packaging Type',
+                    # STRICT: Only map to Primary columns when in Primary section
                     'packaging type': 'Primary Packaging Type',
                     'l-mm': 'Primary L-mm',
                     'l mm': 'Primary L-mm',
@@ -680,13 +680,13 @@ class EnhancedTemplateMapperWithImages:
                     'pack weight': 'Primary Pack Weight'
                 }
             },
-            'secondary_packaging': {
-                'section_keywords': [
-                    'secondary packaging instruction', 'secondary packaging', 'secondary', 
-                    'outer', 'external', '( outer / external )', 'outer / external'
+           'secondary_packaging': {
+               'section_keywords': [
+                   'secondary packaging instruction', 'secondary packaging', 'secondary', 
+                   'outer', 'external', '( outer / external )', 'outer / external'
                 ],
                 'field_mappings': {
-                    'secondary packaging type': 'Secondary Packaging Type',
+                    # STRICT: Only map to Secondary columns when in Secondary section
                     'packaging type': 'Secondary Packaging Type',
                     'l-mm': 'Secondary L-mm',
                     'l mm': 'Secondary L-mm',
@@ -708,6 +708,7 @@ class EnhancedTemplateMapperWithImages:
                     'part information', 'part', 'component', 'item'
                 ],
                 'field_mappings': {
+                    # Part fields remain separate
                     'l': 'Part L',
                     'length': 'Part L',
                     'w': 'Part W',
@@ -769,45 +770,126 @@ class EnhancedTemplateMapperWithImages:
             return []
     
     def identify_section_context(self, worksheet, row, col, max_search_rows=15):
-        """Enhanced section identification with better pattern matching"""
+        """ENHANCED: More accurate section identification to prevent mapping errors"""
         try:
-            section_context = None
-            
-            # Search upwards and in nearby cells for section headers
-            for search_row in range(max(1, row - max_search_rows), row + 1):
-                for search_col in range(max(1, col - 10), min(worksheet.max_column + 1, col + 10)):
+            # Search in expanded area for section headers
+            for search_row in range(max(1, row - max_search_rows), row + 3):
+                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
+                            # PRIMARY PACKAGING detection (strict)
+                            primary_indicators = ['primary packaging', 'primary', 'internal packaging']
+                            if any(indicator in cell_text for indicator in primary_indicators):
+                                if 'secondary' not in cell_text and 'outer' not in cell_text:
+                                    print(f"  🟢 PRIMARY section detected at {cell.coordinate}: '{cell.value}'")
+                                    return 'primary_packaging'
+                        
+                            # SECONDARY PACKAGING detection (strict)
+                            secondary_indicators = ['secondary packaging', 'secondary', 'outer packaging', 'external packaging']
+                            if any(indicator in cell_text for indicator in secondary_indicators):
+                                if 'primary' not in cell_text and 'internal' not in cell_text:
+                                    print(f"  🔵 SECONDARY section detected at {cell.coordinate}: '{cell.value}'")
+                                    return 'secondary_packaging'
+                        
+                            # PART INFORMATION detection
+                            part_indicators = ['part information', 'part details', 'component details']
+                            if any(indicator in cell_text for indicator in part_indicators):
+                                print(f"  🟡 PART section detected at {cell.coordinate}: '{cell.value}'")
+                                return 'part_information'
                             
-                            # Check for section keywords with more flexible matching
-                            for section_name, section_info in self.section_mappings.items():
-                                for keyword in section_info['section_keywords']:
-                                    keyword_processed = self.preprocess_text(keyword)
-                                    
-                                    # Exact match
-                                    if keyword_processed == cell_text:
-                                        return section_name
-                                    
-                                    # Partial match for key phrases
-                                    if keyword_processed in cell_text or cell_text in keyword_processed:
-                                        return section_name
-                                    
-                                    # Check for key words within the text
-                                    if section_name == 'primary_packaging' and ('primary' in cell_text and 'packaging' in cell_text):
-                                        return section_name
-                                    elif section_name == 'secondary_packaging' and ('secondary' in cell_text and 'packaging' in cell_text):
-                                        return section_name
-                                    elif section_name == 'part_information' and ('part' in cell_text and 'information' in cell_text):
-                                        return section_name
                     except:
                         continue
-            
-            return section_context
+        
+            # If no clear section found, analyze field name for hints
+            field_value = str(getattr(worksheet.cell(row=row, column=col), 'value', '')).lower()
+            if 'primary' in field_value:
+                print(f"  🟢 PRIMARY context inferred from field name")
+                return 'primary_packaging'
+            elif 'secondary' in field_value:
+                print(f"  🔵 SECONDARY context inferred from field name")
+                return 'secondary_packaging'
+            elif 'part' in field_value:
+                print(f"  🟡 PART context inferred from field name")
+                return 'part_information'
+        
+            print(f"  ⚪ NO section context found for row {row}, col {col}")
+            return None
+        
         except Exception as e:
             st.error(f"Error in identify_section_context: {e}")
             return None
+        
+    def validate_mapping_results(self, mapping_results):
+        """Validate that mappings are correct and prevent cross-contamination"""
+        validated_results = {}
+    
+        for coord, mapping in mapping_results.items():
+            field_name = mapping['template_field'].lower()
+            data_column = mapping['data_column']
+            section_context = mapping['section_context']
+        
+            # Validation rules
+            is_valid = True
+        
+            if section_context == 'primary_packaging':
+                # Primary fields should only map to Primary columns
+                if data_column and not data_column.startswith('Primary'):
+                    print(f"❌ INVALID: Primary field '{field_name}' mapped to non-Primary column '{data_column}'")
+                    is_valid = False
+                
+            elif section_context == 'secondary_packaging':
+                # Secondary fields should only map to Secondary columns
+                if data_column and not data_column.startswith('Secondary'):
+                    print(f"❌ INVALID: Secondary field '{field_name}' mapped to non-Secondary column '{data_column}'")
+                    is_valid = False
+                
+            elif section_context == 'part_information':
+                # Part fields should only map to Part columns
+                if data_column and not data_column.startswith('Part'):
+                    print(f"❌ INVALID: Part field '{field_name}' mapped to non-Part column '{data_column}'")
+                    is_valid = False
+        
+            if is_valid:
+                validated_results[coord] = mapping
+                if data_column:
+                    print(f"✅ VALID: {field_name} -> {data_column} (Section: {section_context})")
+            else:
+                # Clear invalid mapping
+                mapping['data_column'] = None
+                mapping['is_mappable'] = False
+                validated_results[coord] = mapping
+    
+        return validated_results
+
+    # UPDATE 5: Fix packaging type extraction
+    # Add this method to correctly identify packaging types from data:
+
+    def extract_packaging_types_from_data(self, data_df):
+        """Extract only Primary and Secondary packaging types from data"""
+        packaging_types = []
+    
+        try:
+            if len(data_df) > 0:
+                row_data = data_df.iloc[0]
+                # Look for Primary Packaging Type
+                primary_type_columns = ['Primary Packaging Type', 'Primary Type', 'Primary_Packaging_Type']
+                for col in primary_type_columns:
+                    if col in data_df.columns and not pd.isna(row_data.get(col)):
+                        packaging_types.append(f"Primary: {row_data[col]}")
+            
+                # Look for Secondary Packaging Type  
+                secondary_type_columns = ['Secondary Packaging Type', 'Secondary Type', 'Secondary_Packaging_Type']
+                for col in secondary_type_columns:
+                    if col in data_df.columns and not pd.isna(row_data.get(col)):
+                        packaging_types.append(f"Secondary: {row_data[col]}")
+        
+            return packaging_types
+        
+        except Exception as e:
+            print(f"Error extracting packaging types: {e}")
+            return []
     
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -1032,7 +1114,7 @@ class EnhancedTemplateMapperWithImages:
 
                 # Write step content
                 target_cell.value = step_text
-                target_cell.font = Font(name='Calibri', size=11)
+                target_cell.font = Font(name='Calibri', size=10)
                 target_cell.alignment = Alignment(wrap_text=True, vertical='top')
 
                 # 🔧 RE-MERGE ROW 37 AFTER WRITING CONTENT
@@ -1142,48 +1224,51 @@ class EnhancedTemplateMapperWithImages:
         return fields, image_areas
     
     def map_data_with_section_context(self, template_fields, data_df):
-        """Enhanced mapping with better section-aware logic"""
+        """FIXED: Enhanced mapping with strict section-aware logic to prevent cross-contamination"""
         mapping_results = {}
-        
         try:
             data_columns = data_df.columns.tolist()
-            
+            print(f"Available data columns: {data_columns}")
+        
             for coord, field in template_fields.items():
                 try:
                     best_match = None
                     best_score = 0.0
                     field_value = field['value'].lower().strip()
                     section_context = field.get('section_context')
-                    
-                    # Try section-based mapping first
+                
+                    print(f"\nProcessing field: '{field['value']}' in section: {section_context}")
+                
+                    # STRICT SECTION-BASED MAPPING
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            if template_field_key.strip() == field_value.strip():  # 🔍 Exact match only
-                                # Look for exact match first
+                    
+                        # Look for exact field match in current section
+                        for template_field_key, expected_data_column in section_mappings.items():
+                            if template_field_key.strip() == field_value.strip():
+                                print(f"  Found exact template field match: {template_field_key} -> {expected_data_column}")
+                                # Look for exact data column match
                                 for data_col in data_columns:
-                                    if data_column_pattern.lower() == data_col.lower():
+                                    if expected_data_column.lower() == data_col.lower():
                                         best_match = data_col
                                         best_score = 1.0
+                                        print(f"  ✅ EXACT MATCH: {expected_data_column} -> {data_col}")
                                         break
-                                
-                                # If no exact match, try similarity matching
-                                if not best_match:
-                                    for data_col in data_columns:
-                                        similarity = self.calculate_similarity(data_column_pattern, data_col)
-                                        if similarity > best_score and similarity >= self.similarity_threshold:
-                                            best_score = similarity
-                                            best_match = data_col
-                                break
-                    
-                    # Fallback to general similarity matching
+                            
+                                # If exact match found, don't look further
+                                if best_match:
+                                    break
+                
+                    # ONLY if no section-based match, try general similarity (with lower threshold)
                     if not best_match:
+                        print(f"  No section-based match found, trying general similarity...")
                         for data_col in data_columns:
                             similarity = self.calculate_similarity(field_value, data_col)
-                            if similarity > best_score and similarity >= self.similarity_threshold:
+                            if similarity > best_score and similarity >= 0.7:  # Higher threshold for general matching
                                 best_score = similarity
                                 best_match = data_col
-                    
+                                print(f"  Similarity match: {data_col} (score: {similarity:.2f})")
+                
                     mapping_results[coord] = {
                         'template_field': field['value'],
                         'data_column': best_match,
@@ -1192,15 +1277,21 @@ class EnhancedTemplateMapperWithImages:
                         'section_context': section_context,
                         'is_mappable': best_match is not None
                     }
-                        
+                
+                    if best_match:
+                        print(f"  ✅ FINAL MAPPING: '{field['value']}' -> '{best_match}' (Section: {section_context})")
+                    else:
+                        print(f"  ❌ NO MAPPING: '{field['value']}' (Section: {section_context})")
+                    
                 except Exception as e:
                     st.error(f"Error mapping field {coord}: {e}")
                     continue
-                    
+                
         except Exception as e:
             st.error(f"Error in map_data_with_section_context: {e}")
-            
+        
         return mapping_results
+
     
     def find_data_cell_for_label(self, worksheet, field_info):
         """Find data cell for a label with improved merged cell handling"""
@@ -1702,6 +1793,9 @@ def show_main_app():
                             for i, step in enumerate(procedure_steps, 1):
                                 if step.strip():  # Only add non-empty steps
                                     data_df.loc[0, f'Procedure Step {i}'] = step
+                            
+                            # Add packaging type to data
+                            data_df.loc[0, 'Primary Packaging Type'] = procedure_type
                             
                             st.success(f"✅ Added {len([s for s in procedure_steps if s.strip()])} packaging procedure steps to template data")
                             
