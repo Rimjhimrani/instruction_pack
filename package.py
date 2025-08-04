@@ -705,18 +705,26 @@ class EnhancedTemplateMapperWithImages:
             },
             'part_information': {
                 'section_keywords': [
-                    'part information', 'part', 'component', 'item'
+                    'part information', 'part info', 'part', 'component', 'item', 'component information'
                 ],
                 'field_mappings': {
+                    # Enhanced part dimension mappings
                     'L': 'Part L',
+                    'l': 'Part L',
                     'length': 'Part L',
                     'part l': 'Part L',
+                    'component l': 'Part L',
                     'W': 'Part W',
+                    'w': 'Part W',
                     'width': 'Part W',
                     'part w': 'Part W',
+                    'component w': 'Part W',
                     'H': 'Part H',
+                    'h': 'Part H',
                     'height': 'Part H',
                     'part h': 'Part H',
+                    'component h': 'Part H',
+                    # Other part fields
                     'part no': 'Part No',
                     'part number': 'Part No',
                     'description': 'Part Description',
@@ -725,17 +733,22 @@ class EnhancedTemplateMapperWithImages:
             },
             'vendor_information': {
                 'section_keywords': [
-                    'vendor information', 'vendor', 'supplier', 'supplier information'
+                    'vendor information', 'vendor info', 'vendor', 'supplier', 'supplier information', 'supplier info'
                 ],
                 'field_mappings': {
+                    # Enhanced vendor field mappings
                     'vendor name': 'Vendor Name',
+                    'name': 'Vendor Name',
+                    'supplier name': 'Vendor Name',
                     'vendor code': 'Vendor Code',
+                    'supplier code': 'Vendor Code',
+                    'code': 'Vendor Code',
                     'vendor location': 'Vendor Location',
                     'location': 'Vendor Location',
-                    'name': 'Vendor Name'
+                    'supplier location': 'Vendor Location',
+                    'address': 'Vendor Location'
                 }
             }
-
         }
         
         if ADVANCED_NLP:
@@ -788,39 +801,48 @@ class EnhancedTemplateMapperWithImages:
         """Enhanced section identification with better pattern matching"""
         try:
             section_context = None
-            
+        
             # Search upwards and in nearby cells for section headers
-            for search_row in range(max(1, row - max_search_rows), row + 1):
-                for search_col in range(max(1, col - 10), min(worksheet.max_column + 1, col + 10)):
+            for search_row in range(max(1, row - max_search_rows), row + 2):  # Include current row + 1
+                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
-                            
+                        
                             # Check for section keywords with more flexible matching
                             for section_name, section_info in self.section_mappings.items():
                                 for keyword in section_info['section_keywords']:
                                     keyword_processed = self.preprocess_text(keyword)
-                                    
+                                
                                     # Exact match
                                     if keyword_processed == cell_text:
                                         return section_name
-                                    
+                                
                                     # Partial match for key phrases
                                     if keyword_processed in cell_text or cell_text in keyword_processed:
                                         return section_name
-                                    
-                                    # Check for key words within the text
-                                    if section_name == 'primary_packaging' and ('primary' in cell_text and 'packaging' in cell_text):
-                                        return section_name
-                                    elif section_name == 'secondary_packaging' and ('secondary' in cell_text and 'packaging' in cell_text):
-                                        return section_name
-                                    elif section_name == 'part_information' and ('part' in cell_text and 'information' in cell_text):
-                                        return section_name
+                                
+                                    # Enhanced context matching
+                                    if section_name == 'primary_packaging':
+                                        if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
+                                            return section_name
+                                    elif section_name == 'secondary_packaging':
+                                        if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
+                                            return section_name
+                                    elif section_name == 'part_information':
+                                        if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
+                                            ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                            return section_name
+                                    elif section_name == 'vendor_information':
+                                        if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
+                                            ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                            return section_name
                     except:
                         continue
-            
+        
             return section_context
+        
         except Exception as e:
             st.error(f"Error in identify_section_context: {e}")
             return None
@@ -874,32 +896,63 @@ class EnhancedTemplateMapperWithImages:
         try:
             if not text or pd.isna(text):
                 return False
-                
+            
             text = str(text).lower().strip()
             if not text:
                 return False
-            
+        
+            # Skip header-like patterns that should not be treated as fields
+            header_exclusions = [
+                'vendor information', 'part information', 'primary packaging', 'secondary packaging',
+                'packaging instruction', 'procedure', 'steps', 'process'
+            ]
+        
+            for exclusion in header_exclusions:
+                if exclusion in text:
+                    return False
+        
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
-                r'l[-\s]*mm', r'w[-\s]*mm', r'h[-\s]*mm',  # Dimension fields
-                r'l\b', r'w\b', r'h\b',  # Single letter dimensions
-                r'packaging\s+type', r'qty[/\s]*pack',      # Packaging fields
-                r'part\s+[lwh]', r'component\s+[lwh]',      # Part dimension fields
-                r'length', r'width', r'height',             # Basic dimensions
-                r'quantity', r'pack\s+weight', r'total',    # Quantity fields
-                r'empty\s+weight', r'weight', r'unit\s+weight',  # Weight fields
-                r'code', r'name', r'description',           # Basic info fields
-                r'vendor', r'supplier', r'customer',        # Entity fields
-                r'date', r'revision', r'reference',         # Document fields
-                r'part\s+no', r'part\s+number'              # Part identification
-            ]
+                # Dimension fields
+                r'\bl[-\s]*mm\b', r'\bw[-\s]*mm\b', r'\bh[-\s]*mm\b',
+                r'\bl\b(?!\w)', r'\bw\b(?!\w)', r'\bh\b(?!\w)',  # Single letter dimensions (word boundary)
             
+                # Part-specific dimension fields
+                r'part\s+l\b', r'part\s+w\b', r'part\s+h\b',
+                r'component\s+l\b', r'component\s+w\b', r'component\s+h\b',
+            
+                # Basic dimensions
+                r'\blength\b', r'\bwidth\b', r'\bheight\b',
+            
+                # Packaging fields
+                r'packaging\s+type', r'qty[/\s]*pack', r'quantity\b',
+                r'pack\s+weight', r'total\b', r'empty\s+weight', r'unit\s+weight', r'\bweight\b',
+            
+                # Identification fields
+                r'\bcode\b', r'\bname\b(?!\s+(information|info))', r'\bdescription\b',
+                r'part\s+no\b', r'part\s+number\b',
+            
+                # Location and entity fields (but not headers)
+                r'\blocation\b(?!\s*(information|info))', 
+                r'vendor\s+name\b', r'supplier\s+name\b',
+                r'vendor\s+code\b', r'supplier\s+code\b',
+                r'vendor\s+location\b', r'supplier\s+location\b',
+            
+                # Document fields
+                r'\bdate\b', r'\brevision\b', r'\breference\b'
+            ]
+        
             for pattern in mappable_patterns:
                 if re.search(pattern, text):
                     return True
-            
-            # Check if it ends with colon (label pattern)
+        
+            # Check if it ends with colon (label pattern) but exclude headers
             if text.endswith(':'):
+                text_without_colon = text[:-1].strip()
+                # Only consider as mappable field if it's not a section header
+                for exclusion in header_exclusions:
+                    if exclusion in text_without_colon:
+                        return False
                 return True
                 
             return False
