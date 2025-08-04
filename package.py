@@ -1110,23 +1110,25 @@ class EnhancedTemplateMapperWithImages:
                         
                         # Look for direct field matches within section
                         for template_field_key, data_column_pattern in section_mappings.items():
-                            if field_value == template_field_key:
-                                # Look for exact match first
+                            # Normalize both sides
+                            normalized_field_value = self.preprocess_text(field_value)
+                            normalized_template_key = self.preprocess_text(template_field_key)
+                            if normalized_field_value == normalized_template_key:
                                 for data_col in data_columns:
-                                    if data_column_pattern.lower() == data_col.lower():
+                                    if self.preprocess_text(data_col) == self.preprocess_text(data_column_pattern):
                                         best_match = data_col
                                         best_score = 1.0
                                         break
-                                
-                                # If no exact match, try similarity matching
+                                    
+                                # If no exact match, try similarity
                                 if not best_match:
                                     for data_col in data_columns:
                                         similarity = self.calculate_similarity(data_column_pattern, data_col)
                                         if similarity > best_score and similarity >= self.similarity_threshold:
                                             best_score = similarity
                                             best_match = data_col
-                                break
-                    
+                                break  # stop loop if match found
+                            
                     # Fallback to general similarity matching
                     if not best_match:
                         for data_col in data_columns:
