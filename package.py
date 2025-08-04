@@ -933,125 +933,167 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             st.error(f"Error finding procedure step area: {e}")
             return None
-
+        
+    def debug_worksheet_procedure_area(self, worksheet):
+        """Debug function to inspect the procedure area of the worksheet"""
+        try:
+            print(f"\n=== DEBUGGING PROCEDURE AREA (Rows 25-40, Cols A-Q) ===")
+        
+            # Check for merged cells in the procedure area
+            procedure_merged_cells = []
+            for merged_range in worksheet.merged_cells.ranges:
+                if (merged_range.min_row <= 40 and merged_range.max_row >= 25 and merged_range.min_col <= 17 and merged_range.max_col >= 1):
+                    procedure_merged_cells.append(merged_range)
+        
+            print(f"Merged cells in procedure area: {len(procedure_merged_cells)}")
+            for merged_range in procedure_merged_cells:
+                print(f"  - {merged_range}")
+        
+            # Check specific procedure area (rows 28-38, columns B and P)
+            print(f"\nProcedure step target area inspection:")
+            for row in range(28, 39):  # rows 28-38
+                for col in [2, 16]:  # columns B(2) and P(16)
+                    cell = worksheet.cell(row=row, column=col)
+                    col_letter = 'B' if col == 2 else 'P'
+                
+                    # Check if cell is in a merged range
+                    is_merged = False
+                    merged_info = ""
+                    for merged_range in worksheet.merged_cells.ranges:
+                        if cell.coordinate in merged_range:
+                            is_merged = True
+                            merged_info = f" [MERGED: {merged_range}]"
+                            break
+                
+                    cell_value = cell.value if cell.value else "<empty>"
+                    print(f"  {col_letter}{row}: {cell_value}{merged_info}")
+        
+            # Check if cells are protected
+            print(f"\nWorksheet protection status:")
+            print(f"  Sheet protected: {worksheet.protection.sheet}")
+            print(f"  Password: {worksheet.protection.password}")
+        
+            # Check specific cells for protection
+            sample_cells = [worksheet.cell(row=28, column=2), worksheet.cell(row=28, column=16)]
+            for cell in sample_cells:
+                if hasattr(cell, 'protection'):
+                    print(f"  {cell.coordinate} locked: {cell.protection.locked}")
+        
+            print("=== END PROCEDURE AREA DEBUG ===\n")
+        
+        except Exception as e:
+            print(f"Error in debug_worksheet_procedure_area: {e}")
+            import traceback
+            traceback.print_exc()
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write procedure steps to the Excel template starting from Row 28, ending at Row 38, Columns B and P"""
+        """Enhanced procedure steps writing with better error handling and debugging"""
         try:
             from openpyxl.cell import MergedCell
-            from openpyxl.styles import Font
-            from openpyxl.utils import get_column_letter
-    
+            from openpyxl.styles import Font, Alignment
+            import traceback
+        
+            print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
+        
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
-                print(f"No procedure steps found for packaging type: {packaging_type}")
+                print(f"❌ No procedure steps found for packaging type: {packaging_type}")
                 return 0
-    
-            start_row = 28  # Fixed row 28
-            end_row = 38    # Fixed row 38 - procedure area ends here
+        
+            print(f"📋 Retrieved {len(steps)} procedure steps")
+        
+            # Fixed coordinates for procedure area
+            start_row = 28  # Row 28
+            end_row = 38    # Row 38
             col_b = 2       # Column B
             col_p = 16      # Column P
         
-            # Calculate available rows for steps (28 to 38 = 11 rows)
+            # Calculate available space
             available_rows = end_row - start_row + 1  # 11 rows
             max_steps = available_rows * 2  # 2 steps per row = 22 steps max
-    
-            def get_writable_cell(worksheet, row, col):
-                """Get the actual writable cell, handling merged cells properly"""
+        
+            print(f"📊 Available rows: {available_rows}, Max steps: {max_steps}")
+        
+            # Filter non-empty steps
+            non_empty_steps = [step for step in steps if step and step.strip()]
+            steps_to_write = non_empty_steps[:max_steps]
+        
+            print(f"✏️  Will write {len(steps_to_write)} non-empty steps")
+        
+            def write_step_to_cell(row, col, step_text, step_number):
+                """Write a single step to a specific cell with error handling"""
                 try:
-                    cell = worksheet.cell(row=row, column=col)
-            
-                    # If it's a merged cell, find the top-left cell of the merged range
-                    if isinstance(cell, MergedCell):
-                        for merged_range in worksheet.merged_cells.ranges:
-                            if cell.coordinate in merged_range:
-                                # Return the top-left cell of the merged range
-                                return worksheet.cell(
-                                    row=merged_range.min_row, 
-                                    column=merged_range.min_col
-                                )
-            
-                    # If it's a regular cell, return it
-                    return cell
-            
-                except Exception as e:
-                    print(f"Error getting writable cell at {row},{col}: {e}")
-                    return None
-    
-            def write_value_safely(worksheet, row, col, value):
-                """Safely write a value to a cell, handling all edge cases"""
-                try:
-                    # Check if row is within allowed range
-                    if row > end_row:
-                        print(f"Row {row} exceeds end_row {end_row}, skipping step")
-                        return False
-                    
-                    writable_cell = get_writable_cell(worksheet, row, col)
-            
-                    if writable_cell is None:
-                        print(f"Could not get writable cell at row {row}, col {col}")
-                        return False
-            
-                    # Check if the cell is read-only or protected
-                    if hasattr(writable_cell, 'protection') and writable_cell.protection.locked:
-                        print(f"Cell {writable_cell.coordinate} is protected, skipping...")
-                        return False
-            
-                    # Try to write the value
-                    writable_cell.value = value
-                    print(f"Successfully wrote to cell {writable_cell.coordinate}: {str(value)[:50]}...")
+                    target_cell = worksheet.cell(row=row, column=col)
+                    col_letter = 'B' if col == 2 else 'P'
+                
+                    print(f"📝 Writing step {step_number} to {col_letter}{row}: {step_text[:50]}...")
+                
+                    # Check if cell is in merged range
+                    cell_is_merged = False
+                    for merged_range in worksheet.merged_cells.ranges:
+                        if target_cell.coordinate in merged_range:
+                            cell_is_merged = True
+                            print(f"⚠️  Cell {target_cell.coordinate} is in merged range {merged_range}")
+                        
+                            # If it's not the top-left cell, unmerge the range
+                            if not (row == merged_range.min_row and col == merged_range.min_col):
+                                print(f"🔧 Unmerging range {merged_range}")
+                                worksheet.unmerge_cells(str(merged_range))
+                                target_cell = worksheet.cell(row=row, column=col)
+                            break
+                
+                    # Write the value
+                    target_cell.value = step_text
+                
+                    # Apply formatting
+                    target_cell.font = Font(name='Calibri', size=10)
+                    target_cell.alignment = Alignment(wrap_text=True, vertical='top')
+                
+                    print(f"✅ Successfully wrote step {step_number} to {col_letter}{row}")
                     return True
-            
+                
                 except Exception as e:
-                    print(f"Error writing value to row {row}, col {col}: {e}")
+                    print(f"❌ Error writing step {step_number} to row {row}, col {col}: {e}")
+                    traceback.print_exc()
                     return False
-    
-            # Write procedure steps within the defined area (rows 28-38)
+        
+            # Write procedure steps
             steps_written = 0
             successful_writes = 0
         
-            # Filter out empty steps and limit to max_steps
-            non_empty_steps = [step for step in steps if step.strip()]
-            steps_to_write = non_empty_steps[:max_steps]  # Limit to available space
-    
             for i, step in enumerate(steps_to_write):
                 step_row = start_row + (steps_written // 2)  # Two steps per row
             
-                # Check if we've exceeded the available rows
+                # Check bounds
                 if step_row > end_row:
-                    print(f"Reached maximum rows (38), stopping at step {steps_written + 1}")
+                    print(f"⛔ Reached maximum rows ({end_row}), stopping at step {steps_written + 1}")
                     break
-        
-                # Alternate between column B and P
-                if steps_written % 2 == 0:
-                    target_col = col_b
-                    column_letter = 'B'
-                else:
-                    target_col = col_p
-                    column_letter = 'P'
-        
+            
+                # Alternate between columns B and P
+                target_col = col_b if steps_written % 2 == 0 else col_p
                 step_text = f"{steps_written + 1}. {step}"
-        
-                if write_value_safely(worksheet, step_row, target_col, step_text):
+            
+                # Write the step
+                if write_step_to_cell(step_row, target_col, step_text, steps_written + 1):
                     successful_writes += 1
-                    print(f"✅ Step {steps_written + 1} written to {column_letter}{step_row}")
-                else:
-                    print(f"❌ Failed to write step {steps_written + 1} to {column_letter}{step_row}")
-        
+            
                 steps_written += 1
-    
-            print(f"✅ Attempted to write {steps_written} procedure steps (rows 28-38), {successful_writes} successful")
-            print(f"Template procedure steps processing completed for {packaging_type}")
-    
-            # Return the number of successful writes
+        
+            print(f"\n📋 PROCEDURE STEPS SUMMARY:")
+            print(f"   Total steps attempted: {steps_written}")
+            print(f"   Successful writes: {successful_writes}")
+            print(f"   Target area: Rows {start_row}-{end_row}, Columns B & P")
+        
+            # Force worksheet to recalculate
+            worksheet.formula_attributes = {}
+        
             return successful_writes
-    
+        
         except Exception as e:
-            print(f"Critical error in write_procedure_steps_to_template: {e}")
+            print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
             import traceback
             traceback.print_exc()
-            # Don't show error to user since template is still being filled successfully
             return 0
             
     def get_procedure_steps(self, packaging_type, data_dict=None):
@@ -1314,12 +1356,12 @@ class EnhancedTemplateMapperWithImages:
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-        
+    
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-        
+    
             # Create data dictionary for procedure step replacement
             data_dict = {}
             if len(data_df) > 0:
@@ -1328,18 +1370,22 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = data_df.iloc[0][col]
                     except:
                         data_dict[col] = 'XXX'
-        
+    
+            print(f"Starting template fill process...")
+            print(f"Data dictionary keys: {list(data_dict.keys())}")
+            print(f"Packaging type: {packaging_type}")
+    
             # Fill data fields
+            print("=== Filling data fields ===")
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
-                    
                         target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                    
+                
                         if target_cell and len(data_df) > 0:
                             data_value = data_df.iloc[0][mapping['data_column']]
-                        
+                    
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1350,50 +1396,60 @@ class EnhancedTemplateMapperWithImages:
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
                             filled_count += 1
-                        
+                            print(f"Filled {target_cell} with: {data_value}")
+                    
                 except Exception as e:
-                    st.error(f"Error filling mapping {coord}: {e}")
+                    print(f"Error filling mapping {coord}: {e}")
                     continue
-        
+    
+            print(f"=== Data fields filled: {filled_count} ===")
+    
             # Add images if provided
             if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-        
+                print("=== Adding images ===")
+                try:
+                    # First, identify image upload areas
+                    _, image_areas = self.find_template_fields_with_context_and_images(template_file)
+                    images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
+                    print(f"Images added: {images_added}")
+                except Exception as e:
+                    print(f"Error adding images: {e}")
+                    images_added = 0
+    
             # Write procedure steps if packaging type is provided
             if packaging_type and packaging_type != "Select Packaging Procedure":
+                print(f"=== Writing procedure steps for {packaging_type} ===")
                 try:
-                    procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                    print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                except Exception as e:
-                    st.error(f"Error adding procedure steps: {e}")
-                    print(f"Error adding procedure steps: {e}")
-                    procedure_steps_added = 0
-                    if packaging_type and packaging_type != "Select Packaging Procedure":
-                        try:
-                            # Create data dictionary for procedure step replacement
-                            data_dict = {}
-                            if len(data_df) > 0:
-                                for col in data_df.columns:
-                                    try:
-                                        data_dict[col] = data_df.iloc[0][col]
-                                    except:
-                                        data_dict[col] = 'XXX'
+                    # Debug worksheet area before writing procedure steps
+                    self.debug_worksheet_procedure_area(worksheet)
                 
-                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                        except Exception as e:
-                            st.error(f"Error adding procedure steps: {e}")
-                            print(f"Error adding procedure steps: {e}")
-                            procedure_steps_added = 0
-            
-            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+                    # Write procedure steps
+                    procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
+                    print(f"✅ Successfully added {procedure_steps_added} procedure steps")
+                
+                    # Debug worksheet area after writing procedure steps
+                    print("After writing procedure steps:")
+                    self.debug_worksheet_procedure_area(worksheet)
+                
+                except Exception as e:
+                    print(f"❌ Error adding procedure steps: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    procedure_steps_added = 0
+            else:
+                print("No packaging type provided or invalid packaging type")
         
+            print(f"=== Template fill completed ===")
+            print(f"Final results - Data fields: {filled_count}, Images: {images_added}, Procedure steps: {procedure_steps_added}")
+        
+            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+    
         except Exception as e:
-            st.error(f"Error filling template: {e}")
+            print(f"Critical error in fill_template_with_data_and_images: {e}")
+            import traceback
+            traceback.print_exc()
             return None, 0, 0, [], 0
-
+        
 # Initialize session state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -1455,6 +1511,7 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
+
 def show_main_app():
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
