@@ -1093,66 +1093,81 @@ class EnhancedTemplateMapperWithImages:
     def map_data_with_section_context(self, template_fields, data_df):
         """Enhanced mapping with better section-aware logic"""
         mapping_results = {}
-        
+        used_columns = set()  # ✅ Track already-mapped columns
+
         try:
             data_columns = data_df.columns.tolist()
-            
+
             for coord, field in template_fields.items():
                 try:
                     best_match = None
                     best_score = 0.0
-                    field_value = field['value'].lower().strip()
+                    field_value = field['value']
                     section_context = field.get('section_context')
-                    
-                    # Try section-based mapping first
+
+                    # ✅ If section context exists, use its field mappings
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
-                        
-                        # Look for direct field matches within section
+
                         for template_field_key, data_column_pattern in section_mappings.items():
-                            # Normalize both sides
                             normalized_field_value = self.preprocess_text(field_value)
                             normalized_template_key = self.preprocess_text(template_field_key)
+
                             if normalized_field_value == normalized_template_key:
+                                # ✅ Prefer section-prefixed column (e.g., "Primary Packaging Type")
+                                section_prefix = section_context.split('_')[0].capitalize()
+                                expected_column = f"{section_prefix} {data_column_pattern}".strip()
+
                                 for data_col in data_columns:
-                                    if self.preprocess_text(data_col) == self.preprocess_text(data_column_pattern):
+                                    if data_col in used_columns:
+                                        continue
+                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
                                         best_match = data_col
                                         best_score = 1.0
                                         break
-                                    
-                                # If no exact match, try similarity
+
+                                # 🔁 Fallback to similarity match if no exact match
                                 if not best_match:
                                     for data_col in data_columns:
-                                        similarity = self.calculate_similarity(data_column_pattern, data_col)
+                                        if data_col in used_columns:
+                                            continue
+                                        similarity = self.calculate_similarity(expected_column, data_col)
                                         if similarity > best_score and similarity >= self.similarity_threshold:
                                             best_score = similarity
                                             best_match = data_col
-                                break  # stop loop if match found
-                            
-                    # Fallback to general similarity matching
+                                break  # stop loop if a match is found
+
+                    # 🧠 Final fallback if section mapping didn't resolve
                     if not best_match:
                         for data_col in data_columns:
+                            if data_col in used_columns:
+                                continue
                             similarity = self.calculate_similarity(field_value, data_col)
                             if similarity > best_score and similarity >= self.similarity_threshold:
                                 best_score = similarity
                                 best_match = data_col
-                    
+
+                    # ✅ Save mapping
                     mapping_results[coord] = {
-                        'template_field': field['value'],
+                        'template_field': field_value,
                         'data_column': best_match,
                         'similarity': best_score,
                         'field_info': field,
                         'section_context': section_context,
                         'is_mappable': best_match is not None
                     }
-                        
+
+                    # ✅ Prevent reuse of the same column
+                    if best_match:
+                        used_columns.add(best_match)
+
                 except Exception as e:
                     st.error(f"Error mapping field {coord}: {e}")
                     continue
-                    
+
         except Exception as e:
             st.error(f"Error in map_data_with_section_context: {e}")
-            
+
         return mapping_results
     
     def find_data_cell_for_label(self, worksheet, field_info):
