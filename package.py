@@ -987,7 +987,7 @@ class EnhancedTemplateMapperWithImages:
             traceback.print_exc()
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Enhanced procedure steps writing with better error handling and debugging"""
+        """Enhanced procedure steps writing with better error handling and debugging - writes only step text without numbers"""
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font, Alignment
@@ -1043,8 +1043,8 @@ class EnhancedTemplateMapperWithImages:
                                 target_cell = worksheet.cell(row=row, column=col)
                             break
                 
-                    # Write the value
-                    target_cell.value = step_text
+                    # Write ONLY the step text without numbering (template already has numbers in column A)
+                    target_cell.value = step_text  # No numbering prefix added here
                 
                     # Apply formatting
                     target_cell.font = Font(name='Calibri', size=10)
@@ -1072,7 +1072,10 @@ class EnhancedTemplateMapperWithImages:
             
                 # Alternate between columns B and P
                 target_col = col_b if steps_written % 2 == 0 else col_p
-                step_text = f"{steps_written + 1}. {step}"
+            
+                # CHANGED: Write only the step text, no numbering prefix
+                # The template already has numbers in column A, so we don't need to add them
+                step_text = step  # Just the step text without "1. ", "2. ", etc.
             
                 # Write the step
                 if write_step_to_cell(step_row, target_col, step_text, steps_written + 1):
@@ -1084,6 +1087,7 @@ class EnhancedTemplateMapperWithImages:
             print(f"   Total steps attempted: {steps_written}")
             print(f"   Successful writes: {successful_writes}")
             print(f"   Target area: Rows {start_row}-{end_row}, Columns B & P")
+            print(f"   Note: Writing only step text (no numbers) since template has numbering in column A")
         
             # Force worksheet to recalculate
             worksheet.formula_attributes = {}
