@@ -1703,9 +1703,6 @@ def show_main_app():
                                 if step.strip():  # Only add non-empty steps
                                     data_df.loc[0, f'Procedure Step {i}'] = step
                             
-                            # Add packaging type to data
-                            data_df.loc[0, 'Primary Packaging Type'] = procedure_type
-                            
                             st.success(f"✅ Added {len([s for s in procedure_steps if s.strip()])} packaging procedure steps to template data")
                             
                         except Exception as e:
