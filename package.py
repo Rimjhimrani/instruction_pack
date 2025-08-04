@@ -270,8 +270,8 @@ class ImageExtractor:
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Initialize counter for row 41 images (primary, secondary, label)
-            row_41_counter = 0
+            # Initialize counter for row 42 images (primary, secondary, label)
+            row_42_counter = 0
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -289,13 +289,13 @@ class ImageExtractor:
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
                     added_images += self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx, row_41_counter,
+                        worksheet, img_key, img_data, image_type, idx, row_42_counter,
                         temp_image_paths, used_images
                     )
                     
-                    # Increment row 41 counter for non-current images
+                    # Increment row 42 counter for non-current images
                     if image_type != 'current':
-                        row_41_counter += 1
+                        row_42_counter += 1
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -305,8 +305,8 @@ class ImageExtractor:
             print(f"Error in add_images_to_template: {e}")
             return 0, []
                     
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_41_counter, temp_image_paths, used_images):
-        """Place image at fixed positions: current at row 2 col 20, others at row 41 with spacing"""
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
+        """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
         if not hasattr(self, '_global_image_counter'):
             self._global_image_counter = 0
         try:
@@ -321,21 +321,21 @@ class ImageExtractor:
             # Initialize cell_coord variable
             cell_coord = None
         
-            # FIXED PLACEMENT LOGIC - NO MIXING
+            # FIXED PLACEMENT LOGIC - CORRECTED POSITIONING
             if image_type == 'current':
-                # CURRENT PACKAGING: Always at row 2, column 20
+                # CURRENT PACKAGING: Always at row 3, column 20 (T3)
                 target_row = 3
                 target_col = 20
                 # Current images are larger (8.3cm x 8.3cm)
                 img.width = int(8.3 * 37.8)
                 img.height = int(8.3 * 37.8)
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm)")
+                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm) -> {cell_coord}")
             else:
-                # 🟢 Sequential horizontal placement for other images on row 41 with your defined spacing
-                target_row = 41
+                # 🟢 Sequential horizontal placement for other images on row 42 with proper spacing
+                target_row = 42  # Changed from 41 to 42 as per your requirement
             
-                # Use your defined spacing calculations
+                # Use proper spacing calculations for row 42
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
                 total_spacing = image_width_cols + gap_cols
@@ -351,11 +351,12 @@ class ImageExtractor:
                 img.height = int(4.3 * 37.8)
             
                 cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"📍 {image_type.upper()} IMAGE: Placing at sequential position: {cell_coord}")
+                print(f"📍 {image_type.upper()} IMAGE: Placing at row 42, position: {cell_coord}")
                 print(f"   Image key: {img_key}")
                 print(f"   Image type: {image_type}")
                 print(f"   Global counter: {self._global_image_counter}")
                 print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
+            
             # Ensure cell_coord was set
             if cell_coord is None:
                 raise ValueError(f"Could not determine cell coordinate for image type: {image_type}")
@@ -390,9 +391,9 @@ class ImageExtractor:
             target_column = 3  # Column C
             target_row = 6     # Row 6
         else:
-            # Other images go to row 41 with spacing
+            # Other images go to row 42 with spacing (changed from 41)
             target_column = type_columns.get(area_type, 2)
-            target_row = 41 + (index * 12)  # Vertical spacing for multiple images of same type
+            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
         
         # Create a virtual area for additional placement
         return {
@@ -423,7 +424,7 @@ class ImageExtractor:
                 start_row = 6   # Row 6
             else:
                 target_col = type_columns.get(image_type, 2)
-                start_row = 41
+                start_row = 42  # Changed from 41 to 42
             
             for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
                 if image_type == 'current':
@@ -491,7 +492,7 @@ class ImageExtractor:
         # Sort by original index
         sorted_images.sort(key=lambda x: x[2])
         
-        # Reclassify images
+        # Reclassified images
         reclassified_images = {}
         for position, (img_key, img_data, original_index) in enumerate(sorted_images):
             # Determine new type based on position in sorted list
@@ -516,7 +517,7 @@ class ImageExtractor:
             print(f"Reclassified: {img_key} -> {new_key} (type: {new_type})")
         
         return {'all_sheets': reclassified_images}
-        
+    
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
         self.similarity_threshold = 0.3
@@ -935,27 +936,32 @@ class EnhancedTemplateMapperWithImages:
 
     
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write procedure steps to the Excel template starting from Row 28, Columns B and P with robust merged cell handling"""
+        """Write procedure steps to the Excel template starting from Row 28, ending at Row 38, Columns B and P"""
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font
             from openpyxl.utils import get_column_letter
-        
+    
             # Get the procedure steps for the packaging type
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
-        
+    
             start_row = 28  # Fixed row 28
-            col_b = 2   # Column B
-            col_p = 16  # Column P
+            end_row = 38    # Fixed row 38 - procedure area ends here
+            col_b = 2       # Column B
+            col_p = 16      # Column P
         
+            # Calculate available rows for steps (28 to 38 = 11 rows)
+            available_rows = end_row - start_row + 1  # 11 rows
+            max_steps = available_rows * 2  # 2 steps per row = 22 steps max
+    
             def get_writable_cell(worksheet, row, col):
                 """Get the actual writable cell, handling merged cells properly"""
                 try:
                     cell = worksheet.cell(row=row, column=col)
-                
+            
                     # If it's a merged cell, find the top-left cell of the merged range
                     if isinstance(cell, MergedCell):
                         for merged_range in worksheet.merged_cells.ranges:
@@ -965,124 +971,82 @@ class EnhancedTemplateMapperWithImages:
                                     row=merged_range.min_row, 
                                     column=merged_range.min_col
                                 )
-                
+            
                     # If it's a regular cell, return it
                     return cell
-                
+            
                 except Exception as e:
                     print(f"Error getting writable cell at {row},{col}: {e}")
                     return None
-        
+    
             def write_value_safely(worksheet, row, col, value):
                 """Safely write a value to a cell, handling all edge cases"""
                 try:
+                    # Check if row is within allowed range
+                    if row > end_row:
+                        print(f"Row {row} exceeds end_row {end_row}, skipping step")
+                        return False
+                    
                     writable_cell = get_writable_cell(worksheet, row, col)
-                
+            
                     if writable_cell is None:
                         print(f"Could not get writable cell at row {row}, col {col}")
                         return False
-                
+            
                     # Check if the cell is read-only or protected
                     if hasattr(writable_cell, 'protection') and writable_cell.protection.locked:
                         print(f"Cell {writable_cell.coordinate} is protected, skipping...")
                         return False
-                
+            
                     # Try to write the value
                     writable_cell.value = value
                     print(f"Successfully wrote to cell {writable_cell.coordinate}: {str(value)[:50]}...")
                     return True
-                
+            
                 except Exception as e:
                     print(f"Error writing value to row {row}, col {col}: {e}")
-                    # Try alternative approach - find a nearby empty cell
-                    return write_to_alternative_cell(worksheet, row, col, value)
-            
-            def write_to_alternative_cell(worksheet, original_row, original_col, value):
-                """Find an alternative cell nearby if the original is not writable"""
-                try:
-                    # Try cells in the vicinity
-                    for row_offset in range(0, 3):
-                        for col_offset in range(0, 2):
-                            alt_row = original_row + row_offset
-                            alt_col = original_col + col_offset
-                        
-                            try:
-                                alt_cell = worksheet.cell(row=alt_row, column=alt_col)
-                            
-                                # Skip if it's a merged cell or has content
-                                if isinstance(alt_cell, MergedCell):
-                                    continue
-                            
-                                if alt_cell.value is not None and str(alt_cell.value).strip():
-                                    continue
-                            
-                                # Try to write to this cell
-                                alt_cell.value = value
-                                print(f"Used alternative cell {alt_cell.coordinate} for value: {str(value)[:50]}...")
-                                return True
-                            
-                            except Exception:
-                                continue
-                
                     return False
-                
-                except Exception as e:
-                    print(f"Error finding alternative cell: {e}")
-                    return False
-        
-            # Write headers with safety checks
-            header_b_success = write_value_safely(worksheet, start_row - 1, col_b, f"Packaging Procedure Steps - {packaging_type}")
-            header_p_success = write_value_safely(worksheet, start_row - 1, col_p, f"Additional Steps - {packaging_type}")
-        
-            # Apply bold formatting to headers if successfully written
-            if header_b_success:
-                try:
-                    header_cell_b = get_writable_cell(worksheet, start_row - 1, col_b)
-                    if header_cell_b and not isinstance(header_cell_b, MergedCell):
-                        header_cell_b.font = Font(bold=True)
-                except Exception as e:
-                    print(f"Could not apply bold formatting to header B: {e}")
-        
-            if header_p_success:
-                try:
-                    header_cell_p = get_writable_cell(worksheet, start_row - 1, col_p)
-                    if header_cell_p and not isinstance(header_cell_p, MergedCell):
-                        header_cell_p.font = Font(bold=True)
-                except Exception as e:
-                    print(f"Could not apply bold formatting to header P: {e}")
-        
-            # Write procedure steps
+    
+            # Write procedure steps within the defined area (rows 28-38)
             steps_written = 0
             successful_writes = 0
         
-            for i, step in enumerate(steps):
-                if step.strip():  # Skip empty steps
-                    step_row = start_row + (steps_written // 2)  # Two steps per row
-                
-                    # Alternate between column B and P
-                    if steps_written % 2 == 0:
-                        target_col = col_b
-                        column_letter = 'B'
-                    else:
-                        target_col = col_p
-                        column_letter = 'P'
-                
-                    step_text = f"{steps_written + 1}. {step}"
-                
-                    if write_value_safely(worksheet, step_row, target_col, step_text):
-                        successful_writes += 1
-                        print(f"✅ Step {steps_written + 1} written to {column_letter}{step_row}")
-                    else:
-                        print(f"❌ Failed to write step {steps_written + 1} to {column_letter}{step_row}")
-                
-                    steps_written += 1
+            # Filter out empty steps and limit to max_steps
+            non_empty_steps = [step for step in steps if step.strip()]
+            steps_to_write = non_empty_steps[:max_steps]  # Limit to available space
+    
+            for i, step in enumerate(steps_to_write):
+                step_row = start_row + (steps_written // 2)  # Two steps per row
+            
+                # Check if we've exceeded the available rows
+                if step_row > end_row:
+                    print(f"Reached maximum rows (38), stopping at step {steps_written + 1}")
+                    break
         
-            print(f"✅ Attempted to write {steps_written} procedure steps, {successful_writes} successful")
+                # Alternate between column B and P
+                if steps_written % 2 == 0:
+                    target_col = col_b
+                    column_letter = 'B'
+                else:
+                    target_col = col_p
+                    column_letter = 'P'
+        
+                step_text = f"{steps_written + 1}. {step}"
+        
+                if write_value_safely(worksheet, step_row, target_col, step_text):
+                    successful_writes += 1
+                    print(f"✅ Step {steps_written + 1} written to {column_letter}{step_row}")
+                else:
+                    print(f"❌ Failed to write step {steps_written + 1} to {column_letter}{step_row}")
+        
+                steps_written += 1
+    
+            print(f"✅ Attempted to write {steps_written} procedure steps (rows 28-38), {successful_writes} successful")
             print(f"Template procedure steps processing completed for {packaging_type}")
-        
+    
             # Return the number of successful writes
             return successful_writes
-        
+    
         except Exception as e:
             print(f"Critical error in write_procedure_steps_to_template: {e}")
             import traceback
