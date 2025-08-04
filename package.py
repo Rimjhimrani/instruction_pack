@@ -1031,15 +1031,18 @@ class EnhancedTemplateMapperWithImages:
                             target_cell = worksheet.cell(row=step_row, column=target_col)
                         break
 
-                # Write step content only (no step number)
+                # Write step content only (no step number
                 target_cell.value = step_text
-
-                # Apply formatting and ensure wrapping
-                target_cell.font = Font(name='Calibri', size=11)
+                # Apply formatting with wrapping
+                target_cell.font = Font(name='Calibri', size=10)
                 target_cell.alignment = Alignment(wrap_text=True, vertical='top')
-
-                # ✅ Ensure text wraps properly and row expands if needed
-                worksheet.row_dimensions[step_row].height = None
+                # ✅ Estimate row height based on text length
+                max_chars_per_line = 100  # Adjust based on column width in Excel
+                num_lines = max(1, len(step_text) // max_chars_per_line + 1)
+                base_height = 15           # Approx height of one lin
+                line_height = 15           # Height increment per lin
+                estimated_height = base_height + (num_lines - 1) * line_height
+                worksheet.row_dimensions[step_row].height = estimated_height
 
                 steps_written += 1
 
