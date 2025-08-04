@@ -902,6 +902,9 @@ class EnhancedTemplateMapperWithImages:
             if not text:
                 return False
         
+            # DEBUG: Print what we're checking
+            print(f"DEBUG is_mappable_field: Checking '{text}'")
+        
             # Skip header-like patterns that should not be treated as fields
             header_exclusions = [
                 'vendor information', 'part information', 'primary packaging', 'secondary packaging',
@@ -909,53 +912,42 @@ class EnhancedTemplateMapperWithImages:
             ]
         
             for exclusion in header_exclusions:
-                if exclusion in text:
+                if exclusion in text and 'type' not in text:
+                    print(f"DEBUG: Excluding '{text}' as header")
                     return False
         
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
+                # Packaging type fields
+                r'packaging\s+type', r'\btype\b',
+            
                 # Dimension fields
                 r'\bl[-\s]*mm\b', r'\bw[-\s]*mm\b', r'\bh[-\s]*mm\b',
-                r'\bl\b(?!\w)', r'\bw\b(?!\w)', r'\bh\b(?!\w)',  # Single letter dimensions (word boundary)
+                r'\bl\b', r'\bw\b', r'\bh\b',  # Single letter dimensions
             
                 # Part-specific dimension fields
                 r'part\s+l\b', r'part\s+w\b', r'part\s+h\b',
-                r'component\s+l\b', r'component\s+w\b', r'component\s+h\b',
             
                 # Basic dimensions
                 r'\blength\b', r'\bwidth\b', r'\bheight\b',
             
-                # Packaging fields
-                r'packaging\s+type', r'qty[/\s]*pack', r'quantity\b',
-                r'pack\s+weight', r'total\b', r'empty\s+weight', r'unit\s+weight', r'\bweight\b',
-            
-                # Identification fields
-                r'\bcode\b', r'\bname\b(?!\s+(information|info))', r'\bdescription\b',
-                r'part\s+no\b', r'part\s+number\b',
-            
-                # Location and entity fields (but not headers)
-                r'\blocation\b(?!\s*(information|info))', 
-                r'vendor\s+name\b', r'supplier\s+name\b',
-                r'vendor\s+code\b', r'supplier\s+code\b',
-                r'vendor\s+location\b', r'supplier\s+location\b',
-            
-                # Document fields
-                r'\bdate\b', r'\brevision\b', r'\breference\b'
+                # Other fields
+                r'qty[/\s]*pack', r'quantity\b', r'weight\b', r'empty\s+weight',
+                r'\bcode\b', r'\bname\b', r'\bdescription\b', r'\blocation\b',
+                r'part\s+no\b', r'part\s+number\b'
             ]
         
             for pattern in mappable_patterns:
                 if re.search(pattern, text):
+                    print(f"DEBUG: '{text}' matches pattern '{pattern}'")
                     return True
         
-            # Check if it ends with colon (label pattern) but exclude headers
+            # Check if it ends with colon
             if text.endswith(':'):
-                text_without_colon = text[:-1].strip()
-                # Only consider as mappable field if it's not a section header
-                for exclusion in header_exclusions:
-                    if exclusion in text_without_colon:
-                        return False
+                print(f"DEBUG: '{text}' ends with colon")
                 return True
                 
+            print(f"DEBUG: '{text}' is NOT mappable")
             return False
         except Exception as e:
             st.error(f"Error in is_mappable_field: {e}")
@@ -1111,34 +1103,39 @@ class EnhancedTemplateMapperWithImages:
         """Find template fields and image upload areas"""
         fields = {}
         image_areas = []
-        
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-            
+        
             merged_ranges = worksheet.merged_cells.ranges
-            
+        
             # Find mappable fields
             for row in worksheet.iter_rows():
                 for cell in row:
                     try:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
-                            
+                        
                             if cell_value and self.is_mappable_field(cell_value):
                                 cell_coord = cell.coordinate
                                 merged_range = None
-                                
+                            
                                 for merge_range in merged_ranges:
                                     if cell.coordinate in merge_range:
                                         merged_range = str(merge_range)
                                         break
-                                
+                            
                                 # Identify section context
                                 section_context = self.identify_section_context(
                                     worksheet, cell.row, cell.column
                                 )
-                                
+                            
+                                # DEBUG PRINTS - ADD THESE LINES
+                                print(f"DEBUG: Found field '{cell_value}' at {cell_coord}")
+                                print(f"DEBUG: Section context: {section_context}")
+                                print(f"DEBUG: Is mappable: {self.is_mappable_field(cell_value)}")
+                                print("---")
+                            
                                 fields[cell_coord] = {
                                     'value': cell_value,
                                     'row': cell.row,
@@ -1149,24 +1146,25 @@ class EnhancedTemplateMapperWithImages:
                                 }
                     except Exception as e:
                         continue
-            
+        
             # Find image upload areas
             image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
-            
+        
             workbook.close()
-            
+        
         except Exception as e:
             st.error(f"Error reading template: {e}")
-        
+    
         return fields, image_areas
     
     def map_data_with_section_context(self, template_fields, data_df):
         """Enhanced mapping with better section-aware logic"""
         mapping_results = {}
-        used_columns = set()  # ✅ Track already-mapped columns
+        used_columns = set()
 
         try:
             data_columns = data_df.columns.tolist()
+            print(f"DEBUG: Available data columns: {data_columns}")  # ADD THIS
 
             for coord, field in template_fields.items():
                 try:
@@ -1175,18 +1173,25 @@ class EnhancedTemplateMapperWithImages:
                     field_value = field['value']
                     section_context = field.get('section_context')
 
-                    # ✅ If section context exists, use its field mappings
+                    print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")  # ADD THIS
+
+                    # If section context exists, use its field mappings
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
+                        print(f"DEBUG: Section mappings: {section_mappings}")  # ADD THIS
 
                         for template_field_key, data_column_pattern in section_mappings.items():
                             normalized_field_value = self.preprocess_text(field_value)
                             normalized_template_key = self.preprocess_text(template_field_key)
 
+                            print(f"DEBUG: Comparing '{normalized_field_value}' with '{normalized_template_key}'")  # ADD THIS
+
                             if normalized_field_value == normalized_template_key:
-                                # ✅ Prefer section-prefixed column (e.g., "Primary Packaging Type")
+                                # Prefer section-prefixed column
                                 section_prefix = section_context.split('_')[0].capitalize()
                                 expected_column = f"{section_prefix} {data_column_pattern}".strip()
+                            
+                                print(f"DEBUG: Looking for expected column: '{expected_column}'")  # ADD THIS
 
                                 for data_col in data_columns:
                                     if data_col in used_columns:
@@ -1194,9 +1199,10 @@ class EnhancedTemplateMapperWithImages:
                                     if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
                                         best_match = data_col
                                         best_score = 1.0
+                                        print(f"DEBUG: EXACT MATCH FOUND: {data_col}")  # ADD THIS
                                         break
 
-                                # 🔁 Fallback to similarity match if no exact match
+                                # Fallback to similarity match if no exact match
                                 if not best_match:
                                     for data_col in data_columns:
                                         if data_col in used_columns:
@@ -1205,9 +1211,10 @@ class EnhancedTemplateMapperWithImages:
                                         if similarity > best_score and similarity >= self.similarity_threshold:
                                             best_score = similarity
                                             best_match = data_col
-                                break  # stop loop if a match is found
+                                            print(f"DEBUG: SIMILARITY MATCH: {data_col} (score: {similarity})")  # ADD THIS
+                                break
 
-                    # 🧠 Final fallback if section mapping didn't resolve
+                    # Final fallback if section mapping didn't resolve
                     if not best_match:
                         for data_col in data_columns:
                             if data_col in used_columns:
@@ -1217,7 +1224,10 @@ class EnhancedTemplateMapperWithImages:
                                 best_score = similarity
                                 best_match = data_col
 
-                    # ✅ Save mapping
+                    print(f"DEBUG: Final mapping result - Field: '{field_value}' -> Column: '{best_match}' (Score: {best_score})")  # ADD THIS
+                    print("=" * 50)  # ADD THIS
+
+                    # Save mapping
                     mapping_results[coord] = {
                         'template_field': field_value,
                         'data_column': best_match,
@@ -1227,7 +1237,7 @@ class EnhancedTemplateMapperWithImages:
                         'is_mappable': best_match is not None
                     }
 
-                    # ✅ Prevent reuse of the same column
+                    # Prevent reuse of the same column
                     if best_match:
                         used_columns.add(best_match)
 
@@ -1239,6 +1249,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in map_data_with_section_context: {e}")
 
         return mapping_results
+
     
     def find_data_cell_for_label(self, worksheet, field_info):
         """Find data cell for a label with improved merged cell handling"""
