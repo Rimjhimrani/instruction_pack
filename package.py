@@ -2448,3 +2448,6 @@ def filter_images_for_row(extracted_images, row, columns):
     except Exception as e:
         st.error(f"Error filtering images for current row: {e}")
         return extracted_images
+# THIS MUST BE PRESENT
+if __name__ == "__main__":
+    show_main_app()
