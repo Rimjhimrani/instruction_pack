@@ -1800,8 +1800,65 @@ def show_main_app():
         data_file = st.file_uploader(
             "Upload Data File",
             type=['xlsx', 'xls', 'csv'],
-            help="Upload the data file to map to template (images will be extracted from Excel files)"
+            help="Upload the data file to map to template"
         )
+        
+        # 🆕 BULK IMAGE UPLOAD OPTION
+        st.subheader("🖼️ Bulk Image Upload (Special)")
+        st.info("For bulk processing: Upload 4 images to use across ALL templates")
+        
+        use_bulk_images = st.checkbox(
+            "Use Same Images for All Templates",
+            value=False,
+            help="Check this to upload 4 images that will be used for all generated templates"
+        )
+        
+        bulk_images = {}
+        if use_bulk_images:
+            st.write("**Upload 4 Images (one for each type):**")
+            
+            # Upload each image type
+            current_img = st.file_uploader(
+                "Current Packaging Image",
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
+                help="Image for current packaging (goes to T3)"
+            )
+            
+            primary_img = st.file_uploader(
+                "Primary Packaging Image", 
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
+                help="Image for primary packaging (goes to row 42, column A)"
+            )
+            
+            secondary_img = st.file_uploader(
+                "Secondary Packaging Image",
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp'], 
+                help="Image for secondary packaging (goes to row 42, next position)"
+            )
+            
+            label_img = st.file_uploader(
+                "Label Image",
+                type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
+                help="Image for label (goes to row 42, final position)"
+            )
+            
+            # Process uploaded images
+            if current_img:
+                bulk_images['current'] = process_uploaded_image(current_img, 'current')
+            if primary_img:
+                bulk_images['primary'] = process_uploaded_image(primary_img, 'primary')
+            if secondary_img:
+                bulk_images['secondary'] = process_uploaded_image(secondary_img, 'secondary') 
+            if label_img:
+                bulk_images['label'] = process_uploaded_image(label_img, 'label')
+            
+            # Show upload status
+            if bulk_images:
+                st.success(f"✅ {len(bulk_images)} bulk images uploaded")
+                for img_type in bulk_images:
+                    st.write(f"• {img_type.title()}: ✓")
+            else:
+                st.warning("⚠️ No bulk images uploaded yet")
         
         # Settings
         st.subheader("⚙️ Settings")
@@ -1821,8 +1878,14 @@ def show_main_app():
         data_df = pd.DataFrame()
         template_path = None
 
-        # ✅ 1. Save data file and try to extract images
-        if data_file.name.endswith(('.xlsx', '.xls')):
+        # ✅ 1. Handle images based on mode
+        if use_bulk_images and bulk_images:
+            st.info(f"🔄 Using {len(bulk_images)} bulk images for all {len(pd.read_csv(data_file) if data_file.name.endswith('.csv') else pd.read_excel(data_file))} templates")
+            # Convert bulk images to extracted_images format
+            extracted_images = {'all_sheets': bulk_images}
+            
+        elif data_file.name.endswith(('.xlsx', '.xls')) and not use_bulk_images:
+            # Original image extraction from data file
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
                     tmp_data.write(data_file.getvalue())
@@ -1834,7 +1897,6 @@ def show_main_app():
                     with st.spinner("Extracting images from Excel file..."):
                         # Store Excel path for image classification
                         st.session_state.enhanced_mapper.image_extractor.current_excel_path = data_path
-
                         extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
                         st.success(f"✅ Extracted {len(extracted_images.get('all_sheets', {}))} images.")
 
@@ -1902,8 +1964,25 @@ def show_main_app():
                         image_df = pd.DataFrame(image_areas)
                         st.dataframe(image_df, use_container_width=True)
                 
-                # Show extracted images from data file
-                if extracted_images:
+                # Show image status
+                if use_bulk_images and bulk_images:
+                    st.success(f"🖼️ Using {len(bulk_images)} bulk images for ALL templates")
+                    
+                    with st.expander("Bulk Images Preview", expanded=True):
+                        cols = st.columns(min(4, len(bulk_images)))
+                        
+                        for idx, (img_type, img_data) in enumerate(bulk_images.items()):
+                            with cols[idx % 4]:
+                                st.write(f"**{img_type.title()} Packaging**")
+                                try:
+                                    img_bytes = base64.b64decode(img_data['data'])
+                                    st.image(img_bytes, width=150)
+                                    st.write(f"Size: {img_data['size']}")
+                                    st.write("✅ Will go to all templates")
+                                except Exception as img_err:
+                                    st.error(f"Error displaying image: {img_err}")
+                
+                elif extracted_images:
                     total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
                     st.success(f"🖼️ Extracted {total_images} images from data file")
                     
@@ -1916,7 +1995,6 @@ def show_main_app():
                                 for idx, (position, img_data) in enumerate(sheet_images.items()):
                                     with cols[idx % 3]:
                                         st.write(f"Position: {position}")
-                                        # Display image thumbnail
                                         try:
                                             img_bytes = base64.b64decode(img_data['data'])
                                             st.image(img_bytes, width=150)
@@ -1925,10 +2003,10 @@ def show_main_app():
                                         except Exception as img_err:
                                             st.error(f"Error displaying image: {img_err}")
                 else:
-                    if data_file.name.endswith(('.xlsx', '.xls')):
+                    if data_file.name.endswith(('.xlsx', '.xls')) and not use_bulk_images:
                         st.info("No images found in the data file")
-                    else:
-                        st.info("CSV files don't contain images. Use Excel files to include images.")
+                    elif not use_bulk_images:
+                        st.info("CSV files don't contain images. Use Excel files to include images or enable bulk image mode.")
                 
                 # Data mapping - using first row to establish mapping
                 st.subheader("🔗 Field Mapping")
@@ -2019,8 +2097,10 @@ def show_main_app():
                     if mapped_count > 0:
                         include_items.append(f"📊 {mapped_count} mapped data fields")
                     
-                    # Count images
-                    if extracted_images:
+                    # Count images - updated for bulk mode
+                    if use_bulk_images and bulk_images:
+                        include_items.append(f"🖼️ {len(bulk_images)} bulk images (same for all templates)")
+                    elif extracted_images:
                         total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
                         if total_images > 0:
                             include_items.append(f"🖼️ Images matching each row's part number/description")
@@ -2041,8 +2121,12 @@ def show_main_app():
                     else:
                         st.warning("No items will be added to the templates")
                     
-                    # Show file generation info
-                    st.info(f"🎯 Will generate {len(data_df)} separate template files (one for each data row)")
+                    # Show file generation info with special note for bulk mode
+                    if use_bulk_images and bulk_images:
+                        st.info(f"🎯 Will generate {len(data_df)} separate template files using the same {len(bulk_images)} images for all")
+                        st.success("🚀 **BULK MODE**: Perfect for large datasets with consistent imaging!")
+                    else:
+                        st.info(f"🎯 Will generate {len(data_df)} separate template files (one for each data row)")
                     
                     if st.button("Generate All Filled Templates", type="primary", use_container_width=True):
                         with st.spinner(f"Generating {len(data_df)} filled templates..."):
@@ -2081,13 +2165,18 @@ def show_main_app():
                                                 except Exception as e:
                                                     st.warning(f"Failed to add procedure steps for row {index + 1}: {e}")
                                             
-                                            # 🎯 FILTER IMAGES FOR THIS SPECIFIC ROW
-                                            row_specific_images = filter_images_for_row(extracted_images, row, data_df.columns)
+                                            # 🎯 CHOOSE IMAGE HANDLING MODE
+                                            if use_bulk_images and bulk_images:
+                                                # Use the same bulk images for all templates
+                                                row_specific_images = extracted_images
+                                            else:
+                                                # Filter images for this specific row (original behavior)
+                                                row_specific_images = filter_images_for_row(extracted_images, row, data_df.columns)
                                             
                                             # Pass the packaging type to the fill function
                                             selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
                                             
-                                            # Fill template for this specific row with filtered images
+                                            # Fill template for this specific row with images
                                             result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
                                                 template_path, mapping_results, single_row_df, row_specific_images, selected_packaging_type
                                             )
@@ -2145,6 +2234,11 @@ def show_main_app():
                                     if failed_templates:
                                         st.warning(f"⚠️ Failed to generate templates for rows: {', '.join(map(str, failed_templates))}")
                                     
+                                    # Special success message for bulk mode
+                                    if use_bulk_images and bulk_images:
+                                        st.balloons()
+                                        st.success(f"🚀 **BULK MODE SUCCESS**: All {successful_templates} templates use the same {len(bulk_images)} images!")
+                                    
                                     # Download button for zip file
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     zip_filename = f"filled_templates_{timestamp}.zip"
@@ -2190,7 +2284,7 @@ def show_main_app():
     else:
         st.info("👆 Please upload both an Excel template and a data file to begin")
         
-        # Show demo information
+        # Show demo information with updated features
         st.markdown("### 🎯 Features")
         
         col1, col2 = st.columns(2)
@@ -2203,7 +2297,8 @@ def show_main_app():
             - 🔄 Merged cell handling
             - 📏 Packaging-specific patterns
             - 🗂️ Multi-template generation
-            - 🎯 **Row-specific image filtering (NEW!)**
+            - 🎯 Row-specific image filtering
+            - 🚀 **NEW: Bulk image mode for large datasets**
             """)
             
         with col2:
@@ -2213,7 +2308,8 @@ def show_main_app():
             - 📍 Smart image placement in templates
             - 🎨 Format conversion and optimization
             - 📦 Packaging image area detection
-            - 🎯 **Images filtered by part number/description (NEW!)**
+            - 🎯 Images filtered by part number/description
+            - 🚀 **NEW: Bulk upload mode - same images for all templates**
             """)
         
         st.markdown("""
@@ -2223,10 +2319,17 @@ def show_main_app():
         - **Part Information**: Component specifications and measurements
         
         ### 🖼️ Enhanced Image Processing
-        - Images are automatically extracted from Excel data files
-        - **Smart Filtering**: Only images matching each row's part number and description are included
+        - **Standard Mode**: Images are automatically extracted from Excel data files and filtered per row
+        - **🚀 NEW - Bulk Mode**: Upload 4 images once and use them for ALL generated templates
         - Images are intelligently placed in designated template areas
         - Supports multiple image formats (PNG, JPG, GIF, BMP)
+        
+        ### 🚀 Bulk Image Mode - Perfect for Large Datasets!
+        - ✅ **Use Case**: Perfect for your 189 rows with same images scenario
+        - ✅ **Upload Once**: Upload 4 images (Current, Primary, Secondary, Label)
+        - ✅ **Use Everywhere**: Same images applied to all 189 templates
+        - ✅ **Fixed Positions**: Images always go to predefined positions in template
+        - ✅ **Consistent Results**: Guaranteed same layout across all templates
         
         ### 📋 Packaging Procedures
         - **11+ Predefined Procedures**: Complete packaging workflows for different product types
@@ -2239,8 +2342,40 @@ def show_main_app():
         - **Enhanced Naming**: Files named as `vendorcode_partno_partdescription_template.xlsx`
         - **Zip Download**: All templates packaged in a single ZIP file
         - **Progress Tracking**: Real-time progress updates during generation
-        - **Row-Specific Content**: Each template contains only relevant images and data
+        - **🚀 Bulk Mode**: Same images across all templates for consistent branding
         """)
+
+
+def process_uploaded_image(uploaded_file, image_type):
+    """Process an uploaded image file and return it in the expected format"""
+    try:
+        # Read the uploaded file
+        image_bytes = uploaded_file.read()
+        
+        # Create PIL Image to get size
+        pil_image = Image.open(io.BytesIO(image_bytes))
+        
+        # Convert to base64
+        img_str = base64.b64encode(image_bytes).decode()
+        
+        # Create hash
+        image_hash = hashlib.md5(image_bytes).hexdigest()
+        
+        # Return in expected format
+        return {
+            'data': img_str,
+            'format': 'PNG',
+            'size': pil_image.size,
+            'position': f'BULK_{image_type.upper()}',
+            'sheet': 'BULK_UPLOAD',
+            'index': 0,
+            'type': image_type.lower(),
+            'hash': image_hash
+        }
+        
+    except Exception as e:
+        st.error(f"Error processing {image_type} image: {e}")
+        return None
 
 
 def filter_images_for_row(extracted_images, row, columns):
@@ -2304,127 +2439,12 @@ def filter_images_for_row(extracted_images, row, columns):
             # Method 3: If this is the only row or images aren't clearly separated, include all
             if not should_include and len(search_terms) == 0:
                 should_include = True
-                print(f"✅ Including image {img_key} - no filtering criteria")
-            
-            if should_include:
+                print(f"✅ Including image {img_key}")
+                if should_include:
                 filtered_images[img_key] = img_data
-        
-        print(f"🎯 Filtered {len(filtered_images)} images from {len(all_images)} total images")
+
         return {'all_sheets': filtered_images}
-        
+
     except Exception as e:
-        print(f"❌ Error filtering images for row: {e}")
-        return extracted_images  # Return all images on error
-
-
-def get_field_value(row, columns, field_names):
-    """
-    Get value from row using multiple possible field names.
-    
-    Args:
-        row: pandas Series (data row)
-        columns: List of column names
-        field_names: List of possible field names to search for
-        
-    Returns:
-        Field value or None if not found
-    """
-    try:
-        # Normalize field names for comparison
-        normalized_field_names = [name.lower().replace(' ', '').replace('_', '') for name in field_names]
-        
-        for col in columns:
-            normalized_col = col.lower().replace(' ', '').replace('_', '')
-            if normalized_col in normalized_field_names:
-                value = row[col]
-                if pd.notna(value) and str(value).strip():
-                    return str(value).strip()
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error getting field value: {e}")
-        return None
-
-
-def generate_enhanced_filename(row, columns, index):
-    """
-    Generate enhanced filename including vendor code, part number, and description.
-    
-    Args:
-        row: Current data row (pandas Series)
-        columns: List of column names from the dataframe
-        index: Row index (for fallback naming)
-        
-    Returns:
-        Enhanced filename string
-    """
-    try:
-        # Get vendor code
-        vendor_code = get_field_value(row, columns, [
-            'vendor_code', 'vendorcode', 'vendor code', 'vendor', 'supplier_code', 
-            'suppliercode', 'supplier code', 'supplier'
-        ])
-        
-        # Get part number
-        part_no = get_field_value(row, columns, [
-            'part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number'
-        ])
-        
-        # Get part description
-        part_desc = get_field_value(row, columns, [
-            'part_description', 'partdescription', 'description', 'part_desc', 
-            'partdesc', 'part description', 'part desc'
-        ])
-        
-        # Clean strings for filename (remove invalid characters)
-        def clean_for_filename(text):
-            if not text:
-                return ""
-            # Remove invalid filename characters and limit length
-            cleaned = "".join(c for c in str(text) if c.isalnum() or c in (' ', '-', '_')).strip()
-            return cleaned[:30]  # Limit to 30 characters
-        
-        vendor_code_clean = clean_for_filename(vendor_code)
-        part_no_clean = clean_for_filename(part_no)
-        part_desc_clean = clean_for_filename(part_desc)
-        
-        # Build filename parts
-        filename_parts = []
-        
-        if vendor_code_clean:
-            filename_parts.append(vendor_code_clean)
-        
-        if part_no_clean:
-            filename_parts.append(part_no_clean)
-        
-        if part_desc_clean:
-            filename_parts.append(part_desc_clean)
-        
-        # Create filename
-        if filename_parts:
-            filename = "_".join(filename_parts) + "_template.xlsx"
-        else:
-            filename = f"template_row_{index + 1}.xlsx"
-        
-        # Ensure filename is not too long (Windows has 255 char limit)
-        if len(filename) > 150:
-            filename = filename[:147] + ".xlsx"
-        
-        print(f"🏷️ Generated filename: {filename}")
-        return filename
-        
-    except Exception as e:
-        print(f"❌ Error generating filename: {e}")
-        return f"template_row_{index + 1}.xlsx"
-
-
-# Main application logic
-def main():
-    if not st.session_state.authenticated:
-        show_login()
-    else:
-        show_main_app()
-
-if __name__ == "__main__":
-    main()
+        st.error(f"Error filtering images for current row: {e}")
+        return extracted_images
