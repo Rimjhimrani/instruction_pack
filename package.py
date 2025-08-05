@@ -1895,7 +1895,7 @@ def show_main_app():
         # Show bulk uploaded images preview
         if bulk_images:
             st.subheader("🖼️ Bulk Upload Preview")
-            st.info(f"These {len(bulk_images)} images will be applied to ALL {len(data_df) if not data_df.empty else 'N/A'} templates")
+            st.info(f"These {len(bulk_images)} images will be applied to ALL templates")
             
             cols = st.columns(min(4, len(bulk_images)))
             for idx, (img_key, img_data) in enumerate(bulk_images.items()):
@@ -1907,8 +1907,8 @@ def show_main_app():
                     except Exception as e:
                         st.error(f"Error displaying {img_key}: {e}")
 
-        # ✅ 1. Save data file and try to extract images (only if no bulk images uploaded)
-        if data_file.name.endswith(('.xlsx', '.xls')) and not bulk_images:
+        # ✅ 1. Extract images from data file (Excel only)
+        if data_file.name.endswith(('.xlsx', '.xls')):
             try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
                     tmp_data.write(data_file.getvalue())
@@ -1922,7 +1922,7 @@ def show_main_app():
                         st.session_state.enhanced_mapper.image_extractor.current_excel_path = data_path
 
                         extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
-                        st.success(f"✅ Extracted {len(extracted_images.get('all_sheets', {}))} images.")
+                        st.success(f"✅ Extracted {sum(len(sheet_images) for sheet_images in extracted_images.values())} images.")
 
                 except Exception as extract_err:
                     st.error(f"❌ Error during image extraction: {extract_err}")
@@ -1988,13 +1988,35 @@ def show_main_app():
                         image_df = pd.DataFrame(image_areas)
                         st.dataframe(image_df, use_container_width=True)
                 
-                # Show image source being used
-                if bulk_images:
+                # 🆕 UPDATED: Show combined image usage
+                total_extracted = 0
+                if extracted_images:
+                    total_extracted = sum(len(sheet_images) for sheet_images in extracted_images.values())
+                
+                if bulk_images and extracted_images and total_extracted > 0:
+                    st.success(f"🖼️ Using COMBINED images: {len(bulk_images)} bulk uploaded + {total_extracted} extracted from data file")
+                    st.info("📸 **HYBRID MODE**: Bulk images + Row-specific extracted images will be combined")
+                    
+                    # Show breakdown
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("**Bulk Images (Same for All):**")
+                        for img_type in ['current', 'primary', 'secondary', 'label']:
+                            if any(img_type in key for key in bulk_images.keys()):
+                                st.write(f"• {img_type.title()} packaging")
+                    
+                    with col2:
+                        st.write("**Extracted Images (Row-Specific):**")
+                        st.write(f"• {total_extracted} images from data file")
+                        st.write("• Filtered by part number/description")
+                
+                elif bulk_images:
                     st.success(f"🖼️ Using {len(bulk_images)} bulk uploaded images for ALL templates")
-                    st.warning("⚠️ Bulk images will override any images from data file")
-                elif extracted_images:
-                    total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
-                    st.success(f"🖼️ Extracted {total_images} images from data file")
+                    st.info("🎯 **BULK MODE**: All templates will use the same uploaded images")
+                
+                elif extracted_images and total_extracted > 0:
+                    st.success(f"🖼️ Extracted {total_extracted} images from data file")
+                    st.info("🎯 **EXTRACTION MODE**: Images filtered by part number/description for each row")
                     
                     with st.expander("Extracted Images from Data File", expanded=True):
                         for sheet_name, sheet_images in extracted_images.items():
@@ -2005,7 +2027,6 @@ def show_main_app():
                                 for idx, (position, img_data) in enumerate(sheet_images.items()):
                                     with cols[idx % 3]:
                                         st.write(f"Position: {position}")
-                                        # Display image thumbnail
                                         try:
                                             img_bytes = base64.b64decode(img_data['data'])
                                             st.image(img_bytes, width=150)
@@ -2108,14 +2129,16 @@ def show_main_app():
                     if mapped_count > 0:
                         include_items.append(f"📊 {mapped_count} mapped data fields")
                     
-                    # Count images (prioritize bulk images)
-                    if bulk_images:
+                    # Count images
+                    if bulk_images and extracted_images and total_extracted > 0:
+                        include_items.append(f"🖼️ COMBINED: {len(bulk_images)} bulk + extracted images per row")
+                        st.info("🔄 **HYBRID MODE**: Each template gets both bulk and row-specific images")
+                    elif bulk_images:
                         include_items.append(f"🖼️ {len(bulk_images)} bulk uploaded images (SAME for all templates)")
                         st.info("🎯 **BULK MODE**: All templates will use the same uploaded images")
-                    elif extracted_images:
-                        total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
-                        if total_images > 0:
-                            include_items.append(f"🖼️ Images matching each row's part number/description")
+                    elif extracted_images and total_extracted > 0:
+                        include_items.append(f"🖼️ Images matching each row's part number/description")
+                        st.info("🎯 **EXTRACTION MODE**: Row-specific images from data file")
                     
                     # Count procedure steps
                     if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
@@ -2173,14 +2196,27 @@ def show_main_app():
                                                 except Exception as e:
                                                     st.warning(f"Failed to add procedure steps for row {index + 1}: {e}")
                                             
-                                            # 🎯 DETERMINE WHICH IMAGES TO USE
+                                            # 🆕 UPDATED: COMBINE BOTH IMAGE SOURCES
+                                            combined_images = {}
+                                            
+                                            # First, add extracted images (row-specific)
+                                            if extracted_images:
+                                                row_images = filter_images_for_row(extracted_images, row, data_df.columns)
+                                                if row_images and 'all_sheets' in row_images:
+                                                    combined_images.update(row_images['all_sheets'])
+                                                    st.write(f"Added {len(row_images.get('all_sheets', {}))} extracted images for row {index + 1}")
+                                            
+                                            # Then, add bulk images (these will be the same for all rows)
                                             if bulk_images:
-                                                # Use bulk uploaded images for ALL templates
-                                                images_to_use = {'all_sheets': bulk_images}
-                                                st.write(f"Using bulk images for template {index + 1}")
+                                                combined_images.update(bulk_images)
+                                                st.write(f"Added {len(bulk_images)} bulk images for row {index + 1}")
+                                            
+                                            # Prepare final image structure
+                                            if combined_images:
+                                                images_to_use = {'all_sheets': combined_images}
+                                                st.write(f"Total images for template {index + 1}: {len(combined_images)}")
                                             else:
-                                                # Use row-specific filtered images from data file
-                                                images_to_use = filter_images_for_row(extracted_images, row, data_df.columns)
+                                                images_to_use = {}
                                             
                                             # Pass the packaging type to the fill function
                                             selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
@@ -2243,9 +2279,16 @@ def show_main_app():
                                     if failed_templates:
                                         st.warning(f"⚠️ Failed to generate templates for rows: {', '.join(map(str, failed_templates))}")
                                     
-                                    # 🎯 SHOW IMAGE USAGE SUMMARY
-                                    if bulk_images:
+                                    # 🆕 UPDATED: SHOW COMBINED IMAGE USAGE SUMMARY
+                                    if bulk_images and extracted_images:
+                                        bulk_count = len(bulk_images)
+                                        extracted_count = sum(len(sheet_images) for sheet_images in extracted_images.values())
+                                        st.info(f"📸 All {successful_templates} templates used COMBINED images: {bulk_count} bulk + {extracted_count} extracted (per row)")
+                                    elif bulk_images:
                                         st.info(f"📸 All {successful_templates} templates used the same {len(bulk_images)} bulk uploaded images")
+                                    elif extracted_images:
+                                        total_extracted = sum(len(sheet_images) for sheet_images in extracted_images.values())
+                                        st.info(f"📸 Templates used row-specific images from {total_extracted} extracted images")
                                     
                                     # Download button for zip file
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -2292,7 +2335,7 @@ def show_main_app():
     else:
         st.info("👆 Please upload both an Excel template and a data file to begin")
         
-        # Show demo information
+        # Show demo information with updated features
         st.markdown("### 🎯 Features")
         
         col1, col2 = st.columns(2)
@@ -2317,44 +2360,25 @@ def show_main_app():
             - 🎨 Format conversion and optimization
             - 📦 Packaging image area detection
             - 🎯 **Images filtered by part number/description**
-            - 🆕 **BULK: Same 4 images for all 189 templates**
+            - 🆕 **BULK: Upload images that apply to all templates**
+            - 🔄 **HYBRID: Combine bulk + extracted images**
             """)
         
         st.markdown("""
-        ### 📚 Supported Sections
-        - **Primary Packaging**: Internal packaging dimensions and specifications
-        - **Secondary Packaging**: Outer packaging details
-        - **Part Information**: Component specifications and measurements
-        
-        ### 🖼️ Enhanced Image Processing
+        ### 🖼️ Enhanced Image Processing Modes
         - **AUTO-EXTRACTION**: Images are automatically extracted from Excel data files
-        - **BULK UPLOAD (NEW)**: Upload 4 images that will be applied to ALL templates
-        - **Smart Filtering**: Only images matching each row's part number and description are included (auto-extraction mode)
-        - **Fixed Positions**: Images are placed at predefined positions:
-          - Current Packaging: Position T3
-          - Primary Packaging: Row 42, Column A
-          - Secondary Packaging: Row 42, next column
-          - Label: Row 42, next column
+        - **BULK UPLOAD**: Upload images that will be applied to ALL templates
+        - **HYBRID MODE (NEW)**: Combine both bulk uploaded AND extracted images
+        - **Smart Filtering**: Extracted images are filtered by part number/description for each row
+        - **Non-Override**: Bulk images complement extracted images instead of replacing them
+        - **Fixed Positions**: Images are placed at predefined positions in templates
         - Supports multiple image formats (PNG, JPG, GIF, BMP)
         
-        ### 🆕 BULK Upload Mode
-        - **Perfect for 189 identical templates**: Upload 4 images once, apply to all
-        - **Fixed Positioning**: Images go to exact predefined positions
-        - **No Filtering Needed**: Same images for every template
-        - **Override Mode**: Bulk images take priority over extracted images
-        
-        ### 📋 Packaging Procedures
-        - **11+ Predefined Procedures**: Complete packaging workflows for different product types
-        - **Smart Substitution**: Automatically replaces placeholders with actual data values
-        - **Preview Mode**: Review steps before adding to template
-        - **Integrated Workflow**: Seamlessly adds procedure steps to your filled templates
-        
-        ### 🗂️ Enhanced Multi-Template Generation
-        - **Bulk Processing**: Generate separate template files for each data row
-        - **Enhanced Naming**: Files named as `vendorcode_partno_partdescription_template.xlsx`
-        - **Zip Download**: All templates packaged in a single ZIP file
-        - **Progress Tracking**: Real-time progress updates during generation
-        - **Flexible Content**: Each template contains relevant data + chosen images (bulk or filtered)
+        ### 🔄 HYBRID Mode Benefits
+        - **Best of Both**: Use consistent bulk images + specific extracted images
+        - **Flexible Workflow**: Upload common images once, extract specific ones per row
+        - **No Data Loss**: Both image sources are preserved and combined
+        - **Smart Combination**: Each template gets both bulk and row-specific images
         """)
 
 
