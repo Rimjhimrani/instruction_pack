@@ -1608,7 +1608,7 @@ def show_main_app():
                 tmp_template.write(template_file.getvalue())
                 template_path = tmp_template.name
             
-            # ✅ TEMPLATE PROCESSING (moved from except block to try block)
+            # ✅ TEMPLATE PROCESSING
             st.subheader("📋 Template Analysis")
         
             with st.spinner("Analyzing template fields and image areas..."):
@@ -1688,24 +1688,6 @@ def show_main_app():
                     ])
                     
                     st.dataframe(mapping_df, use_container_width=True)
-
-                    # ✅ Optional debug: add test image extraction button here
-                    st.subheader("🧪 Debug: Test Image Extraction")
-                    if st.button("Test Image Extraction"):
-                        try:
-                            # Save uploaded file to a temporary path
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
-                                tmp.write(data_file.getvalue())
-                                tmp_path = tmp.name
-                                
-                                # Use extractor
-                                extractor = ImageExtractor()
-                                result = extractor.extract_images_from_excel(tmp_path)
-                                st.success("✅ Image extraction succeeded.")
-                                st.write(result)
-
-                        except Exception as e:
-                            st.error(f"❌ Image extraction failed: {e}")
                     
                     # ✨ ENHANCED PACKAGING PROCEDURE SECTION
                     st.subheader("📋 Packaging Procedure Configuration")
@@ -1777,7 +1759,7 @@ def show_main_app():
                     if extracted_images:
                         total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
                         if total_images > 0:
-                            include_items.append(f"🖼️ {total_images} extracted images")
+                            include_items.append(f"🖼️ Images matching each row's part number/description")
                     
                     # Count procedure steps
                     if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
@@ -1835,65 +1817,22 @@ def show_main_app():
                                                 except Exception as e:
                                                     st.warning(f"Failed to add procedure steps for row {index + 1}: {e}")
                                             
-                                            # Convert extracted images to the format expected by fill_template_with_data_and_images
-                                            processed_images = {}
-                                            if extracted_images:
-                                                for sheet_name, sheet_images in extracted_images.items():
-                                                    for position, img_data in sheet_images.items():
-                                                        # Create a unique key for each image
-                                                        image_key = f"{sheet_name}_{position}"
-                                                        processed_images[image_key] = img_data
+                                            # 🎯 FILTER IMAGES FOR THIS SPECIFIC ROW
+                                            row_specific_images = filter_images_for_row(extracted_images, row, data_df.columns)
                                             
                                             # Pass the packaging type to the fill function
                                             selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
                                             
-                                            # Fill template for this specific row
+                                            # Fill template for this specific row with filtered images
                                             result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                                                template_path, mapping_results, single_row_df, processed_images, selected_packaging_type
+                                                template_path, mapping_results, single_row_df, row_specific_images, selected_packaging_type
                                             )
                                             
                                             workbook, filled_count, images_added, temp_image_paths, procedure_steps_added = result
                                             
                                             if workbook:
-                                                # Generate filename using part number and part description
-                                                try:
-                                                    # Try to find part number and description columns
-                                                    part_no = ""
-                                                    part_desc = ""
-                                                    
-                                                    # Look for common part number column names
-                                                    part_no_columns = ['part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number']
-                                                    for col in data_df.columns:
-                                                        if col.lower().replace(' ', '').replace('_', '') in [x.replace(' ', '').replace('_', '') for x in part_no_columns]:
-                                                            part_no = str(row[col])
-                                                            break
-                                                    
-                                                    # Look for common part description column names
-                                                    desc_columns = ['part_description', 'partdescription', 'description', 'part_desc', 'partdesc', 'part description', 'part desc']
-                                                    for col in data_df.columns:
-                                                        if col.lower().replace(' ', '').replace('_', '') in [x.replace(' ', '').replace('_', '') for x in desc_columns]:
-                                                            part_desc = str(row[col])
-                                                            break
-                                                    
-                                                    # Clean strings for filename (remove invalid characters)
-                                                    part_no = "".join(c for c in part_no if c.isalnum() or c in (' ', '-', '_')).strip()
-                                                    part_desc = "".join(c for c in part_desc if c.isalnum() or c in (' ', '-', '_')).strip()
-                                                    
-                                                    # Create filename
-                                                    if part_no and part_desc:
-                                                        filename = f"{part_no}_{part_desc}_template.xlsx"
-                                                    elif part_no:
-                                                        filename = f"{part_no}_template.xlsx"
-                                                    else:
-                                                        filename = f"template_row_{index + 1}.xlsx"
-                                                    
-                                                    # Ensure filename is not too long
-                                                    if len(filename) > 100:
-                                                        filename = filename[:97] + ".xlsx"
-                                                        
-                                                except Exception as e:
-                                                    filename = f"template_row_{index + 1}.xlsx"
-                                                    st.warning(f"Could not generate custom filename for row {index + 1}, using default: {e}")
+                                                # 🎯 ENHANCED FILENAME GENERATION
+                                                filename = generate_enhanced_filename(row, data_df.columns, index)
                                                 
                                                 # Save workbook to memory
                                                 template_buffer = io.BytesIO()
@@ -1999,7 +1938,8 @@ def show_main_app():
             - 🎯 Section-aware mapping
             - 🔄 Merged cell handling
             - 📏 Packaging-specific patterns
-            - 🗂️ **Multi-template generation (NEW!)**
+            - 🗂️ Multi-template generation
+            - 🎯 **Row-specific image filtering (NEW!)**
             """)
             
         with col2:
@@ -2009,6 +1949,7 @@ def show_main_app():
             - 📍 Smart image placement in templates
             - 🎨 Format conversion and optimization
             - 📦 Packaging image area detection
+            - 🎯 **Images filtered by part number/description (NEW!)**
             """)
         
         st.markdown("""
@@ -2017,11 +1958,11 @@ def show_main_app():
         - **Secondary Packaging**: Outer packaging details
         - **Part Information**: Component specifications and measurements
         
-        ### 🖼️ Image Processing
+        ### 🖼️ Enhanced Image Processing
         - Images are automatically extracted from Excel data files
-        - Supports multiple image formats (PNG, JPG, GIF, BMP)
+        - **Smart Filtering**: Only images matching each row's part number and description are included
         - Images are intelligently placed in designated template areas
-        - No manual image upload required - everything is automated!
+        - Supports multiple image formats (PNG, JPG, GIF, BMP)
         
         ### 📋 Packaging Procedures
         - **11+ Predefined Procedures**: Complete packaging workflows for different product types
@@ -2029,12 +1970,190 @@ def show_main_app():
         - **Preview Mode**: Review steps before adding to template
         - **Integrated Workflow**: Seamlessly adds procedure steps to your filled templates
         
-        ### 🗂️ Multi-Template Generation
+        ### 🗂️ Enhanced Multi-Template Generation
         - **Bulk Processing**: Generate separate template files for each data row
-        - **Smart Naming**: Files named as `partno_partdescription_template.xlsx`
+        - **Enhanced Naming**: Files named as `vendorcode_partno_partdescription_template.xlsx`
         - **Zip Download**: All templates packaged in a single ZIP file
         - **Progress Tracking**: Real-time progress updates during generation
+        - **Row-Specific Content**: Each template contains only relevant images and data
         """)
+
+
+def filter_images_for_row(extracted_images, row, columns):
+    """
+    Filter extracted images to only include those that match the current row's 
+    part number and description.
+    
+    Args:
+        extracted_images: Dictionary of all extracted images
+        row: Current data row (pandas Series)
+        columns: List of column names from the dataframe
+        
+    Returns:
+        Dictionary of filtered images for this specific row
+    """
+    if not extracted_images or 'all_sheets' not in extracted_images:
+        return {}
+    
+    try:
+        # Get part number and description from current row
+        part_no = get_field_value(row, columns, ['part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number'])
+        part_desc = get_field_value(row, columns, ['part_description', 'partdescription', 'description', 'part_desc', 'partdesc', 'part description', 'part desc'])
+        
+        if not part_no and not part_desc:
+            print("⚠️ No part number or description found for filtering images")
+            return extracted_images  # Return all images if we can't identify the row
+        
+        print(f"🎯 Filtering images for: Part No='{part_no}', Description='{part_desc}'")
+        
+        filtered_images = {}
+        all_images = extracted_images['all_sheets']
+        
+        # Create search terms for matching
+        search_terms = []
+        if part_no:
+            search_terms.append(str(part_no).lower().strip())
+        if part_desc:
+            search_terms.append(str(part_desc).lower().strip())
+        
+        # Check each image to see if it matches this row
+        for img_key, img_data in all_images.items():
+            should_include = False
+            
+            # Method 1: Check if image is from a sheet that matches the part info
+            sheet_name = img_data.get('sheet', '').lower()
+            position = img_data.get('position', '').lower()
+            
+            # Look for part number or description in sheet name or position
+            for term in search_terms:
+                if term and (term in sheet_name or term in position):
+                    should_include = True
+                    print(f"✅ Including image {img_key} - found '{term}' in sheet/position")
+                    break
+            
+            # Method 2: If we don't have specific matching, include all images from the first sheet
+            # (This is a fallback when images aren't clearly labeled)
+            if not should_include and not any(search_terms):
+                should_include = True
+                print(f"✅ Including image {img_key} - fallback (no specific identifiers)")
+            
+            # Method 3: If this is the only row or images aren't clearly separated, include all
+            if not should_include and len(search_terms) == 0:
+                should_include = True
+                print(f"✅ Including image {img_key} - no filtering criteria")
+            
+            if should_include:
+                filtered_images[img_key] = img_data
+        
+        print(f"🎯 Filtered {len(filtered_images)} images from {len(all_images)} total images")
+        return {'all_sheets': filtered_images}
+        
+    except Exception as e:
+        print(f"❌ Error filtering images for row: {e}")
+        return extracted_images  # Return all images on error
+
+
+def get_field_value(row, columns, field_names):
+    """
+    Get value from row using multiple possible field names.
+    
+    Args:
+        row: pandas Series (data row)
+        columns: List of column names
+        field_names: List of possible field names to search for
+        
+    Returns:
+        Field value or None if not found
+    """
+    try:
+        # Normalize field names for comparison
+        normalized_field_names = [name.lower().replace(' ', '').replace('_', '') for name in field_names]
+        
+        for col in columns:
+            normalized_col = col.lower().replace(' ', '').replace('_', '')
+            if normalized_col in normalized_field_names:
+                value = row[col]
+                if pd.notna(value) and str(value).strip():
+                    return str(value).strip()
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error getting field value: {e}")
+        return None
+
+
+def generate_enhanced_filename(row, columns, index):
+    """
+    Generate enhanced filename including vendor code, part number, and description.
+    
+    Args:
+        row: Current data row (pandas Series)
+        columns: List of column names from the dataframe
+        index: Row index (for fallback naming)
+        
+    Returns:
+        Enhanced filename string
+    """
+    try:
+        # Get vendor code
+        vendor_code = get_field_value(row, columns, [
+            'vendor_code', 'vendorcode', 'vendor code', 'vendor', 'supplier_code', 
+            'suppliercode', 'supplier code', 'supplier'
+        ])
+        
+        # Get part number
+        part_no = get_field_value(row, columns, [
+            'part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number'
+        ])
+        
+        # Get part description
+        part_desc = get_field_value(row, columns, [
+            'part_description', 'partdescription', 'description', 'part_desc', 
+            'partdesc', 'part description', 'part desc'
+        ])
+        
+        # Clean strings for filename (remove invalid characters)
+        def clean_for_filename(text):
+            if not text:
+                return ""
+            # Remove invalid filename characters and limit length
+            cleaned = "".join(c for c in str(text) if c.isalnum() or c in (' ', '-', '_')).strip()
+            return cleaned[:30]  # Limit to 30 characters
+        
+        vendor_code_clean = clean_for_filename(vendor_code)
+        part_no_clean = clean_for_filename(part_no)
+        part_desc_clean = clean_for_filename(part_desc)
+        
+        # Build filename parts
+        filename_parts = []
+        
+        if vendor_code_clean:
+            filename_parts.append(vendor_code_clean)
+        
+        if part_no_clean:
+            filename_parts.append(part_no_clean)
+        
+        if part_desc_clean:
+            filename_parts.append(part_desc_clean)
+        
+        # Create filename
+        if filename_parts:
+            filename = "_".join(filename_parts) + "_template.xlsx"
+        else:
+            filename = f"template_row_{index + 1}.xlsx"
+        
+        # Ensure filename is not too long (Windows has 255 char limit)
+        if len(filename) > 150:
+            filename = filename[:147] + ".xlsx"
+        
+        print(f"🏷️ Generated filename: {filename}")
+        return filename
+        
+    except Exception as e:
+        print(f"❌ Error generating filename: {e}")
+        return f"template_row_{index + 1}.xlsx"
+
 
 # Main application logic
 def main():
