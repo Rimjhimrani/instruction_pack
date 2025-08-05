@@ -81,6 +81,7 @@ class ImageExtractor:
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
         self._placement_counters = defaultdict(int)
+        self.current_excel_path = None  # ← ADD THIS LINE - it was missing!
     
     def identify_image_upload_areas(self, worksheet):
         """Identify areas in template designated for image uploads with better categorization"""
@@ -234,44 +235,36 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
+        """Fixed version that doesn't reload the workbook"""
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
         try:
-            col_letter = re.sub(r'\d+', '', position)
-            col_index = column_index_from_string(col_letter)
-            row_number = int(re.sub(r'\D+', '', position))
-
-            # Load the Excel file path
-            workbook = openpyxl.load_workbook(self.current_excel_path)  # ← This could be the issue
-            worksheet = workbook[sheet_name]
-
-            header_text = ""
-            for r in range(row_number - 1, max(0, row_number - 4), -1):
-                cell = worksheet.cell(row=r, column=col_index)
-                if cell.value:
-                    header_text = str(cell.value).strip().lower()
-                    break
-
-            image_keywords = {
-                'primary': ['primary packaging', 'primary'],
-                'secondary': ['secondary packaging', 'secondary'],
-                'current': ['current packaging', 'current'],
-                'label': ['label', 'labels', 'product label']
-            }
-
-            for image_type, keywords in image_keywords.items():
-                for keyword in keywords:
-                    if keyword in header_text:
-                        print(f"-> Header matched: '{header_text}' → {image_type}")
-                        return image_type
-
+            # Simple fallback classification based on index to avoid workbook reloading issues
             fallback_types = ['current', 'primary', 'secondary', 'label']
             fallback_type = fallback_types[index % len(fallback_types)]
-            print(f"-> No header match found. Fallback to: {fallback_type}")
-            return fallback_type
+        
+            # Try to get column info if position is valid
+            if position and re.match(r'^[A-Z]+\d+$', position):
+                col_letter = re.sub(r'\d+', '', position)
+            
+                # Simple heuristic based on column position
+                try:
+                    ol_index = column_index_from_string(col_letter)
+                    if col_index <= 5:  # Early columns = current
+                        return 'current'
+                    elif col_index <= 10:  # Middle columns = primary
+                        return 'primary'
+                    elif col_index <= 15:  # Later columns = secondary
+                        return 'secondary'
+                    else:  # Far right = label
+                        return 'label'
+                except:
+                    pass
+        
+            print(f"-> Using fallback classification: {fallback_type}"
+                  return fallback_type
 
         except Exception as e:
             print(f"❌ Error in _classify_image_type: {e}")
-            traceback.print_exc()
             return 'unknown'
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
@@ -1559,7 +1552,6 @@ def show_main_app():
         
         st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
     
-    # Main content area
     if template_file and data_file:
         extracted_images = {}
 
@@ -1613,10 +1605,20 @@ def show_main_app():
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
                 tmp_template.write(template_file.getvalue())
                 template_path = tmp_template.name
+            
+            # NOW PROCESS THE TEMPLATE - This should be INSIDE the try block, not in except!
+            st.subheader("📋 Template Analysis")
+        
+            with st.spinner("Analyzing template fields and image areas..."):
+                template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
+        
+            # ... rest of template processing code goes here ...
+        
         except Exception as template_err:
             st.error(f"❌ Failed to save template file: {template_err}")
             st.code(traceback.format_exc())
             template_path = None
+
             # Process template and find fields
             st.subheader("📋 Template Analysis")
             
