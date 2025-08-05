@@ -1554,6 +1554,8 @@ def show_main_app():
     
     if template_file and data_file:
         extracted_images = {}
+        data_df = pd.DataFrame()
+        template_path = None
 
         # ✅ 1. Save data file and try to extract images
         if data_file.name.endswith(('.xlsx', '.xls')):
@@ -1600,31 +1602,18 @@ def show_main_app():
             st.code(traceback.format_exc())
             data_df = pd.DataFrame()
 
-        # ✅ 3. Save template file
+        # ✅ 3. Save template file and process it
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
                 tmp_template.write(template_file.getvalue())
                 template_path = tmp_template.name
             
-            # NOW PROCESS THE TEMPLATE - This should be INSIDE the try block, not in except!
+            # ✅ TEMPLATE PROCESSING (moved from except block to try block)
             st.subheader("📋 Template Analysis")
         
             with st.spinner("Analyzing template fields and image areas..."):
                 template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
         
-            # ... rest of template processing code goes here ...
-        
-        except Exception as template_err:
-            st.error(f"❌ Failed to save template file: {template_err}")
-            st.code(traceback.format_exc())
-            template_path = None
-
-            # Process template and find fields
-            st.subheader("📋 Template Analysis")
-            
-            with st.spinner("Analyzing template fields and image areas..."):
-                template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
-            
             if template_fields:
                 st.success(f"Found {len(template_fields)} mappable fields")
                 
@@ -1664,10 +1653,13 @@ def show_main_app():
                                     with cols[idx % 3]:
                                         st.write(f"Position: {position}")
                                         # Display image thumbnail
-                                        img_bytes = base64.b64decode(img_data['data'])
-                                        st.image(img_bytes, width=150)
-                                        st.write(f"Size: {img_data['size']}")
-                                        st.write(f"Type: {img_data.get('type', 'Unknown')}")
+                                        try:
+                                            img_bytes = base64.b64decode(img_data['data'])
+                                            st.image(img_bytes, width=150)
+                                            st.write(f"Size: {img_data['size']}")
+                                            st.write(f"Type: {img_data.get('type', 'Unknown')}")
+                                        except Exception as img_err:
+                                            st.error(f"Error displaying image: {img_err}")
                 else:
                     if data_file.name.endswith(('.xlsx', '.xls')):
                         st.info("No images found in the data file")
@@ -1768,7 +1760,7 @@ def show_main_app():
                                 
                             except Exception as e:
                                 st.error(f"Error generating procedure steps: {e}")
-		
+        
                     # Fill templates for ALL rows
                     st.subheader("📝 Generate Multiple Filled Templates")
                     
@@ -1975,16 +1967,23 @@ def show_main_app():
             else:
                 st.warning("No mappable fields found in template")
             
-            # Clean up temporary file
+            # Clean up temporary template file
             try:
-                os.unlink(template_path)
+                if template_path:
+                    os.unlink(template_path)
+            except Exception as cleanup_err:
+                print(f"Could not cleanup template file: {cleanup_err}")
+                
+        except Exception as template_err:
+            st.error(f"❌ Failed to process template file: {template_err}")
+            st.code(traceback.format_exc())
+            # Clean up on error too
+            try:
+                if template_path:
+                    os.unlink(template_path)
             except:
                 pass
                 
-        except Exception as e:
-            st.error(f"Error processing files: {e}")
-            st.exception(e)
-    
     else:
         st.info("👆 Please upload both an Excel template and a data file to begin")
         
