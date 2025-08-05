@@ -159,7 +159,7 @@ class ImageExtractor:
             return []
 
     def extract_images_from_excel(self, excel_file_path):
-        """Extract unique images from Excel file with better type classification"""
+        """Extract unique images from Excel file with improved type classification"""
         try:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
@@ -216,10 +216,12 @@ class ImageExtractor:
                                 'sheet': sheet_name,
                                 'index': idx,
                                 'type': image_type,
-                                'hash': image_hash
+                                'hash': image_hash,
+                                'col': col,
+                                'row': row
                             }
 
-                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position}")
+                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position} (col: {col})")
                             
                         except Exception as e:
                             print(f"Error extracting image {idx} from {sheet_name}: {e}")
@@ -237,13 +239,11 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
-        """Classify image type based on position and index, not sheet name"""
-        # Ignore sheet name completely - classify based on image order/position
-        # First image = current, then cycle through primary, secondary, label
+        """Classify image type based on position and index, ensuring all types are represented"""
         
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
         
-        # Simple classification based on image index only
+        # Simple classification based on image index - ensuring all 4 types are covered
         if index == 0:
             image_type = 'current'  # First image is always current packaging
         elif index == 1:
@@ -253,7 +253,7 @@ class ImageExtractor:
         elif index == 3:
             image_type = 'label'  # Fourth image is label
         else:
-            # For additional images, cycle through types
+            # For additional images, cycle through types but prioritize missing ones
             type_cycle = ['primary', 'secondary', 'label']
             image_type = type_cycle[(index - 1) % len(type_cycle)]
         
@@ -304,7 +304,7 @@ class ImageExtractor:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
             return 0, []
-                    
+    
     def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
         """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
         if not hasattr(self, '_global_image_counter'):
@@ -375,95 +375,6 @@ class ImageExtractor:
             print(f"❌ Could not add image {img_key}: {e}")
             st.warning(f"Could not add image {img_key}: {e}")
             return 0
-
-    def _create_additional_placement_area(self, area_type, index, existing_areas):
-        """Create additional placement area when no predefined area exists"""
-        # Define column positions for different image types
-        type_columns = {
-            'primary': 2,    # Column B
-            'secondary': 6,  # Column F
-            'current': 3,    # Column C (special case)
-            'label': 11      # Column K
-        }
-        
-        if area_type == 'current':
-            # Current images should go to a specific location
-            target_column = 3  # Column C
-            target_row = 6     # Row 6
-        else:
-            # Other images go to row 42 with spacing (changed from 41)
-            target_column = type_columns.get(area_type, 2)
-            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
-        
-        # Create a virtual area for additional placement
-        return {
-            'position': f"{get_column_letter(target_column)}{target_row}",
-            'row': target_row,
-            'column': target_column,
-            'text': f"Additional {area_type}",
-            'type': area_type,
-            'header_text': area_type,
-            'matched_keyword': area_type,
-            'match_score': 1
-        }
-
-    def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
-        """Place remaining images in available columns with proper spacing"""
-        try:
-            # Define column positions for different image types
-            type_columns = {
-                'primary': 2,    # Column B
-                'secondary': 6,  # Column F
-                'current': 3,    # Column C (special case)
-                'label': 11      # Column K
-            }
-            
-            if image_type == 'current':
-                # Current images should go to specific location
-                target_col = 3  # Column C
-                start_row = 6   # Row 6
-            else:
-                target_col = type_columns.get(image_type, 2)
-                start_row = 42  # Changed from 41 to 42
-            
-            for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
-                if image_type == 'current':
-                    target_row = start_row + (idx * 10)  # Vertical spacing for multiple current images
-                else:
-                    target_row = start_row + (idx * 12)  # Vertical spacing for other types
-                
-                try:
-                    # Create and place image
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                        image_bytes = base64.b64decode(img_data['data'])
-                        tmp_img.write(image_bytes)
-                        tmp_img_path = tmp_img.name
-                    
-                    img = OpenpyxlImage(tmp_img_path)
-                    
-                    # Set size based on image type
-                    if image_type == 'current':
-                        img.width = int(8.3 * 37.8)   # 8.3cm width for current
-                        img.height = int(8.3 * 37.8)  # 8.3cm height for current
-                    else:
-                        img.width = int(4.3 * 37.8)   # 4.3cm width for others
-                        img.height = int(4.3 * 37.8)  # 4.3cm height for others
-                    
-                    cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                    img.anchor = cell_coord
-                    worksheet.add_image(img)
-                    
-                    temp_image_paths.append(tmp_img_path)
-                    used_images.add(img_key)
-                    
-                    print(f"✅ Placed remaining {image_type} image at {cell_coord}")
-                    
-                except Exception as e:
-                    print(f"❌ Error placing remaining image: {e}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Error in _place_remaining_images: {e}")
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
         """Reclassify extracted images based on new rules or manual assignment"""
@@ -1587,37 +1498,6 @@ def show_main_app():
             help="Upload the data file to map to template (images will be extracted from Excel files)"
         )
         
-        # NEW: Column mapping for file naming
-        st.subheader("🏷️ File Naming")
-        if data_file:
-            try:
-                # Read just the headers to show column options
-                if data_file.name.endswith('.csv'):
-                    temp_df = pd.read_csv(data_file, nrows=0)
-                else:
-                    temp_df = pd.read_excel(data_file, nrows=0)
-                
-                columns = temp_df.columns.tolist()
-                
-                part_no_col = st.selectbox(
-                    "Part Number Column",
-                    ["Auto-detect"] + columns,
-                    help="Select column containing part numbers for file naming"
-                )
-                
-                part_desc_col = st.selectbox(
-                    "Part Description Column", 
-                    ["Auto-detect"] + columns,
-                    help="Select column containing part descriptions for file naming"
-                )
-                
-                # Store selections in session state
-                st.session_state.part_no_col = part_no_col
-                st.session_state.part_desc_col = part_desc_col
-                
-            except Exception as e:
-                st.error(f"Error reading file headers: {e}")
-        
         # Settings
         st.subheader("⚙️ Settings")
         similarity_threshold = st.slider(
@@ -1629,72 +1509,11 @@ def show_main_app():
             help="Minimum similarity score for field matching"
         )
         
-        # NEW: Row processing options
-        st.subheader("📊 Processing Options")
-        process_all_rows = st.checkbox(
-            "Process All Rows",
-            value=True,
-            help="Generate separate template for each data row"
-        )
-        
-        if not process_all_rows:
-            max_rows = st.number_input(
-                "Maximum Rows to Process",
-                min_value=1,
-                max_value=1000,
-                value=10,
-                help="Limit number of templates to generate"
-            )
-        else:
-            max_rows = None
-        
         st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
     
     # Main content area
     if template_file and data_file:
         try:
-            # Read data file
-            if data_file.name.endswith('.csv'):
-                data_df = pd.read_csv(data_file)
-            else:
-                data_df = pd.read_excel(data_file)
-            
-            # Show data preview
-            st.subheader("📊 Data Preview")
-            rows_to_process = len(data_df) if process_all_rows else min(max_rows, len(data_df))
-            st.info(f"Will process {rows_to_process} rows from {len(data_df)} total rows")
-            
-            # Preview first few rows
-            st.dataframe(data_df.head(), use_container_width=True)
-            
-            # Auto-detect or use selected columns for file naming
-            def detect_column(keywords, columns):
-                for keyword in keywords:
-                    for col in columns:
-                        if keyword.lower() in col.lower():
-                            return col
-                return columns[0] if columns else None
-            
-            # Determine part number and description columns
-            columns = data_df.columns.tolist()
-            
-            if hasattr(st.session_state, 'part_no_col') and st.session_state.part_no_col != "Auto-detect":
-                part_no_column = st.session_state.part_no_col
-            else:
-                part_no_column = detect_column(['part_no', 'partno', 'part number', 'part_number', 'item_no', 'itemno'], columns)
-            
-            if hasattr(st.session_state, 'part_desc_col') and st.session_state.part_desc_col != "Auto-detect":
-                part_desc_column = st.session_state.part_desc_col
-            else:
-                part_desc_column = detect_column(['part_desc', 'partdesc', 'description', 'part description', 'item_desc'], columns)
-            
-            # Show detected columns
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write(f"**Part Number Column:** {part_no_column}")
-            with col2:
-                st.write(f"**Part Description Column:** {part_desc_column}")
-            
             # Extract images from data file (only if it's Excel)
             extracted_images = {}
             if data_file.name.endswith(('.xlsx', '.xls')):
@@ -1712,6 +1531,15 @@ def show_main_app():
                     os.unlink(data_path)
                 except:
                     pass
+            
+            # Read data file
+            if data_file.name.endswith('.csv'):
+                data_df = pd.read_csv(data_file)
+            else:
+                data_df = pd.read_excel(data_file)
+            
+            # Display data info
+            st.info(f"📊 Data file contains {len(data_df)} rows of data")
             
             # Create temporary file for template
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
@@ -1773,7 +1601,7 @@ def show_main_app():
                     else:
                         st.info("CSV files don't contain images. Use Excel files to include images.")
                 
-                # Data mapping
+                # Data mapping - using first row to establish mapping
                 st.subheader("🔗 Field Mapping")
                 
                 with st.spinner("Mapping template fields to data columns..."):
@@ -1821,12 +1649,12 @@ def show_main_app():
                         if procedure_type and procedure_type != "Select Packaging Procedure":
                             st.info(f"**Selected:** {procedure_type}")
                             
-                            # Get procedure steps with data substitution (using first row for preview)
+                            # Get procedure steps with data substitution (using first row as example)
                             try:
                                 data_dict = data_df.iloc[0].to_dict() if len(data_df) > 0 else {}
                                 procedures = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
                                 
-                                st.write("**Procedure Steps Preview (for first row):**")
+                                st.write("**Procedure Steps Preview (using first row data):**")
                                 
                                 # Display steps in a more organized way
                                 steps_container = st.container()
@@ -1850,8 +1678,8 @@ def show_main_app():
                             except Exception as e:
                                 st.error(f"Error generating procedure steps: {e}")
 		
-                    # Fill template for ALL ROWS
-                    st.subheader("📝 Generate Filled Templates")
+                    # Fill templates for ALL rows
+                    st.subheader("📝 Generate Multiple Filled Templates")
                     
                     # Show what will be included in the templates
                     st.write("**Each template will include:**")
@@ -1866,7 +1694,7 @@ def show_main_app():
                     if extracted_images:
                         total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
                         if total_images > 0:
-                            include_items.append(f"🖼️ Available images for placement")
+                            include_items.append(f"🖼️ {total_images} extracted images")
                     
                     # Count procedure steps
                     if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
@@ -1884,145 +1712,159 @@ def show_main_app():
                     else:
                         st.warning("No items will be added to the templates")
                     
-                    # Big Generate Button
-                    if st.button("🚀 Generate All Templates (ZIP Download)", type="primary", use_container_width=True):
-                        
-                        # Progress tracking
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        # Determine packaging type
-                        selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
-                        
-                        try:
-                            # Create temporary directory for all templates
-                            with tempfile.TemporaryDirectory() as temp_dir:
-                                generated_files = []
-                                errors = []
+                    # Show file generation info
+                    st.info(f"🎯 Will generate {len(data_df)} separate template files (one for each data row)")
+                    
+                    if st.button("Generate All Filled Templates", type="primary", use_container_width=True):
+                        with st.spinner(f"Generating {len(data_df)} filled templates..."):
+                            try:
+                                # Create a zip file to contain all templates
+                                zip_buffer = io.BytesIO()
                                 
-                                # Process each row
-                                rows_to_process = min(len(data_df), max_rows) if max_rows else len(data_df)
-                                
-                                for idx in range(rows_to_process):
-                                    progress = (idx + 1) / rows_to_process
-                                    progress_bar.progress(progress)
+                                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                    successful_templates = 0
+                                    failed_templates = []
                                     
-                                    try:
-                                        # Get current row data
-                                        current_row = data_df.iloc[idx:idx+1].copy()  # Keep as DataFrame with single row
-                                        row_dict = current_row.iloc[0].to_dict()
-                                        
-                                        # Generate filename
-                                        part_no = str(row_dict.get(part_no_column, f"row_{idx+1}"))
-                                        part_desc = str(row_dict.get(part_desc_column, "template"))
-                                        
-                                        # Clean filename characters
-                                        part_no = "".join(c for c in part_no if c.isalnum() or c in (' ', '-', '_')).strip()
-                                        part_desc = "".join(c for c in part_desc if c.isalnum() or c in (' ', '-', '_')).strip()
-                                        
-                                        filename = f"{part_no}_{part_desc}_template.xlsx"
-                                        filepath = os.path.join(temp_dir, filename)
-                                        
-                                        status_text.text(f"Processing row {idx+1}/{rows_to_process}: {part_no}")
-                                        
-                                        # Convert extracted images to the format expected by fill function
-                                        processed_images = {}
-                                        if extracted_images:
-                                            for sheet_name, sheet_images in extracted_images.items():
-                                                for position, img_data in sheet_images.items():
-                                                    # Create a unique key for each image
-                                                    image_key = f"{sheet_name}_{position}"
-                                                    processed_images[image_key] = img_data
-                                        
-                                        # Fill template for this specific row
-                                        result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                                            template_path, mapping_results, current_row, processed_images, selected_packaging_type
-                                        )
-                                        
-                                        workbook, filled_count, images_added, temp_image_paths, procedure_steps_added = result
-                                        
-                                        if workbook:
-                                            # Save the workbook
-                                            workbook.save(filepath)
-                                            workbook.close()
-                                            generated_files.append({
-                                                'filename': filename,
-                                                'path': filepath,
-                                                'row': idx + 1,
-                                                'part_no': part_no,
-                                                'part_desc': part_desc,
-                                                'filled_count': filled_count,
-                                                'images_added': images_added,
-                                                'procedure_steps_added': procedure_steps_added
-                                            })
+                                    # Progress bar
+                                    progress_bar = st.progress(0)
+                                    status_placeholder = st.empty()
+                                    
+                                    for index, row in data_df.iterrows():
+                                        try:
+                                            # Update progress
+                                            progress = (index + 1) / len(data_df)
+                                            progress_bar.progress(progress)
+                                            status_placeholder.text(f"Processing row {index + 1} of {len(data_df)}...")
                                             
-                                            # Clean up temporary image files
-                                            for path in temp_image_paths:
+                                            # Create a single-row dataframe for this iteration
+                                            single_row_df = pd.DataFrame([row])
+                                            
+                                            # Add procedure steps to this row if selected
+                                            if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
                                                 try:
-                                                    os.unlink(path)
-                                                except:
-                                                    pass
-                                        else:
-                                            errors.append(f"Row {idx+1}: Failed to generate template")
+                                                    data_dict = row.to_dict()
+                                                    procedure_steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
+                                                    
+                                                    # Add procedure steps to the single row dataframe
+                                                    for i, step in enumerate(procedure_steps, 1):
+                                                        if step.strip():  # Only add non-empty steps
+                                                            single_row_df.loc[0, f'Procedure Step {i}'] = step
+                                                except Exception as e:
+                                                    st.warning(f"Failed to add procedure steps for row {index + 1}: {e}")
                                             
-                                    except Exception as e:
-                                        errors.append(f"Row {idx+1}: {str(e)}")
-                                        continue
+                                            # Convert extracted images to the format expected by fill_template_with_data_and_images
+                                            processed_images = {}
+                                            if extracted_images:
+                                                for sheet_name, sheet_images in extracted_images.items():
+                                                    for position, img_data in sheet_images.items():
+                                                        # Create a unique key for each image
+                                                        image_key = f"{sheet_name}_{position}"
+                                                        processed_images[image_key] = img_data
+                                            
+                                            # Pass the packaging type to the fill function
+                                            selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
+                                            
+                                            # Fill template for this specific row
+                                            result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
+                                                template_path, mapping_results, single_row_df, processed_images, selected_packaging_type
+                                            )
+                                            
+                                            workbook, filled_count, images_added, temp_image_paths, procedure_steps_added = result
+                                            
+                                            if workbook:
+                                                # Generate filename using part number and part description
+                                                try:
+                                                    # Try to find part number and description columns
+                                                    part_no = ""
+                                                    part_desc = ""
+                                                    
+                                                    # Look for common part number column names
+                                                    part_no_columns = ['part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number']
+                                                    for col in data_df.columns:
+                                                        if col.lower().replace(' ', '').replace('_', '') in [x.replace(' ', '').replace('_', '') for x in part_no_columns]:
+                                                            part_no = str(row[col])
+                                                            break
+                                                    
+                                                    # Look for common part description column names
+                                                    desc_columns = ['part_description', 'partdescription', 'description', 'part_desc', 'partdesc', 'part description', 'part desc']
+                                                    for col in data_df.columns:
+                                                        if col.lower().replace(' ', '').replace('_', '') in [x.replace(' ', '').replace('_', '') for x in desc_columns]:
+                                                            part_desc = str(row[col])
+                                                            break
+                                                    
+                                                    # Clean strings for filename (remove invalid characters)
+                                                    part_no = "".join(c for c in part_no if c.isalnum() or c in (' ', '-', '_')).strip()
+                                                    part_desc = "".join(c for c in part_desc if c.isalnum() or c in (' ', '-', '_')).strip()
+                                                    
+                                                    # Create filename
+                                                    if part_no and part_desc:
+                                                        filename = f"{part_no}_{part_desc}_template.xlsx"
+                                                    elif part_no:
+                                                        filename = f"{part_no}_template.xlsx"
+                                                    else:
+                                                        filename = f"template_row_{index + 1}.xlsx"
+                                                    
+                                                    # Ensure filename is not too long
+                                                    if len(filename) > 100:
+                                                        filename = filename[:97] + ".xlsx"
+                                                        
+                                                except Exception as e:
+                                                    filename = f"template_row_{index + 1}.xlsx"
+                                                    st.warning(f"Could not generate custom filename for row {index + 1}, using default: {e}")
+                                                
+                                                # Save workbook to memory
+                                                template_buffer = io.BytesIO()
+                                                workbook.save(template_buffer)
+                                                template_buffer.seek(0)
+                                                
+                                                # Add to zip file
+                                                zip_file.writestr(filename, template_buffer.getvalue())
+                                                
+                                                # Clean up temporary image files
+                                                for path in temp_image_paths:
+                                                    try:
+                                                        os.unlink(path)
+                                                    except Exception as e:
+                                                        pass
+                                                
+                                                workbook.close()
+                                                successful_templates += 1
+                                                
+                                            else:
+                                                failed_templates.append(index + 1)
+                                                
+                                        except Exception as e:
+                                            failed_templates.append(index + 1)
+                                            st.warning(f"Failed to process row {index + 1}: {e}")
+                                    
+                                    # Clear progress indicators
+                                    progress_bar.empty()
+                                    status_placeholder.empty()
                                 
-                                progress_bar.progress(1.0)
-                                status_text.text("Creating ZIP file...")
+                                zip_buffer.seek(0)
                                 
-                                if generated_files:
-                                    # Create ZIP file
-                                    zip_buffer = io.BytesIO()
-                                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                        for file_info in generated_files:
-                                            zip_file.write(file_info['path'], file_info['filename'])
+                                # Show results
+                                if successful_templates > 0:
+                                    st.success(f"🎉 Successfully generated {successful_templates} template files!")
                                     
-                                    zip_buffer.seek(0)
-                                    
-                                    # Show results
-                                    st.success(f"🎉 Successfully generated {len(generated_files)} templates!")
-                                    
-                                    # Statistics
+                                    # Show stats
                                     col1, col2, col3 = st.columns(3)
                                     with col1:
-                                        st.metric("Templates Generated", len(generated_files))
+                                        st.metric("Successful Templates", successful_templates)
                                     with col2:
-                                        total_fields = sum(f['filled_count'] for f in generated_files)
-                                        st.metric("Total Fields Filled", total_fields)
+                                        st.metric("Failed Templates", len(failed_templates))
                                     with col3:
-                                        total_images = sum(f['images_added'] for f in generated_files)
-                                        st.metric("Total Images Added", total_images)
+                                        st.metric("Success Rate", f"{(successful_templates/len(data_df)*100):.1f}%")
                                     
-                                    # Show file list
-                                    with st.expander("Generated Files", expanded=True):
-                                        files_df = pd.DataFrame([
-                                            {
-                                                'Row': f['row'],
-                                                'Filename': f['filename'],
-                                                'Part No': f['part_no'],
-                                                'Description': f['part_desc'],
-                                                'Fields': f['filled_count'],
-                                                'Images': f['images_added'],
-                                                'Procedures': f['procedure_steps_added']
-                                            }
-                                            for f in generated_files
-                                        ])
-                                        st.dataframe(files_df, use_container_width=True)
+                                    if failed_templates:
+                                        st.warning(f"⚠️ Failed to generate templates for rows: {', '.join(map(str, failed_templates))}")
                                     
-                                    # Show errors if any
-                                    if errors:
-                                        st.warning(f"⚠️ {len(errors)} errors occurred:")
-                                        for error in errors:
-                                            st.write(f"• {error}")
-                                    
-                                    # Download ZIP
+                                    # Download button for zip file
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     zip_filename = f"filled_templates_{timestamp}.zip"
                                     
                                     st.download_button(
-                                        label="📦 Download All Templates (ZIP)",
+                                        label=f"📥 Download All Templates ({successful_templates} files)",
                                         data=zip_buffer.getvalue(),
                                         file_name=zip_filename,
                                         mime="application/zip",
@@ -2030,19 +1872,11 @@ def show_main_app():
                                     )
                                     
                                 else:
-                                    st.error("❌ No templates were generated successfully")
-                                    if errors:
-                                        st.write("**Errors:**")
-                                        for error in errors:
-                                            st.write(f"• {error}")
-                                            
-                        except Exception as e:
-                            st.error(f"Critical error during template generation: {e}")
-                            st.exception(e)
-                        
-                        finally:
-                            progress_bar.empty()
-                            status_text.empty()
+                                    st.error("❌ Failed to generate any templates")
+                                    
+                            except Exception as e:
+                                st.error(f"Error generating templates: {e}")
+                                st.exception(e)
                 
                 else:
                     st.warning("No mapping results generated")
@@ -2075,25 +1909,23 @@ def show_main_app():
             - 🎯 Section-aware mapping
             - 🔄 Merged cell handling
             - 📏 Packaging-specific patterns
-            - 🚀 **Multi-row processing** (NEW!)
+            - 🗂️ **Multi-template generation (NEW!)**
             """)
             
         with col2:
             st.markdown("""
-            **File Generation:**
-            - 📁 Separate template per data row
-            - 🏷️ Smart filename generation
-            - 📦 ZIP download of all files
-            - 🖼️ Image processing per template
-            - 📋 Custom procedure steps per row
+            **Image Processing:**
+            - 🖼️ Auto image extraction from Excel data files
+            - 📍 Smart image placement in templates
+            - 🎨 Format conversion and optimization
+            - 📦 Packaging image area detection
             """)
         
         st.markdown("""
-        ### 📚 Multi-Row Processing
-        - **Individual Templates**: Creates separate Excel file for each data row
-        - **Smart Naming**: Files named as `{partno}_{description}_template.xlsx`
-        - **Bulk Download**: All templates packaged in a single ZIP file
-        - **Progress Tracking**: Real-time progress for large datasets
+        ### 📚 Supported Sections
+        - **Primary Packaging**: Internal packaging dimensions and specifications
+        - **Secondary Packaging**: Outer packaging details
+        - **Part Information**: Component specifications and measurements
         
         ### 🖼️ Image Processing
         - Images are automatically extracted from Excel data files
@@ -2105,7 +1937,13 @@ def show_main_app():
         - **11+ Predefined Procedures**: Complete packaging workflows for different product types
         - **Smart Substitution**: Automatically replaces placeholders with actual data values
         - **Preview Mode**: Review steps before adding to template
-        - **Per-Row Application**: Each template gets customized procedure steps
+        - **Integrated Workflow**: Seamlessly adds procedure steps to your filled templates
+        
+        ### 🗂️ Multi-Template Generation
+        - **Bulk Processing**: Generate separate template files for each data row
+        - **Smart Naming**: Files named as `partno_partdescription_template.xlsx`
+        - **Zip Download**: All templates packaged in a single ZIP file
+        - **Progress Tracking**: Real-time progress updates during generation
         """)
 
 # Main application logic
