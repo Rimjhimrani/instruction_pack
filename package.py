@@ -2529,3 +2529,16 @@ def generate_enhanced_filename(row, columns, index):
     except Exception as e:
         print(f"Error generating filename: {e}")
         return f"template_row_{index + 1}.xlsx"
+
+def main():
+    try:
+        if not st.session_state.authenticated:
+            show_login()
+        else:
+            show_main_app()
+    except Exception as e:
+        st.error(f"Application Error: {e}")
+        st.exception(e)
+
+if __name__ == "__main__":
+    main()
