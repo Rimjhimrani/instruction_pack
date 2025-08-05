@@ -1561,39 +1561,62 @@ def show_main_app():
     
     # Main content area
     if template_file and data_file:
-        try:
-            # Extract images from data file (only if it's Excel)
-            extracted_images = {}
-            if data_file.name.endswith(('.xlsx', '.xls')):
-                # Create temporary file for data file
+        extracted_images = {}
+
+        # ✅ 1. Save data file and try to extract images
+        if data_file.name.endswith(('.xlsx', '.xls')):
+            try:
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
                     tmp_data.write(data_file.getvalue())
                     data_path = tmp_data.name
-                
+
                 st.info("🔍 Extracting images from data file...")
-                with st.spinner("Extracting images from Excel file..."):
-                    extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
-                
-                # Clean up data file copy
+
+                try:
+                    with st.spinner("Extracting images from Excel file..."):
+                        # Store Excel path for image classification
+                        st.session_state.enhanced_mapper.image_extractor.current_excel_path = data_path
+
+                        extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
+                        st.success(f"✅ Extracted {len(extracted_images.get('all_sheets', {}))} images.")
+
+                except Exception as extract_err:
+                    st.error(f"❌ Error during image extraction: {extract_err}")
+                    st.code(traceback.format_exc())
+
+                # Clean up temp data file
                 try:
                     os.unlink(data_path)
-                except:
-                    pass
-            
-            # Read data file
+                except Exception as cleanup_err:
+                    print(f"⚠️ Could not delete temp file: {cleanup_err}")
+
+            except Exception as e:
+                st.error(f"❌ Unexpected error while saving data file: {e}")
+                st.code(traceback.format_exc())
+
+        # ✅ 2. Read data file into DataFrame
+        try:
             if data_file.name.endswith('.csv'):
                 data_df = pd.read_csv(data_file)
             else:
                 data_df = pd.read_excel(data_file)
-            
-            # Display data info
+
             st.info(f"📊 Data file contains {len(data_df)} rows of data")
-            
-            # Create temporary file for template
+
+        except Exception as read_err:
+            st.error(f"❌ Failed to read data file: {read_err}")
+            st.code(traceback.format_exc())
+            data_df = pd.DataFrame()
+
+        # ✅ 3. Save template file
+        try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
                 tmp_template.write(template_file.getvalue())
                 template_path = tmp_template.name
-            
+        except Exception as template_err:
+            st.error(f"❌ Failed to save template file: {template_err}")
+            st.code(traceback.format_exc())
+            template_path = None
             # Process template and find fields
             st.subheader("📋 Template Analysis")
             
