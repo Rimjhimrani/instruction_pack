@@ -238,9 +238,6 @@ class ImageExtractor:
 
     def _classify_image_type(self, sheet_name, position, index):
         """Classify image type based on position and index, not sheet name"""
-        # Ignore sheet name completely - classify based on image order/position
-        # First image = current, then cycle through primary, secondary, label
-        
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
         
         # Simple classification based on image index only
@@ -261,54 +258,117 @@ class ImageExtractor:
         return image_type
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with your original spacing but fixed logic"""
+        """Add uploaded images to template - COMPLETELY REWRITTEN FOR RELIABILITY"""
         try:
             added_images = 0
             temp_image_paths = []
-            used_images = set()
             
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Reset the global counter for each template
-            if not hasattr(self, '_global_image_counter'):
-                self._global_image_counter = 0
-            else:
-                self._global_image_counter = 0  # Reset for each new template
+            # Debug: Print all available images
+            for img_key, img_data in uploaded_images.items():
+                print(f"Available: {img_key} -> type: {img_data.get('type', 'unknown')}")
             
-            # Process images in order: current, primary, secondary, label
-            for image_type in ['current', 'primary', 'secondary', 'label']:
-                type_images = {
-                    k: v for k, v in uploaded_images.items()
-                    if v.get('type', '').lower() == image_type and k not in used_images
-                }
-                if not type_images:
-                    print(f"No {image_type} images found")
-                    continue
-                    
-                print(f"\n--- Processing {image_type} images ---")
-                print(f"Found {len(type_images)} images of type '{image_type}'")
-                
-                for idx, (img_key, img_data) in enumerate(type_images.items()):
-                    print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
-                    
-                    success = self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx,
-                        temp_image_paths, used_images
-                    )
-                    added_images += success
-                    
-            print(f"\n✅ Total images added: {added_images}")
+            # Process EACH image type separately and ensure they all get added
+            row_42_column_position = 1  # Start at column A for row 42
+            
+            # 1. CURRENT PACKAGING - Always goes to T3
+            current_images = [
+                (k, v) for k, v in uploaded_images.items() 
+                if v.get('type', '').lower() == 'current'
+            ]
+            print(f"\n--- CURRENT PACKAGING ({len(current_images)} images) ---")
+            for img_key, img_data in current_images:
+                success = self._place_image_at_position(
+                    worksheet, img_key, img_data, 'T3', 
+                    width_cm=8.3, height_cm=8.3, temp_image_paths
+                )
+                if success:
+                    added_images += 1
+                    print(f"✅ CURRENT placed at T3: {img_key}")
+                else:
+                    print(f"❌ CURRENT failed: {img_key}")
+            
+            # 2. PRIMARY PACKAGING - Goes to row 42, column A
+            primary_images = [
+                (k, v) for k, v in uploaded_images.items() 
+                if v.get('type', '').lower() == 'primary'
+            ]
+            print(f"\n--- PRIMARY PACKAGING ({len(primary_images)} images) ---")
+            for img_key, img_data in primary_images:
+                cell_pos = f"{get_column_letter(row_42_column_position)}42"
+                success = self._place_image_at_position(
+                    worksheet, img_key, img_data, cell_pos,
+                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                )
+                if success:
+                    added_images += 1
+                    print(f"✅ PRIMARY placed at {cell_pos}: {img_key}")
+                    # Move to next position for row 42 (your spacing calculation)
+                    image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns
+                    gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap  
+                    row_42_column_position += image_width_cols + gap_cols
+                else:
+                    print(f"❌ PRIMARY failed: {img_key}")
+            
+            # 3. SECONDARY PACKAGING - Goes to row 42, next position
+            secondary_images = [
+                (k, v) for k, v in uploaded_images.items() 
+                if v.get('type', '').lower() == 'secondary'
+            ]
+            print(f"\n--- SECONDARY PACKAGING ({len(secondary_images)} images) ---")
+            for img_key, img_data in secondary_images:
+                cell_pos = f"{get_column_letter(row_42_column_position)}42"
+                success = self._place_image_at_position(
+                    worksheet, img_key, img_data, cell_pos,
+                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                )
+                if success:
+                    added_images += 1
+                    print(f"✅ SECONDARY placed at {cell_pos}: {img_key}")
+                    # Move to next position for row 42
+                    image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns
+                    gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
+                    row_42_column_position += image_width_cols + gap_cols
+                else:
+                    print(f"❌ SECONDARY failed: {img_key}")
+            
+            # 4. LABEL - Goes to row 42, next position
+            label_images = [
+                (k, v) for k, v in uploaded_images.items() 
+                if v.get('type', '').lower() == 'label'
+            ]
+            print(f"\n--- LABEL ({len(label_images)} images) ---")
+            for img_key, img_data in label_images:
+                cell_pos = f"{get_column_letter(row_42_column_position)}42"
+                success = self._place_image_at_position(
+                    worksheet, img_key, img_data, cell_pos,
+                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                )
+                if success:
+                    added_images += 1
+                    print(f"✅ LABEL placed at {cell_pos}: {img_key}")
+                else:
+                    print(f"❌ LABEL failed: {img_key}")
+            
+            print(f"\n✅ TOTAL IMAGES ADDED: {added_images}")
+            print(f"📁 Temporary files created: {len(temp_image_paths)}")
+            
             return added_images, temp_image_paths
             
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
-            print(f"Error in add_images_to_template: {e}")
+            print(f"CRITICAL ERROR in add_images_to_template: {e}")
+            import traceback
+            traceback.print_exc()
             return 0, []
-                    
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, temp_image_paths, used_images):
-        """Place image using your original positioning logic but with fixes"""
+
+    def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
+        """Place a single image at the specified cell position"""
         try:
+            print(f"  Placing {img_key} at {cell_position} ({width_cm}x{height_cm}cm)")
+            
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
@@ -318,152 +378,37 @@ class ImageExtractor:
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
             
-            # Initialize cell_coord variable
-            cell_coord = None
+            # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
+            img.width = int(width_cm * 37.8)
+            img.height = int(height_cm * 37.8)
             
-            # YOUR ORIGINAL PLACEMENT LOGIC - KEPT EXACTLY THE SAME
-            if image_type == 'current':
-                # CURRENT PACKAGING: Always at row 3, column 20 (T3)
-                target_row = 3
-                target_col = 20
-                # Current images are larger (8.3cm x 8.3cm)
-                img.width = int(8.3 * 37.8)
-                img.height = int(8.3 * 37.8)
-                cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm) -> {cell_coord}")
-            else:
-                # 🟢 Sequential horizontal placement for other images on row 42 with proper spacing
-                target_row = 42  # Row 42 as per your requirement
+            # Set position using simple anchor
+            img.anchor = cell_position
             
-                # Use proper spacing calculations for row 42 (YOUR ORIGINAL LOGIC)
-                image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
-                gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
-                total_spacing = image_width_cols + gap_cols
-            
-                # Start at column 1 (A), then shift right for each non-current image
-                target_col = 1 + (self._global_image_counter * total_spacing)
-            
-                # Increment counter for next non-current image
-                self._global_image_counter += 1
-            
-                # Other images are smaller (4.3cm x 4.3cm)
-                img.width = int(4.3 * 37.8)
-                img.height = int(4.3 * 37.8)
-            
-                cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                print(f"📍 {image_type.upper()} IMAGE: Placing at row 42, position: {cell_coord}")
-                print(f"   Image key: {img_key}")
-                print(f"   Image type: {image_type}")
-                print(f"   Global counter: {self._global_image_counter}")
-                print(f"   Spacing calculation: width_cols={image_width_cols}, gap_cols={gap_cols}, total={total_spacing}")
-            
-            # Ensure cell_coord was set
-            if cell_coord is None:
-                raise ValueError(f"Could not determine cell coordinate for image type: {image_type}")
-            
-            # Set image position and add to worksheet
-            img.anchor = cell_coord
+            # Add image to worksheet
             worksheet.add_image(img)
-        
-            # Track temporary files and used images
+            
+            # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            used_images.add(img_key)
-            print(f"✅ Successfully added {image_type} image '{img_key}' at {cell_coord}")
-            return 1
+            
+            print(f"    ✅ Successfully placed {img_key} at {cell_position}")
+            return True
             
         except Exception as e:
-            print(f"❌ Could not add image {img_key}: {e}")
-            st.warning(f"Could not add image {img_key}: {e}")
-            return 0
+            print(f"    ❌ Failed to place {img_key} at {cell_position}: {e}")
+            return False
+                    
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, temp_image_paths, used_images):
+        """DEPRECATED - Use _place_image_at_position instead"""
+        pass
 
     def _create_additional_placement_area(self, area_type, index, existing_areas):
-        """Create additional placement area when no predefined area exists"""
-        # Define column positions for different image types
-        type_columns = {
-            'primary': 2,    # Column B
-            'secondary': 6,  # Column F
-            'current': 3,    # Column C (special case)
-            'label': 11      # Column K
-        }
-        
-        if area_type == 'current':
-            # Current images should go to a specific location
-            target_column = 3  # Column C
-            target_row = 6     # Row 6
-        else:
-            # Other images go to row 42 with spacing
-            target_column = type_columns.get(area_type, 2)
-            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
-        
-        # Create a virtual area for additional placement
-        return {
-            'position': f"{get_column_letter(target_column)}{target_row}",
-            'row': target_row,
-            'column': target_column,
-            'text': f"Additional {area_type}",
-            'type': area_type,
-            'header_text': area_type,
-            'matched_keyword': area_type,
-            'match_score': 1
-        }
+        """DEPRECATED - Not used in new fixed positioning logic"""
+        pass
 
     def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
-        """Place remaining images in available columns with proper spacing"""
-        try:
-            # Define column positions for different image types
-            type_columns = {
-                'primary': 2,    # Column B
-                'secondary': 6,  # Column F
-                'current': 3,    # Column C (special case)
-                'label': 11      # Column K
-            }
-            
-            if image_type == 'current':
-                # Current images should go to specific location
-                target_col = 3  # Column C
-                start_row = 6   # Row 6
-            else:
-                target_col = type_columns.get(image_type, 2)
-                start_row = 42  # Row 42
-            
-            for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
-                if image_type == 'current':
-                    target_row = start_row + (idx * 10)  # Vertical spacing for multiple current images
-                else:
-                    target_row = start_row + (idx * 12)  # Vertical spacing for other types
-                
-                try:
-                    # Create and place image
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                        image_bytes = base64.b64decode(img_data['data'])
-                        tmp_img.write(image_bytes)
-                        tmp_img_path = tmp_img.name
-                    
-                    img = OpenpyxlImage(tmp_img_path)
-                    
-                    # Set size based on image type
-                    if image_type == 'current':
-                        img.width = int(8.3 * 37.8)   # 8.3cm width for current
-                        img.height = int(8.3 * 37.8)  # 8.3cm height for current
-                    else:
-                        img.width = int(4.3 * 37.8)   # 4.3cm width for others
-                        img.height = int(4.3 * 37.8)  # 4.3cm height for others
-                    
-                    cell_coord = f"{get_column_letter(target_col)}{target_row}"
-                    img.anchor = cell_coord
-                    worksheet.add_image(img)
-                    
-                    temp_image_paths.append(tmp_img_path)
-                    used_images.add(img_key)
-                    
-                    print(f"✅ Placed remaining {image_type} image at {cell_coord}")
-                    
-                except Exception as e:
-                    print(f"❌ Error placing remaining image: {e}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Error in _place_remaining_images: {e}")
+        """DEPRECATED - Not used in new fixed positioning logic"""
+        pass
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
         """Reclassify extracted images based on new rules or manual assignment"""
