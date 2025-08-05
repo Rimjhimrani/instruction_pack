@@ -159,7 +159,7 @@ class ImageExtractor:
             return []
 
     def extract_images_from_excel(self, excel_file_path):
-        """Extract unique images from Excel file with improved type classification"""
+        """Extract unique images from Excel file with better type classification"""
         try:
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
@@ -216,12 +216,10 @@ class ImageExtractor:
                                 'sheet': sheet_name,
                                 'index': idx,
                                 'type': image_type,
-                                'hash': image_hash,
-                                'col': col,
-                                'row': row
+                                'hash': image_hash
                             }
 
-                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position} (col: {col})")
+                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position}")
                             
                         except Exception as e:
                             print(f"Error extracting image {idx} from {sheet_name}: {e}")
@@ -239,11 +237,13 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
-        """Classify image type based on position and index, ensuring all types are represented"""
+        """Classify image type based on position and index, not sheet name"""
+        # Ignore sheet name completely - classify based on image order/position
+        # First image = current, then cycle through primary, secondary, label
         
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
         
-        # Simple classification based on image index - ensuring all 4 types are covered
+        # Simple classification based on image index only
         if index == 0:
             image_type = 'current'  # First image is always current packaging
         elif index == 1:
@@ -253,7 +253,7 @@ class ImageExtractor:
         elif index == 3:
             image_type = 'label'  # Fourth image is label
         else:
-            # For additional images, cycle through types but prioritize missing ones
+            # For additional images, cycle through types
             type_cycle = ['primary', 'secondary', 'label']
             image_type = type_cycle[(index - 1) % len(type_cycle)]
         
@@ -261,7 +261,7 @@ class ImageExtractor:
         return image_type
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template with fixed positions"""
+        """Add uploaded images to template with your original spacing but fixed logic"""
         try:
             added_images = 0
             temp_image_paths = []
@@ -270,8 +270,11 @@ class ImageExtractor:
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
             
-            # Initialize counter for row 42 images (primary, secondary, label)
-            row_42_counter = 0
+            # Reset the global counter for each template
+            if not hasattr(self, '_global_image_counter'):
+                self._global_image_counter = 0
+            else:
+                self._global_image_counter = 0  # Reset for each new template
             
             # Process images in order: current, primary, secondary, label
             for image_type in ['current', 'primary', 'secondary', 'label']:
@@ -280,6 +283,7 @@ class ImageExtractor:
                     if v.get('type', '').lower() == image_type and k not in used_images
                 }
                 if not type_images:
+                    print(f"No {image_type} images found")
                     continue
                     
                 print(f"\n--- Processing {image_type} images ---")
@@ -288,14 +292,11 @@ class ImageExtractor:
                 for idx, (img_key, img_data) in enumerate(type_images.items()):
                     print(f"Processing image {idx + 1}/{len(type_images)}: {img_key}")
                     
-                    added_images += self._place_single_image(
-                        worksheet, img_key, img_data, image_type, idx, row_42_counter,
+                    success = self._place_single_image(
+                        worksheet, img_key, img_data, image_type, idx,
                         temp_image_paths, used_images
                     )
-                    
-                    # Increment row 42 counter for non-current images
-                    if image_type != 'current':
-                        row_42_counter += 1
+                    added_images += success
                     
             print(f"\n✅ Total images added: {added_images}")
             return added_images, temp_image_paths
@@ -304,24 +305,23 @@ class ImageExtractor:
             st.error(f"Error adding images to template: {e}")
             print(f"Error in add_images_to_template: {e}")
             return 0, []
-    
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, row_42_counter, temp_image_paths, used_images):
-        """Place image at fixed positions: current at row 2 col 20, others at row 42 with spacing"""
-        if not hasattr(self, '_global_image_counter'):
-            self._global_image_counter = 0
+                    
+    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, temp_image_paths, used_images):
+        """Place image using your original positioning logic but with fixes"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
+            
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
-        
+            
             # Initialize cell_coord variable
             cell_coord = None
-        
-            # FIXED PLACEMENT LOGIC - CORRECTED POSITIONING
+            
+            # YOUR ORIGINAL PLACEMENT LOGIC - KEPT EXACTLY THE SAME
             if image_type == 'current':
                 # CURRENT PACKAGING: Always at row 3, column 20 (T3)
                 target_row = 3
@@ -333,9 +333,9 @@ class ImageExtractor:
                 print(f"🎯 CURRENT IMAGE: Placing at row={target_row}, col={target_col} (8.3x8.3cm) -> {cell_coord}")
             else:
                 # 🟢 Sequential horizontal placement for other images on row 42 with proper spacing
-                target_row = 42  # Changed from 41 to 42 as per your requirement
+                target_row = 42  # Row 42 as per your requirement
             
-                # Use proper spacing calculations for row 42
+                # Use proper spacing calculations for row 42 (YOUR ORIGINAL LOGIC)
                 image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns for regular images
                 gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap
                 total_spacing = image_width_cols + gap_cols
@@ -375,6 +375,95 @@ class ImageExtractor:
             print(f"❌ Could not add image {img_key}: {e}")
             st.warning(f"Could not add image {img_key}: {e}")
             return 0
+
+    def _create_additional_placement_area(self, area_type, index, existing_areas):
+        """Create additional placement area when no predefined area exists"""
+        # Define column positions for different image types
+        type_columns = {
+            'primary': 2,    # Column B
+            'secondary': 6,  # Column F
+            'current': 3,    # Column C (special case)
+            'label': 11      # Column K
+        }
+        
+        if area_type == 'current':
+            # Current images should go to a specific location
+            target_column = 3  # Column C
+            target_row = 6     # Row 6
+        else:
+            # Other images go to row 42 with spacing
+            target_column = type_columns.get(area_type, 2)
+            target_row = 42 + (index * 12)  # Vertical spacing for multiple images of same type
+        
+        # Create a virtual area for additional placement
+        return {
+            'position': f"{get_column_letter(target_column)}{target_row}",
+            'row': target_row,
+            'column': target_column,
+            'text': f"Additional {area_type}",
+            'type': area_type,
+            'header_text': area_type,
+            'matched_keyword': area_type,
+            'match_score': 1
+        }
+
+    def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
+        """Place remaining images in available columns with proper spacing"""
+        try:
+            # Define column positions for different image types
+            type_columns = {
+                'primary': 2,    # Column B
+                'secondary': 6,  # Column F
+                'current': 3,    # Column C (special case)
+                'label': 11      # Column K
+            }
+            
+            if image_type == 'current':
+                # Current images should go to specific location
+                target_col = 3  # Column C
+                start_row = 6   # Row 6
+            else:
+                target_col = type_columns.get(image_type, 2)
+                start_row = 42  # Row 42
+            
+            for idx, (img_key, img_data) in enumerate(list(remaining_images.items())):
+                if image_type == 'current':
+                    target_row = start_row + (idx * 10)  # Vertical spacing for multiple current images
+                else:
+                    target_row = start_row + (idx * 12)  # Vertical spacing for other types
+                
+                try:
+                    # Create and place image
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                        image_bytes = base64.b64decode(img_data['data'])
+                        tmp_img.write(image_bytes)
+                        tmp_img_path = tmp_img.name
+                    
+                    img = OpenpyxlImage(tmp_img_path)
+                    
+                    # Set size based on image type
+                    if image_type == 'current':
+                        img.width = int(8.3 * 37.8)   # 8.3cm width for current
+                        img.height = int(8.3 * 37.8)  # 8.3cm height for current
+                    else:
+                        img.width = int(4.3 * 37.8)   # 4.3cm width for others
+                        img.height = int(4.3 * 37.8)  # 4.3cm height for others
+                    
+                    cell_coord = f"{get_column_letter(target_col)}{target_row}"
+                    img.anchor = cell_coord
+                    worksheet.add_image(img)
+                    
+                    temp_image_paths.append(tmp_img_path)
+                    used_images.add(img_key)
+                    
+                    print(f"✅ Placed remaining {image_type} image at {cell_coord}")
+                    
+                except Exception as e:
+                    print(f"❌ Error placing remaining image: {e}")
+                    continue
+                    
+        except Exception as e:
+            print(f"Error in _place_remaining_images: {e}")
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
         """Reclassify extracted images based on new rules or manual assignment"""
@@ -428,7 +517,7 @@ class ImageExtractor:
             print(f"Reclassified: {img_key} -> {new_key} (type: {new_type})")
         
         return {'all_sheets': reclassified_images}
-        
+    
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
         self.similarity_threshold = 0.3
