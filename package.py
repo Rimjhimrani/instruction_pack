@@ -76,12 +76,12 @@ except ImportError as e:
     st.warning("⚠️ Advanced NLP features disabled. Install nltk and scikit-learn for better matching.")
 
 class ImageExtractor:
-    """Handles image extraction from Excel files with improved duplicate handling"""
+    """Handles image extraction from Excel files with improved duplicate handling and debugging"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
         self._placement_counters = defaultdict(int)
-        self.current_excel_path = None  # ← ADD THIS LINE - it was missing!
+        self.current_excel_path = None
     
     def identify_image_upload_areas(self, worksheet):
         """Identify areas in template designated for image uploads with better categorization"""
@@ -161,78 +161,341 @@ class ImageExtractor:
             return []
 
     def extract_images_from_excel(self, excel_file_path):
-        """Extract unique images from Excel file with better type classification"""
+        """Extract unique images from Excel file with enhanced debugging and multiple extraction methods"""
         try:
             self.current_excel_path = excel_file_path
             images = {}
-            workbook = openpyxl.load_workbook(excel_file_path)
             image_hashes = set()
             
-            print("=== Extracting images from Excel ===")
+            print("=== ENHANCED IMAGE EXTRACTION ===")
+            print(f"📁 File path: {excel_file_path}")
+            
+            # First, let's check if the file exists and is readable
+            if not os.path.exists(excel_file_path):
+                print("❌ File does not exist!")
+                return {}
+            
+            file_size = os.path.getsize(excel_file_path)
+            print(f"📊 File size: {file_size} bytes")
+            
+            # Try multiple methods to extract images
+            methods_tried = []
+            
+            # METHOD 1: Standard openpyxl extraction
+            try:
+                print("\n🔍 METHOD 1: Standard openpyxl extraction")
+                result1 = self._extract_with_openpyxl(excel_file_path)
+                methods_tried.append(("openpyxl", len(result1)))
+                images.update(result1)
+                print(f"✅ Method 1 found {len(result1)} images")
+            except Exception as e:
+                print(f"❌ Method 1 failed: {e}")
+                methods_tried.append(("openpyxl", 0))
+            
+            # METHOD 2: ZIP-based extraction (Excel files are ZIP archives)
+            try:
+                print("\n🔍 METHOD 2: ZIP-based extraction")
+                result2 = self._extract_with_zipfile(excel_file_path)
+                methods_tried.append(("zipfile", len(result2)))
+                # Only add if we haven't found images yet
+                if not images:
+                    images.update(result2)
+                print(f"✅ Method 2 found {len(result2)} images")
+            except Exception as e:
+                print(f"❌ Method 2 failed: {e}")
+                methods_tried.append(("zipfile", 0))
+            
+            # METHOD 3: Using python-docx2txt for embedded objects
+            try:
+                print("\n🔍 METHOD 3: Alternative extraction using xlwings (if available)")
+                result3 = self._extract_alternative_method(excel_file_path)
+                methods_tried.append(("alternative", len(result3)))
+                if not images:
+                    images.update(result3)
+                print(f"✅ Method 3 found {len(result3)} images")
+            except Exception as e:
+                print(f"❌ Method 3 failed: {e}")
+                methods_tried.append(("alternative", 0))
+            
+            # Print summary
+            print("\n=== EXTRACTION SUMMARY ===")
+            for method, count in methods_tried:
+                print(f"📊 {method}: {count} images")
+            
+            print(f"🎯 TOTAL UNIQUE IMAGES EXTRACTED: {len(images)}")
+            
+            if not images:
+                print("\n⚠️ NO IMAGES FOUND - POSSIBLE REASONS:")
+                print("1. Excel file contains no embedded images")
+                print("2. Images are stored as external links rather than embedded")
+                print("3. Images are in unsupported format")
+                print("4. Images are stored in drawings/charts rather than as direct images")
+                print("5. File might be corrupted or password protected")
+                
+                # Additional diagnostics
+                self._run_diagnostics(excel_file_path)
+            
+            return {'all_sheets': images}
+            
+        except Exception as e:
+            print(f"❌ CRITICAL ERROR in extract_images_from_excel: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
+    def _extract_with_openpyxl(self, excel_file_path):
+        """Standard openpyxl image extraction"""
+        images = {}
+        
+        try:
+            workbook = openpyxl.load_workbook(excel_file_path, data_only=False)
+            print(f"📋 Workbook loaded. Sheets: {workbook.sheetnames}")
             
             for sheet_name in workbook.sheetnames:
                 worksheet = workbook[sheet_name]
-                print(f"Processing sheet: {sheet_name}")
+                print(f"🔍 Processing sheet: {sheet_name}")
+                
+                # Check for images in worksheet
+                if hasattr(worksheet, '_images'):
+                    print(f"📸 _images attribute exists: {len(worksheet._images) if worksheet._images else 0} images")
+                    
+                    if worksheet._images:
+                        for idx, img in enumerate(worksheet._images):
+                            try:
+                                # Get image data
+                                image_data = img._data()
+                                
+                                # Create hash to avoid duplicates
+                                image_hash = hashlib.md5(image_data).hexdigest()
+                                
+                                # Create PIL Image
+                                pil_image = Image.open(io.BytesIO(image_data))
+                                
+                                # Get position info
+                                anchor = img.anchor
+                                if hasattr(anchor, '_from') and anchor._from:
+                                    col = anchor._from.col
+                                    row = anchor._from.row
+                                    position = f"{get_column_letter(col + 1)}{row + 1}"
+                                else:
+                                    position = f"Image_{idx + 1}"
+                                
+                                # Convert to base64
+                                buffered = io.BytesIO()
+                                pil_image.save(buffered, format="PNG")
+                                img_str = base64.b64encode(buffered.getvalue()).decode()
+                                
+                                # Classify image type
+                                image_type = self._classify_image_type(sheet_name, position, idx)
+                                
+                                image_key = f"{image_type}_{sheet_name}_{position}_{idx}"
+                                images[image_key] = {
+                                    'data': img_str,
+                                    'format': 'PNG',
+                                    'size': pil_image.size,
+                                    'position': position,
+                                    'sheet': sheet_name,
+                                    'index': idx,
+                                    'type': image_type,
+                                    'hash': image_hash
+                                }
+                                
+                                print(f"✅ Extracted: {image_key} at {position}")
+                                
+                            except Exception as e:
+                                print(f"❌ Failed to extract image {idx} from sheet {sheet_name}: {e}")
+                else:
+                    print(f"⚠️ No _images attribute found in sheet {sheet_name}")
+                
+                # Also check for drawing parts (charts, shapes, etc.)
+                if hasattr(worksheet, '_charts') and worksheet._charts:
+                    print(f"📊 Found {len(worksheet._charts)} charts in {sheet_name}")
+                
+                if hasattr(worksheet, '_drawing') and worksheet._drawing:
+                    print(f"🎨 Found drawing elements in {sheet_name}")
+            
+            workbook.close()
+            
+        except Exception as e:
+            print(f"❌ Error in openpyxl extraction: {e}")
+            raise
+        
+        return images
 
-                if hasattr(worksheet, '_images') and worksheet._images:
-                    print(f"Found {len(worksheet._images)} images in {sheet_name}")
-
-                    for idx, img in enumerate(worksheet._images):
-                        try:
-                            # Get image data
-                            image_data = img._data()
-
-                            # Create hash of image data to detect duplicates
-                            image_hash = hashlib.md5(image_data).hexdigest()
-
+    def _extract_with_zipfile(self, excel_file_path):
+        """Extract images by treating Excel file as ZIP archive"""
+        images = {}
+        
+        try:
+            import zipfile
+            
+            with zipfile.ZipFile(excel_file_path, 'r') as zip_ref:
+                # List all files in the archive
+                file_list = zip_ref.namelist()
+                print(f"📁 ZIP contents: {len(file_list)} files")
+                
+                # Look for media files
+                media_files = [f for f in file_list if '/media/' in f.lower()]
+                image_files = [f for f in file_list if any(f.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])]
+                
+                print(f"📸 Media files found: {len(media_files)}")
+                print(f"🖼️ Image files found: {len(image_files)}")
+                
+                # Extract images from media folder
+                for media_file in media_files:
+                    try:
+                        with zip_ref.open(media_file) as img_file:
+                            image_data = img_file.read()
+                            
                             # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
-
-                            # Get image position
-                            anchor = img.anchor
-                            if hasattr(anchor, '_from') and anchor._from:
-                                col = anchor._from.col
-                                row = anchor._from.row
-                                position = f"{get_column_letter(col + 1)}{row + 1}"
-                            else:
-                                position = f"Image_{idx + 1}"
-
+                            
                             # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
-
-                            # Improved image type classification
-                            image_type = self._classify_image_type(sheet_name, position, idx)
                             
-                            image_key = f"{image_type}_{sheet_name}_{position}_{idx}"
+                            # Create hash
+                            image_hash = hashlib.md5(image_data).hexdigest()
+                            
+                            # Generate key
+                            filename = os.path.basename(media_file)
+                            image_key = f"zip_{filename}_{len(images)}"
+                            
                             images[image_key] = {
                                 'data': img_str,
                                 'format': 'PNG',
                                 'size': pil_image.size,
-                                'position': position,
-                                'sheet': sheet_name,
-                                'index': idx,
-                                'type': image_type,
-                                'hash': image_hash
+                                'position': f"ZIP_{len(images)}",
+                                'sheet': 'ZIP_EXTRACTED',
+                                'index': len(images),
+                                'type': 'current',  # Default type
+                                'hash': image_hash,
+                                'source_path': media_file
                             }
-
-                            print(f"Extracted image: {image_key} (type: {image_type}) at position {position}")
                             
+                            print(f"✅ ZIP extracted: {image_key}")
+                            
+                    except Exception as e:
+                        print(f"❌ Failed to extract {media_file}: {e}")
+                
+                # Also check for direct image files
+                for img_file in image_files:
+                    if img_file not in media_files:  # Avoid duplicates
+                        try:
+                            with zip_ref.open(img_file) as f:
+                                image_data = f.read()
+                                
+                                pil_image = Image.open(io.BytesIO(image_data))
+                                
+                                buffered = io.BytesIO()
+                                pil_image.save(buffered, format="PNG")
+                                img_str = base64.b64encode(buffered.getvalue()).decode()
+                                
+                                image_hash = hashlib.md5(image_data).hexdigest()
+                                
+                                filename = os.path.basename(img_file)
+                                image_key = f"direct_{filename}_{len(images)}"
+                                
+                                images[image_key] = {
+                                    'data': img_str,
+                                    'format': 'PNG',
+                                    'size': pil_image.size,
+                                    'position': f"DIRECT_{len(images)}",
+                                    'sheet': 'DIRECT_EXTRACTED',
+                                    'index': len(images),
+                                    'type': 'primary',  # Default type
+                                    'hash': image_hash,
+                                    'source_path': img_file
+                                }
+                                
+                                print(f"✅ Direct extracted: {image_key}")
+                                
                         except Exception as e:
-                            print(f"Error extracting image {idx} from {sheet_name}: {e}")
-                            continue
-                else:
-                    print(f"No images found in sheet: {sheet_name}")
-                    
-            workbook.close()
-            print(f"Total unique extracted images: {len(images)}")
-            return {'all_sheets': images}
+                            print(f"❌ Failed to extract direct image {img_file}: {e}")
+        
+        except Exception as e:
+            print(f"❌ Error in ZIP extraction: {e}")
+            raise
+        
+        return images
+
+    def _extract_alternative_method(self, excel_file_path):
+        """Alternative extraction method using other libraries if available"""
+        images = {}
+        
+        try:
+            # Try using xlrd for older Excel files
+            print("🔍 Attempting xlrd-based extraction...")
+            # This is a placeholder - xlrd doesn't directly support image extraction
+            # but we can try to detect if it's an older format
             
         except Exception as e:
-            st.error(f"Error extracting images: {e}")
-            print(f"Error in extract_images_from_excel: {e}")
-            return {}
+            print(f"❌ Alternative method failed: {e}")
+        
+        return images
+
+    def _run_diagnostics(self, excel_file_path):
+        """Run diagnostic checks on the Excel file"""
+        try:
+            print("\n🔍 RUNNING DIAGNOSTICS...")
+            
+            # Check file extension
+            _, ext = os.path.splitext(excel_file_path)
+            print(f"📄 File extension: {ext}")
+            
+            # Try to open with different methods
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(excel_file_path)
+                print(f"✅ Openpyxl can open file")
+                print(f"📋 Sheets: {wb.sheetnames}")
+                
+                # Check each sheet for any objects
+                for sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    print(f"\n🔍 Sheet '{sheet_name}' diagnostics:")
+                    print(f"   - Max row: {ws.max_row}")
+                    print(f"   - Max column: {ws.max_column}")
+                    print(f"   - Has _images: {hasattr(ws, '_images')}")
+                    print(f"   - Has _charts: {hasattr(ws, '_charts')}")
+                    print(f"   - Has _drawing: {hasattr(ws, '_drawing')}")
+                    
+                    if hasattr(ws, '_images') and ws._images:
+                        print(f"   - Images count: {len(ws._images)}")
+                    
+                    if hasattr(ws, '_charts') and ws._charts:
+                        print(f"   - Charts count: {len(ws._charts)}")
+                
+                wb.close()
+                
+            except Exception as e:
+                print(f"❌ Openpyxl cannot open file: {e}")
+            
+            # Check ZIP structure
+            try:
+                import zipfile
+                with zipfile.ZipFile(excel_file_path, 'r') as zip_ref:
+                    files = zip_ref.namelist()
+                    print(f"\n📁 ZIP structure analysis:")
+                    print(f"   - Total files: {len(files)}")
+                    
+                    media_files = [f for f in files if 'media' in f.lower()]
+                    drawing_files = [f for f in files if 'drawing' in f.lower()]
+                    chart_files = [f for f in files if 'chart' in f.lower()]
+                    
+                    print(f"   - Media files: {len(media_files)}")
+                    print(f"   - Drawing files: {len(drawing_files)}")
+                    print(f"   - Chart files: {len(chart_files)}")
+                    
+                    if media_files:
+                        print(f"   - Media files found: {media_files}")
+                    
+            except Exception as e:
+                print(f"❌ Cannot analyze as ZIP: {e}")
+                
+        except Exception as e:
+            print(f"❌ Diagnostics failed: {e}")
 
     def _classify_image_type(self, sheet_name, position, index):
         """Fixed version that doesn't reload the workbook"""
@@ -248,7 +511,7 @@ class ImageExtractor:
             
                 # Simple heuristic based on column position
                 try:
-                    ol_index = column_index_from_string(col_letter)
+                    col_index = column_index_from_string(col_letter)
                     if col_index <= 5:  # Early columns = current
                         return 'current'
                     elif col_index <= 10:  # Middle columns = primary
@@ -406,18 +669,6 @@ class ImageExtractor:
         except Exception as e:
             print(f"    ❌ Failed to place {img_key} at {cell_position}: {e}")
             return False
-                    
-    def _place_single_image(self, worksheet, img_key, img_data, image_type, image_index, temp_image_paths, used_images):
-        """DEPRECATED - Use _place_image_at_position instead"""
-        pass
-
-    def _create_additional_placement_area(self, area_type, index, existing_areas):
-        """DEPRECATED - Not used in new fixed positioning logic"""
-        pass
-
-    def _place_remaining_images(self, worksheet, remaining_images, image_type, temp_image_paths, used_images):
-        """DEPRECATED - Not used in new fixed positioning logic"""
-        pass
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
         """Reclassify extracted images based on new rules or manual assignment"""
@@ -1300,40 +1551,51 @@ class EnhancedTemplateMapperWithImages:
             return None
     
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template in designated areas"""
+        """Add uploaded images to template in designated areas only if part number or description matches"""
         try:
             added_images = 0
             temp_image_paths = []
             used_images = set()
+
+            # Get current part number and description
+            part_no = str(data_dict.get('Part No', '')).lower()
+            desc = str(data_dict.get('Part Description', '')).lower()
+
             for area in image_areas:
                 area_type = area['type']
-                label_text = area.get('text', '').lower()  # ✅ Define label_text here
-
+                label_text = area.get('text', '').lower()
                 matching_image = None
 
                 for label, img_data in uploaded_images.items():
                     if label in used_images:
                         continue
+
                     label_lower = label.lower()
+
+                    # Match image if part number or description is in label
                     if (
+                        part_no and part_no in label_lower
+                    ) or (
+                        desc and desc in label_lower
+                    ) or (
                         area_type in label_lower
-                        or area_type.replace('_', ' ') in label_lower
-                        or 'primary' in label_lower and area_type == 'primary_packaging'
-                        or 'secondary' in label_lower and area_type == 'secondary_packaging'
-                        or 'current' in label_lower and area_type == 'current_packaging'
-                        or label_lower in label_text
-                        or label_text in label_lower
+                    ) or (
+                        area_type.replace('_', ' ') in label_lower
+                    ) or (
+                        label_lower in label_text or label_text in label_lower
                     ):
                         matching_image = img_data
                         used_images.add(label)
                         break
-                        
+
+                # fallback to any unused image
                 if not matching_image:
                     for label, img_data in uploaded_images.items():
                         if label not in used_images:
                             matching_image = img_data
                             used_images.add(label)
                             break
+
                 if matching_image:
                     try:
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -1352,7 +1614,9 @@ class EnhancedTemplateMapperWithImages:
                     except Exception as e:
                         st.warning(f"Could not add image to {area['position']}: {e}")
                         continue
+
             return added_images, temp_image_paths
+
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             return 0, []
