@@ -20,6 +20,7 @@ from collections import defaultdict
 import zipfile
 from PIL import Image
 import base64
+import traceback
 
 # Configure Streamlit page
 st.set_page_config(
@@ -233,18 +234,16 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
-        """Classify image type based on column header above image."""
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
         try:
             col_letter = re.sub(r'\d+', '', position)
             col_index = column_index_from_string(col_letter)
             row_number = int(re.sub(r'\D+', '', position))
 
-            # Load workbook and worksheet again
-            workbook = openpyxl.load_workbook(self.current_excel_path)
+            # Load the Excel file path
+            workbook = openpyxl.load_workbook(self.current_excel_path)  # ← This could be the issue
             worksheet = workbook[sheet_name]
 
-            # Search 1–3 rows above the image for a header
             header_text = ""
             for r in range(row_number - 1, max(0, row_number - 4), -1):
                 cell = worksheet.cell(row=r, column=col_index)
@@ -252,7 +251,6 @@ class ImageExtractor:
                     header_text = str(cell.value).strip().lower()
                     break
 
-            # Define keywords per image type
             image_keywords = {
                 'primary': ['primary packaging', 'primary'],
                 'secondary': ['secondary packaging', 'secondary'],
@@ -260,21 +258,20 @@ class ImageExtractor:
                 'label': ['label', 'labels', 'product label']
             }
 
-            # Try matching the header to known image types
             for image_type, keywords in image_keywords.items():
                 for keyword in keywords:
                     if keyword in header_text:
                         print(f"-> Header matched: '{header_text}' → {image_type}")
                         return image_type
 
-            # Fallback to index-based classification if no header matched
             fallback_types = ['current', 'primary', 'secondary', 'label']
-            image_type = fallback_types[index % len(fallback_types)]
-            print(f"-> No header match found. Fallback to index-based: {image_type}")
-            return image_type
+            fallback_type = fallback_types[index % len(fallback_types)]
+            print(f"-> No header match found. Fallback to: {fallback_type}")
+            return fallback_type
 
         except Exception as e:
-            print(f"Error in _classify_image_type: {e}")
+            print(f"❌ Error in _classify_image_type: {e}")
+            traceback.print_exc()
             return 'unknown'
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
@@ -380,7 +377,6 @@ class ImageExtractor:
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"CRITICAL ERROR in add_images_to_template: {e}")
-            import traceback
             traceback.print_exc()
             return 0, []
 
@@ -967,7 +963,6 @@ class EnhancedTemplateMapperWithImages:
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font, Alignment
-            import traceback
 
             print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
 
@@ -1037,7 +1032,6 @@ class EnhancedTemplateMapperWithImages:
 
         except Exception as e:
             print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
-            import traceback
             traceback.print_exc()
             return 0
             
@@ -1677,6 +1671,24 @@ def show_main_app():
                     ])
                     
                     st.dataframe(mapping_df, use_container_width=True)
+
+                    # ✅ Optional debug: add test image extraction button here
+                    st.subheader("🧪 Debug: Test Image Extraction")
+                    if st.button("Test Image Extraction"):
+                        try:
+                            # Save uploaded file to a temporary path
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                                tmp.write(data_file.getvalue())
+                                tmp_path = tmp.name
+                                
+                                # Use extractor
+                                extractor = ImageExtractor()
+                                result = extractor.extract_images_from_excel(tmp_path)
+                                st.success("✅ Image extraction succeeded.")
+                                st.write(result)
+
+                        except Exception as e:
+                            st.error(f"❌ Image extraction failed: {e}")
                     
                     # ✨ ENHANCED PACKAGING PROCEDURE SECTION
                     st.subheader("📋 Packaging Procedure Configuration")
