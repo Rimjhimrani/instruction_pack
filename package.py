@@ -261,7 +261,7 @@ class ImageExtractor:
                     pass
         
             print(f"-> Using fallback classification: {fallback_type}")
-                  return fallback_type
+            return fallback_type
 
         except Exception as e:
             print(f"❌ Error in _classify_image_type: {e}")
