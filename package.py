@@ -2441,9 +2441,9 @@ def filter_images_for_row(extracted_images, row, columns):
                 should_include = True
                 print(f"✅ Including image {img_key}")
                 if should_include:
-                filtered_images[img_key] = img_data
+                    filtered_images[img_key] = img_data
 
-        return {'all_sheets': filtered_images}
+            return {'all_sheets': filtered_images}
 
     except Exception as e:
         st.error(f"Error filtering images for current row: {e}")
