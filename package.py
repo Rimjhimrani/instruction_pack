@@ -161,6 +161,7 @@ class ImageExtractor:
     def extract_images_from_excel(self, excel_file_path):
         """Extract unique images from Excel file with better type classification"""
         try:
+            self.current_excel_path = excel_file_path
             images = {}
             workbook = openpyxl.load_workbook(excel_file_path)
             image_hashes = set()
@@ -181,11 +182,6 @@ class ImageExtractor:
 
                             # Create hash of image data to detect duplicates
                             image_hash = hashlib.md5(image_data).hexdigest()
-
-                            if image_hash in image_hashes:
-                                print(f"Skipping duplicate image in {sheet_name}")
-                                continue
-                            image_hashes.add(image_hash)
 
                             # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
@@ -237,25 +233,49 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, sheet_name, position, index):
-        """Classify image type based on position and index, not sheet name"""
+        """Classify image type based on column header above image."""
         print(f"Classifying image {index} from sheet '{sheet_name}' at position '{position}'")
-        
-        # Simple classification based on image index only
-        if index == 0:
-            image_type = 'current'  # First image is always current packaging
-        elif index == 1:
-            image_type = 'primary'  # Second image is primary
-        elif index == 2:
-            image_type = 'secondary'  # Third image is secondary
-        elif index == 3:
-            image_type = 'label'  # Fourth image is label
-        else:
-            # For additional images, cycle through types
-            type_cycle = ['primary', 'secondary', 'label']
-            image_type = type_cycle[(index - 1) % len(type_cycle)]
-        
-        print(f"-> Classified as: {image_type}")
-        return image_type
+        try:
+            col_letter = re.sub(r'\d+', '', position)
+            col_index = column_index_from_string(col_letter)
+            row_number = int(re.sub(r'\D+', '', position))
+
+            # Load workbook and worksheet again
+            workbook = openpyxl.load_workbook(self.current_excel_path)
+            worksheet = workbook[sheet_name]
+
+            # Search 1–3 rows above the image for a header
+            header_text = ""
+            for r in range(row_number - 1, max(0, row_number - 4), -1):
+                cell = worksheet.cell(row=r, column=col_index)
+                if cell.value:
+                    header_text = str(cell.value).strip().lower()
+                    break
+
+            # Define keywords per image type
+            image_keywords = {
+                'primary': ['primary packaging', 'primary'],
+                'secondary': ['secondary packaging', 'secondary'],
+                'current': ['current packaging', 'current'],
+                'label': ['label', 'labels', 'product label']
+            }
+
+            # Try matching the header to known image types
+            for image_type, keywords in image_keywords.items():
+                for keyword in keywords:
+                    if keyword in header_text:
+                        print(f"-> Header matched: '{header_text}' → {image_type}")
+                        return image_type
+
+            # Fallback to index-based classification if no header matched
+            fallback_types = ['current', 'primary', 'secondary', 'label']
+            image_type = fallback_types[index % len(fallback_types)]
+            print(f"-> No header match found. Fallback to index-based: {image_type}")
+            return image_type
+
+        except Exception as e:
+            print(f"Error in _classify_image_type: {e}")
+            return 'unknown'
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
         """Add uploaded images to template - COMPLETELY REWRITTEN FOR RELIABILITY"""
