@@ -262,17 +262,17 @@ class ImageExtractor:
         try:
             added_images = 0
             temp_image_paths = []
-            
+        
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
-            
+        
             # Debug: Print all available images
             for img_key, img_data in uploaded_images.items():
                 print(f"Available: {img_key} -> type: {img_data.get('type', 'unknown')}")
-            
+        
             # Process EACH image type separately and ensure they all get added
             row_42_column_position = 1  # Start at column A for row 42
-            
+
             # 1. CURRENT PACKAGING - Always goes to T3
             current_images = [
                 (k, v) for k, v in uploaded_images.items() 
@@ -282,14 +282,14 @@ class ImageExtractor:
             for img_key, img_data in current_images:
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, 'T3', 
-                    width_cm=8.3, height_cm=8.3, temp_image_paths
+                    width_cm=8.3, height_cm=8.3, temp_image_paths=temp_image_paths
                 )
                 if success:
                     added_images += 1
                     print(f"✅ CURRENT placed at T3: {img_key}")
                 else:
                     print(f"❌ CURRENT failed: {img_key}")
-            
+
             # 2. PRIMARY PACKAGING - Goes to row 42, column A
             primary_images = [
                 (k, v) for k, v in uploaded_images.items() 
@@ -300,7 +300,7 @@ class ImageExtractor:
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
-                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                    width_cm=4.3, height_cm=4.3, temp_image_paths=temp_image_paths
                 )
                 if success:
                     added_images += 1
@@ -311,7 +311,7 @@ class ImageExtractor:
                     row_42_column_position += image_width_cols + gap_cols
                 else:
                     print(f"❌ PRIMARY failed: {img_key}")
-            
+
             # 3. SECONDARY PACKAGING - Goes to row 42, next position
             secondary_images = [
                 (k, v) for k, v in uploaded_images.items() 
@@ -322,7 +322,7 @@ class ImageExtractor:
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
-                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                    width_cm=4.3, height_cm=4.3, temp_image_paths=temp_image_paths
                 )
                 if success:
                     added_images += 1
@@ -333,7 +333,7 @@ class ImageExtractor:
                     row_42_column_position += image_width_cols + gap_cols
                 else:
                     print(f"❌ SECONDARY failed: {img_key}")
-            
+
             # 4. LABEL - Goes to row 42, next position
             label_images = [
                 (k, v) for k, v in uploaded_images.items() 
@@ -344,19 +344,19 @@ class ImageExtractor:
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
-                    width_cm=4.3, height_cm=4.3, temp_image_paths
+                    width_cm=4.3, height_cm=4.3, temp_image_paths=temp_image_paths
                 )
                 if success:
                     added_images += 1
                     print(f"✅ LABEL placed at {cell_pos}: {img_key}")
                 else:
                     print(f"❌ LABEL failed: {img_key}")
-            
+
             print(f"\n✅ TOTAL IMAGES ADDED: {added_images}")
             print(f"📁 Temporary files created: {len(temp_image_paths)}")
-            
+        
             return added_images, temp_image_paths
-            
+
         except Exception as e:
             st.error(f"Error adding images to template: {e}")
             print(f"CRITICAL ERROR in add_images_to_template: {e}")
