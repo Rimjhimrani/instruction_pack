@@ -1946,6 +1946,8 @@ def generate_single_template(enhanced_mapper, template_path, mapping_results, si
 
 def show_main_app():
     """Main application interface - ENHANCED DEBUGGING VERSION"""
+    if 'enhanced_mapper' not in st.session_state:
+        st.session_state.enhanced_mapper = EnhancedExcelMapper()
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
     # Header with user info
