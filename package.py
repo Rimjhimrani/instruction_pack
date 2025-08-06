@@ -1658,7 +1658,8 @@ class EnhancedTemplateMapperWithImages:
         print("🛠️ Entered fill_template_with_data_and_images()")
         print(f"📂 Template file: {template_file}")
         print(f"📊 DataFrame shape: {data_df.shape}")
-        print(f"🧩 Number of mappings: {len(mapping_results) if mapping_results else 0}")
+        print(f"🧩 Mapping results type: {type(mapping_results)}")
+        print(f"🧩 Mapping results content: {str(mapping_results)[:500]}...")  # Show first 500 chars
         print(f"🖼️ Uploaded images: {list(uploaded_images.keys()) if uploaded_images else 'None'}")
         print(f"📦 Packaging type: {packaging_type}")
 
@@ -1677,27 +1678,72 @@ class EnhancedTemplateMapperWithImages:
             procedure_steps_added = 0
             temp_image_paths = []
 
-            # ✅ Fill mapped fields
+            # ✅ Fill mapped fields with proper type checking
             if mapping_results:
-                for mapping in mapping_results:
-                    field_name = mapping.get('template_field')
-                    column = mapping.get('data_column')
+                print(f"🔍 Processing mapping_results of type: {type(mapping_results)}")
+            
+                # Handle different formats of mapping_results
+                mappings_to_process = []
+            
+                if isinstance(mapping_results, str):
+                    print("⚠️ mapping_results is a string, cannot process mappings")
+                    print(f"String content: {mapping_results[:200]}...")  # Show first 200 chars
+                elif isinstance(mapping_results, dict):
+                    print("📋 mapping_results is a dictionary")
+                    # If it's a dict, convert values to list or handle as single mapping
+                    if 'template_field' in mapping_results and 'data_column' in mapping_results:
+                        mappings_to_process = [mapping_results]
+                    else:
+                        mappings_to_process = list(mapping_results.values()) if mapping_results.values() else []
+                elif isinstance(mapping_results, (list, tuple)):
+                    print("📋 mapping_results is a list/tuple")
+                    mappings_to_process = mapping_results
+                else:
+                    print(f"⚠️ Unexpected mapping_results type: {type(mapping_results)}")
+            
+                print(f"📊 Processing {len(mappings_to_process)} mappings")
+            
+                for i, mapping in enumerate(mappings_to_process):
+                    try:
+                        print(f"🔍 Processing mapping {i+1}: {type(mapping)}")
+                    
+                        # Handle different mapping formats
+                        if isinstance(mapping, dict):
+                            field_name = mapping.get('template_field')
+                            column = mapping.get('data_column')
+                        elif isinstance(mapping, (list, tuple)) and len(mapping) >= 2:
+                            field_name = mapping[0]
+                            column = mapping[1]
+                        else:
+                            print(f"⚠️ Skipping invalid mapping format: {mapping}")
+                            continue
 
-                    if column and field_name and column in data_df.columns:
-                        try:
-                            value = data_df.iloc[0][column]
-                            print(f"✍️ Writing value '{value}' to field '{field_name}'")
-                        
-                            # Search and replace in all worksheets
-                            for sheet in workbook.worksheets:
-                                for row in sheet.iter_rows():
-                                    for cell in row:
-                                        if cell.value == field_name:
-                                            cell.value = value
-                                            filled_count += 1
+                        if column and field_name and column in data_df.columns:
+                            try:
+                                value = data_df.iloc[0][column]
+                                print(f"✍️ Writing value '{value}' to field '{field_name}'")
+                            
+                                # Search and replace in all worksheets
+                                for sheet in workbook.worksheets:
+                                    for row in sheet.iter_rows():
+                                        for cell in row:
+                                            if cell.value == field_name:
+                                                cell.value = value
+                                                filled_count += 1
                                             print(f"✅ Filled {field_name} with {value} at {cell.coordinate}")
-                        except Exception as e:
-                            print(f"⚠️ Failed to fill field '{field_name}': {e}")
+                            except Exception as e:
+                                print(f"⚠️ Failed to fill field '{field_name}': {e}")
+                        else:
+                            if not column:
+                                print(f"⚠️ No column specified for field '{field_name}'")
+                            elif not field_name:
+                                print(f"⚠️ No field name specified for column '{column}'")
+                            elif column not in data_df.columns:
+                                print(f"⚠️ Column '{column}' not found in data. Available: {list(data_df.columns)}")
+                            
+                    except Exception as mapping_error:
+                        print(f"❌ Error processing mapping {i+1}: {mapping_error}")
+                        continue
 
             # ✅ Add procedure steps
             try:
@@ -1821,6 +1867,7 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
+
 def generate_single_template(enhanced_mapper, template_path, mapping_results, single_row_df, images_to_use, debug_mode=False):
     """
     Generate a single template with proper error handling and return format
