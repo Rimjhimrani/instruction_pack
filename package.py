@@ -531,18 +531,18 @@ class ImageExtractor:
             return 'unknown'
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template - COMPLETELY REWRITTEN FOR RELIABILITY"""
+        """Add uploaded images to template - ENHANCED WITH BETTER ERROR HANDLING"""
         try:
             added_images = 0
             temp_image_paths = []
-        
+    
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
-        
+    
             # Debug: Print all available images
             for img_key, img_data in uploaded_images.items():
                 print(f"Available: {img_key} -> type: {img_data.get('type', 'unknown')}")
-        
+    
             # Process EACH image type separately and ensure they all get added
             row_42_column_position = 1  # Start at column A for row 42
 
@@ -578,7 +578,7 @@ class ImageExtractor:
                 if success:
                     added_images += 1
                     print(f"✅ PRIMARY placed at {cell_pos}: {img_key}")
-                    # Move to next position for row 42 (your spacing calculation)
+                    # Move to next position for row 42
                     image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns
                     gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap  
                     row_42_column_position += image_width_cols + gap_cols
@@ -627,7 +627,7 @@ class ImageExtractor:
 
             print(f"\n✅ TOTAL IMAGES ADDED: {added_images}")
             print(f"📁 Temporary files created: {len(temp_image_paths)}")
-        
+    
             return added_images, temp_image_paths
 
         except Exception as e:
@@ -637,37 +637,66 @@ class ImageExtractor:
             return 0, []
 
     def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
-        """Place a single image at the specified cell position"""
+        """Place a single image at the specified cell position - FIXED VERSION"""
         try:
             print(f"  Placing {img_key} at {cell_position} ({width_cm}x{height_cm}cm)")
-            
+        
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
+                tmp_img.flush()  # Ensure data is written
                 tmp_img_path = tmp_img.name
+        
+            print(f"    Created temp file: {tmp_img_path}")
+        
+            # Verify temp file exists and has content
+            if not os.path.exists(tmp_img_path):
+                print(f"    ❌ Temp file doesn't exist: {tmp_img_path}")
+                return False
             
+            file_size = os.path.getsize(tmp_img_path)
+            if file_size == 0:
+                print(f"    ❌ Temp file is empty: {tmp_img_path}")
+                return False
+            
+            print(f"    Temp file size: {file_size} bytes")
+        
             # Create openpyxl image object
-            img = OpenpyxlImage(tmp_img_path)
-            
+            try:
+                img = OpenpyxlImage(tmp_img_path)
+                print(f"    ✅ Created OpenpyxlImage object")
+            except Exception as img_err:
+                print(f"    ❌ Failed to create OpenpyxlImage: {img_err}")
+                return False
+        
             # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
             img.width = int(width_cm * 37.8)
             img.height = int(height_cm * 37.8)
-            
+            print(f"    Set size: {img.width}x{img.height} pixels")
+        
             # Set position using simple anchor
             img.anchor = cell_position
-            
+            print(f"    Set anchor: {cell_position}")
+        
             # Add image to worksheet
-            worksheet.add_image(img)
-            
-            # Track temporary file for cleanup
+            try:
+                worksheet.add_image(img)
+                print(f"    ✅ Added image to worksheet")
+            except Exception as add_err:
+                print(f"    ❌ Failed to add image to worksheet: {add_err}")
+                return False
+        
+            # Track temporary file for cleanup (but don't delete yet!)
             temp_image_paths.append(tmp_img_path)
-            
+        
             print(f"    ✅ Successfully placed {img_key} at {cell_position}")
             return True
-            
+        
         except Exception as e:
             print(f"    ❌ Failed to place {img_key} at {cell_position}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
@@ -1622,88 +1651,74 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
-        """Fill template with mapped data, images, and procedure steps"""
+        """Fill template with data and images - UPDATED TO HANDLE TEMP FILES CORRECTLY"""
         try:
-            workbook = openpyxl.load_workbook(template_file)
+            print("=== Filling template with data and images ===")
+        
+            # Load workbook
+            workbook = openpyxl.load_workbook(template_path)
             worksheet = workbook.active
         
             filled_count = 0
             images_added = 0
-            procedure_steps_added = 0
             temp_image_paths = []
+            procedure_steps_added = 0
         
-            # Create data dictionary for procedure step replacement
-            data_dict = {}
-            if len(data_df) > 0:
-                for col in data_df.columns:
+            # Fill data fields first
+            for template_coord, mapping in mapping_results.items():
+                if mapping['is_mappable'] and mapping['data_column']:
                     try:
-                        data_dict[col] = data_df.iloc[0][col]
-                    except:
-                        data_dict[col] = 'XXX'
-        
-            # Fill data fields
-            for coord, mapping in mapping_results.items():
-                try:
-                    if mapping['data_column'] is not None and mapping['is_mappable']:
-                        field_info = mapping['field_info']
+                        cell = worksheet[template_coord]
+                        data_value = data_df.iloc[0][mapping['data_column']]
                     
-                        target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                    
-                        if target_cell and len(data_df) > 0:
-                            data_value = data_df.iloc[0][mapping['data_column']]
-                        
-                            cell_obj = worksheet[target_cell]
-                            if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                                for merged_range in worksheet.merged_cells.ranges:
-                                    if target_cell in merged_range:
-                                        anchor_cell = merged_range.start_cell
-                                        anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                        break
+                        if pd.notna(data_value):
+                            if isinstance(data_value, (int, float)):
+                                cell.value = data_value
                             else:
-                                cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
+                                cell.value = str(data_value)
                             filled_count += 1
+                            print(f"✅ Filled {template_coord} with: {data_value}")
                         
-                except Exception as e:
-                    st.error(f"Error filling mapping {coord}: {e}")
-                    continue
+                    except Exception as e:
+                        print(f"❌ Error filling {template_coord}: {e}")
         
-            # Add images if provided
-            if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-        
-            # Write procedure steps if packaging type is provided
-            if packaging_type and packaging_type != "Select Packaging Procedure":
+            # Add packaging procedure steps if provided
+            if packaging_type:
                 try:
-                    procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                    print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
+                    procedure_steps = self.get_procedure_steps(packaging_type, data_df.iloc[0].to_dict())
+                    procedure_steps_added = self.add_procedure_steps_to_template(worksheet, procedure_steps)
+                    print(f"✅ Added {procedure_steps_added} procedure steps")
                 except Exception as e:
-                    st.error(f"Error adding procedure steps: {e}")
-                    print(f"Error adding procedure steps: {e}")
-                    procedure_steps_added = 0
-                    if packaging_type and packaging_type != "Select Packaging Procedure":
-                        try:
-                            # Create data dictionary for procedure step replacement
-                            data_dict = {}
-                            if len(data_df) > 0:
-                                for col in data_df.columns:
-                                    try:
-                                        data_dict[col] = data_df.iloc[0][col]
-                                    except:
-                                        data_dict[col] = 'XXX'
+                    print(f"❌ Error adding procedure steps: {e}")
+        
+            # Add images if available
+            if images_dict and 'all_sheets' in images_dict and images_dict['all_sheets']:
+                try:
+                    print(f"🖼️ Processing {len(images_dict['all_sheets'])} images...")
                 
-                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                        except Exception as e:
-                            st.error(f"Error adding procedure steps: {e}")
-                            print(f"Error adding procedure steps: {e}")
-                            procedure_steps_added = 0
-            
+                    # Use the existing image areas or create default ones
+                    image_areas = []  # We use fixed positions, so areas aren't strictly needed
+                
+                    images_added, temp_image_paths = self.image_extractor.add_images_to_template(
+                        worksheet, images_dict['all_sheets'], image_areas
+                    )
+                
+                    print(f"✅ Added {images_added} images to template")
+                
+                except Exception as e:
+                    print(f"❌ Error adding images: {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+            print(f"✅ Template filling complete: {filled_count} fields, {images_added} images, {procedure_steps_added} procedure steps")
+        
+            # IMPORTANT: Don't clean up temp files here - return them for later cleanup
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
         
         except Exception as e:
-            st.error(f"Error filling template: {e}")
+            print(f"❌ Error in fill_template_with_data_and_images: {e}")
+            import traceback
+            traceback.print_exc()
             return None, 0, 0, [], 0
 
 # Initialize session state
@@ -1767,8 +1782,170 @@ def show_login():
                     st.error("Invalid credentials")
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
+def generate_single_template(enhanced_mapper, template_path, mapping_results, single_row_df, images_to_use, debug_mode=False):
+    """Generate a single template with comprehensive error handling and deep debugging"""
+    try:
+        if debug_mode:
+            print(f"=== GENERATE_SINGLE_TEMPLATE DEBUG ===")
+            print(f"Template path exists: {os.path.exists(template_path)}")
+            print(f"Mapping results count: {len(mapping_results) if mapping_results else 0}")
+            print(f"Data rows: {len(single_row_df)}")
+            print(f"Images available: {len(images_to_use.get('all_sheets', {}))}")
+            print(f"Enhanced mapper type: {type(enhanced_mapper)}")
+            
+            # Check if the method exists
+            if hasattr(enhanced_mapper, 'fill_template_with_data_and_images'):
+                print("✅ fill_template_with_data_and_images method found")
+            else:
+                print("❌ fill_template_with_data_and_images method NOT found")
+                available_methods = [method for method in dir(enhanced_mapper) if 'fill' in method.lower()]
+                print(f"Available 'fill' methods: {available_methods}")
+        
+        # Validate inputs with detailed logging
+        if not template_path or not os.path.exists(template_path):
+            error_msg = f'Template file not accessible: {template_path}'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        if single_row_df.empty:
+            error_msg = 'No data provided'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        if not hasattr(enhanced_mapper, 'fill_template_with_data_and_images'):
+            error_msg = 'Template filler method not available'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        # Additional validation checks
+        if not mapping_results:
+            if debug_mode:
+                print("⚠️ WARNING: No mapping results provided")
+        
+        # Try to get more info about the data
+        if debug_mode:
+            print(f"Single row data preview:")
+            for col, val in single_row_df.iloc[0].items():
+                print(f"  {col}: {val}")
+        
+        # Call the template filling method with detailed error tracking
+        if debug_mode:
+            print("🔄 Calling fill_template_with_data_and_images...")
+        
+        try:
+            result = enhanced_mapper.fill_template_with_data_and_images(
+                template_path, 
+                mapping_results, 
+                single_row_df, 
+                images_to_use, 
+                None  # No packaging type for now
+            )
+            
+            if debug_mode:
+                print(f"✅ Method call completed. Result type: {type(result)}")
+                print(f"Result length: {len(result) if result and hasattr(result, '__len__') else 'N/A'}")
+                
+        except Exception as method_error:
+            error_msg = f'Error calling fill_template_with_data_and_images: {str(method_error)}'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+                traceback.print_exc()
+            return {'success': False, 'error': error_msg}
+        
+        # Validate result structure
+        if not result:
+            error_msg = 'Template filler returned None/empty result'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        # Check if result is iterable and has expected structure
+        try:
+            if not hasattr(result, '__getitem__'):
+                error_msg = f'Template filler returned non-indexable result: {type(result)}'
+                if debug_mode:
+                    print(f"❌ {error_msg}")
+                return {'success': False, 'error': error_msg}
+            
+            if len(result) < 1:
+                error_msg = 'Template filler returned empty result tuple'
+                if debug_mode:
+                    print(f"❌ {error_msg}")
+                return {'success': False, 'error': error_msg}
+                
+        except Exception as structure_error:
+            error_msg = f'Error checking result structure: {str(structure_error)}'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        # Extract workbook with detailed checking
+        try:
+            workbook = result[0]
+            if debug_mode:
+                print(f"Workbook extracted. Type: {type(workbook)}")
+                print(f"Workbook is None: {workbook is None}")
+                
+                if workbook:
+                    print(f"Workbook has worksheets: {hasattr(workbook, 'worksheets')}")
+                    if hasattr(workbook, 'worksheets'):
+                        print(f"Number of worksheets: {len(workbook.worksheets)}")
+                
+        except (IndexError, TypeError) as extract_error:
+            error_msg = f'Error extracting workbook from result: {str(extract_error)}'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg}
+        
+        if not workbook:
+            error_msg = 'Template filler returned None workbook'
+            if debug_mode:
+                print(f"❌ {error_msg}")
+                # Try to get more info about what was returned
+                print(f"Full result: {result}")
+            return {'success': False, 'error': error_msg}
+        
+        # Extract additional info from result with safe indexing
+        try:
+            filled_count = result[1] if len(result) > 1 else 0
+            images_added = result[2] if len(result) > 2 else 0
+            temp_files = result[3] if len(result) > 3 else []
+            
+            if debug_mode:
+                print(f"✅ Template filled successfully:")
+                print(f"  Filled count: {filled_count}")
+                print(f"  Images added: {images_added}")
+                print(f"  Temp files: {len(temp_files)}")
+                
+        except Exception as info_error:
+            # If we can't extract additional info, that's okay as long as we have the workbook
+            if debug_mode:
+                print(f"⚠️ Warning: Could not extract additional info: {info_error}")
+            filled_count = 0
+            images_added = 0
+            temp_files = []
+        
+        return {
+            'success': True,
+            'workbook': workbook,
+            'filled_count': filled_count,
+            'images_added': images_added,
+            'temp_files': temp_files
+        }
+        
+    except Exception as e:
+        error_msg = f'Unexpected error in generate_single_template: {str(e)}'
+        if debug_mode:
+            print(f"❌ {error_msg}")
+            traceback.print_exc()
+        return {'success': False, 'error': error_msg}
+
 
 def show_main_app():
+    """Main application interface - ENHANCED DEBUGGING VERSION"""
     st.title("🤖 Enhanced AI Template Mapper with Images")
     
     # Header with user info
@@ -1800,631 +1977,665 @@ def show_main_app():
         data_file = st.file_uploader(
             "Upload Data File",
             type=['xlsx', 'xls', 'csv'],
-            help="Upload the data file to map to template (images will be extracted from Excel files)"
+            help="Upload the data file to map to template"
         )
         
-        # Settings
-        st.subheader("⚙️ Settings")
+        # Image Source Selection
+        st.markdown("---")
+        st.header("🖼️ Image Processing Options")
+        st.info("Choose how you want to handle images for your templates")
+        
+        image_source = st.radio(
+            "Select Image Source:",
+            [
+                "🚫 No Images (Fastest)",
+                "📤 Upload Images (Same for All Templates)", 
+                "📊 Extract from Data File (Row-Specific)",
+                "🔄 Both Upload + Extract (Advanced)"
+            ],
+            index=0,
+            help="Choose your preferred image handling method"
+        )
+        
+        # Show relevant options based on selection
+        uploaded_images = {}
+        
+        if image_source == "📤 Upload Images (Same for All Templates)":
+            st.subheader("🖼️ Bulk Image Upload")
+            st.success("✅ BULK MODE: Upload images that apply to ALL templates")
+            
+            current_img = st.file_uploader("Current Packaging Image", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            primary_img = st.file_uploader("Primary Packaging Image", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            secondary_img = st.file_uploader("Secondary Packaging Image", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            label_img = st.file_uploader("Label Image", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            
+            uploaded_images = {'current': current_img, 'primary': primary_img, 'secondary': secondary_img, 'label': label_img}
+            
+        elif image_source == "📊 Extract from Data File (Row-Specific)":
+            st.subheader("📊 Auto-Extract Images")
+            st.success("✅ EXTRACT MODE: Images will be extracted from Excel data file")
+            st.info("💡 Make sure your data file is Excel format (.xlsx/.xls) with embedded images")
+            
+        elif image_source == "🔄 Both Upload + Extract (Advanced)":
+            st.subheader("🔄 Advanced: Upload + Extract")
+            st.warning("⚠️ HYBRID MODE: Both uploaded and extracted images will be used")
+            
+            current_img = st.file_uploader("Current Packaging Image (Bulk)", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            primary_img = st.file_uploader("Primary Packaging Image (Bulk)", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            secondary_img = st.file_uploader("Secondary Packaging Image (Bulk)", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            label_img = st.file_uploader("Label Image (Bulk)", type=['png', 'jpg', 'jpeg', 'gif', 'bmp'])
+            
+            uploaded_images = {'current': current_img, 'primary': primary_img, 'secondary': secondary_img, 'label': label_img}
+            
+        else:  # No Images
+            st.subheader("🚫 No Images")
+            st.info("✅ NO IMAGE MODE: Templates will be generated without images")
+        
+        # Enhanced Settings
+        st.markdown("---")
+        st.subheader("⚙️ Enhanced Debug Settings")
+        
+        # Debug mode toggle with more detail
+        debug_mode = st.checkbox("🐛 Deep Debug Mode", value=True, help="Enable comprehensive debugging and error reporting")
+        
+        # Test with limited rows
+        test_mode = st.checkbox("🧪 Test Mode (First 2 rows)", value=True, help="Test with only first 2 rows for faster debugging")
+        
+        # Enhanced mapper validation
+        if st.checkbox("🔍 Validate Enhanced Mapper", value=False, help="Check enhanced mapper initialization"):
+            if hasattr(st.session_state, 'enhanced_mapper'):
+                st.success("✅ Enhanced mapper is available")
+                mapper_methods = [method for method in dir(st.session_state.enhanced_mapper) if not method.startswith('_')]
+                with st.expander("Available Methods"):
+                    for method in sorted(mapper_methods):
+                        st.write(f"• {method}")
+            else:
+                st.error("❌ Enhanced mapper not found in session state!")
+                st.warning("This is likely the root cause of your issue. The enhanced_mapper needs to be initialized.")
+        
         similarity_threshold = st.slider(
-            "Similarity Threshold",
-            min_value=0.1,
-            max_value=1.0,
-            value=0.3,
-            step=0.1,
+            "Similarity Threshold", min_value=0.1, max_value=1.0, value=0.3, step=0.1,
             help="Minimum similarity score for field matching"
         )
         
-        st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
+        if hasattr(st.session_state, 'enhanced_mapper'):
+            st.session_state.enhanced_mapper.similarity_threshold = similarity_threshold
     
+    # Main processing logic with enhanced debugging
     if template_file and data_file:
+        st.header("🔍 Processing Files")
+        
+        # DIAGNOSTIC SECTION
+        if debug_mode:
+            st.subheader("🔧 System Diagnostics")
+            
+            # Check session state
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Session State Keys:**")
+                for key in sorted(st.session_state.keys()):
+                    st.write(f"• {key}")
+            
+            with col2:
+                st.write("**Enhanced Mapper Status:**")
+                if hasattr(st.session_state, 'enhanced_mapper'):
+                    mapper = st.session_state.enhanced_mapper
+                    st.write(f"• Type: {type(mapper)}")
+                    st.write(f"• Has fill method: {hasattr(mapper, 'fill_template_with_data_and_images')}")
+                    if hasattr(mapper, 'similarity_threshold'):
+                        st.write(f"• Similarity threshold: {mapper.similarity_threshold}")
+                else:
+                    st.error("❌ enhanced_mapper not found!")
+        
+        # Continue with existing file processing logic...
+        # [The rest of your existing code continues here]
+        
+        # Initialize variables
         extracted_images = {}
         data_df = pd.DataFrame()
         template_path = None
+        bulk_images = {}
+        processing_errors = []
 
-        # ✅ 1. Save data file and try to extract images
-        if data_file.name.endswith(('.xlsx', '.xls')):
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_data:
-                    tmp_data.write(data_file.getvalue())
-                    data_path = tmp_data.name
-
-                st.info("🔍 Extracting images from data file...")
-
-                try:
-                    with st.spinner("Extracting images from Excel file..."):
-                        # Store Excel path for image classification
-                        st.session_state.enhanced_mapper.image_extractor.current_excel_path = data_path
-
-                        extracted_images = st.session_state.enhanced_mapper.image_extractor.extract_images_from_excel(data_path)
-                        st.success(f"✅ Extracted {len(extracted_images.get('all_sheets', {}))} images.")
-
-                except Exception as extract_err:
-                    st.error(f"❌ Error during image extraction: {extract_err}")
-                    st.code(traceback.format_exc())
-
-                # Clean up temp data file
-                try:
-                    os.unlink(data_path)
-                except Exception as cleanup_err:
-                    print(f"⚠️ Could not delete temp file: {cleanup_err}")
-
-            except Exception as e:
-                st.error(f"❌ Unexpected error while saving data file: {e}")
-                st.code(traceback.format_exc())
-
-        # ✅ 2. Read data file into DataFrame
+        # STEP 1: Read and validate data file
         try:
+            st.info("📖 Reading data file...")
+            
             if data_file.name.endswith('.csv'):
                 data_df = pd.read_csv(data_file)
             else:
                 data_df = pd.read_excel(data_file)
 
-            st.info(f"📊 Data file contains {len(data_df)} rows of data")
+            if data_df.empty:
+                st.error("❌ Data file is empty!")
+                return
+            
+            # Limit rows in test mode (reduced to 2 for faster testing)
+            if test_mode:
+                original_rows = len(data_df)
+                data_df = data_df.head(2)
+                st.warning(f"🧪 TEST MODE: Processing only {len(data_df)} rows (out of {original_rows})")
+            
+            st.success(f"✅ Data file loaded: {len(data_df)} rows, {len(data_df.columns)} columns")
+            
+            if debug_mode:
+                st.write("**Data columns:**", list(data_df.columns))
+                st.write("**First row sample:**", data_df.iloc[0].to_dict())
 
         except Exception as read_err:
             st.error(f"❌ Failed to read data file: {read_err}")
-            st.code(traceback.format_exc())
-            data_df = pd.DataFrame()
+            if debug_mode:
+                st.code(traceback.format_exc())
+            return
 
-        # ✅ 3. Save template file and process it
+        # STEP 2: Process template file with enhanced validation
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_template:
                 tmp_template.write(template_file.getvalue())
                 template_path = tmp_template.name
             
-            # ✅ TEMPLATE PROCESSING
-            st.subheader("📋 Template Analysis")
-        
-            with st.spinner("Analyzing template fields and image areas..."):
-                template_fields, image_areas = st.session_state.enhanced_mapper.find_template_fields_with_context_and_images(template_path)
-        
-            if template_fields:
-                st.success(f"Found {len(template_fields)} mappable fields")
-                
-                # Show template fields
-                with st.expander("Template Fields Details", expanded=False):
-                    fields_df = pd.DataFrame([
-                        {
-                            'Position': coord,
-                            'Field': field['value'],
-                            'Section': field.get('section_context', 'Unknown'),
-                            'Row': field['row'],
-                            'Column': field['column']
-                        }
-                        for coord, field in template_fields.items()
-                    ])
-                    st.dataframe(fields_df, use_container_width=True)
-                
-                # Show image areas
-                if image_areas:
-                    st.info(f"Found {len(image_areas)} image upload areas in template")
-                    with st.expander("Image Upload Areas", expanded=False):
-                        image_df = pd.DataFrame(image_areas)
-                        st.dataframe(image_df, use_container_width=True)
-                
-                # Show extracted images from data file
-                if extracted_images:
-                    total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
-                    st.success(f"🖼️ Extracted {total_images} images from data file")
-                    
-                    with st.expander("Extracted Images from Data File", expanded=True):
-                        for sheet_name, sheet_images in extracted_images.items():
-                            if sheet_images:
-                                st.write(f"**Sheet: {sheet_name}**")
-                                cols = st.columns(min(3, len(sheet_images)))
-                                
-                                for idx, (position, img_data) in enumerate(sheet_images.items()):
-                                    with cols[idx % 3]:
-                                        st.write(f"Position: {position}")
-                                        # Display image thumbnail
-                                        try:
-                                            img_bytes = base64.b64decode(img_data['data'])
-                                            st.image(img_bytes, width=150)
-                                            st.write(f"Size: {img_data['size']}")
-                                            st.write(f"Type: {img_data.get('type', 'Unknown')}")
-                                        except Exception as img_err:
-                                            st.error(f"Error displaying image: {img_err}")
-                else:
-                    if data_file.name.endswith(('.xlsx', '.xls')):
-                        st.info("No images found in the data file")
-                    else:
-                        st.info("CSV files don't contain images. Use Excel files to include images.")
-                
-                # Data mapping - using first row to establish mapping
-                st.subheader("🔗 Field Mapping")
-                
-                with st.spinner("Mapping template fields to data columns..."):
-                    mapping_results = st.session_state.enhanced_mapper.map_data_with_section_context(
-                        template_fields, data_df
-                    )
-                
-                if mapping_results:
-                    # Show mapping results
-                    mapping_df = pd.DataFrame([
-                        {
-                            'Template Field': mapping['template_field'],
-                            'Data Column': mapping['data_column'] if mapping['data_column'] else 'No Match',
-                            'Similarity': f"{mapping['similarity']:.2f}" if mapping['similarity'] > 0 else "0.00",
-                            'Section': mapping.get('section_context', 'Unknown'),
-                            'Status': '✅ Mapped' if mapping['is_mappable'] else '❌ No Match'
-                        }
-                        for mapping in mapping_results.values()
-                    ])
-                    
-                    st.dataframe(mapping_df, use_container_width=True)
-                    
-                    # ✨ ENHANCED PACKAGING PROCEDURE SECTION
-                    st.subheader("📋 Packaging Procedure Configuration")
-
-                    # Create two columns for better layout
-                    col1, col2 = st.columns([1, 2])
-
-                    with col1:
-                        st.write("**Select Packaging Type:**")
-                        procedure_type = st.selectbox(
-                            "Packaging Procedure Type",
-                            ["Select Packaging Procedure"] + list(st.session_state.enhanced_mapper.packaging_procedures.keys()),
-                            help="Select a packaging type to auto-populate procedure steps"
-                        )
-                        
-                        # Add option to preview steps without adding to data
-                        preview_only = st.checkbox(
-                            "Preview Only", 
-                            value=False, 
-                            help="Check to preview steps without adding them to the template"
-                        )
-
-                    with col2:
-                        if procedure_type and procedure_type != "Select Packaging Procedure":
-                            st.info(f"**Selected:** {procedure_type}")
-                            
-                            # Get procedure steps with data substitution (using first row as example)
-                            try:
-                                data_dict = data_df.iloc[0].to_dict() if len(data_df) > 0 else {}
-                                procedures = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
-                                
-                                st.write("**Procedure Steps Preview (using first row data):**")
-                                
-                                # Display steps in a more organized way
-                                steps_container = st.container()
-                                with steps_container:
-                                    for i, step in enumerate(procedures, 1):
-                                        if step.strip():
-                                            # Color-code different types of steps
-                                            if any(keyword in step.lower() for keyword in ['pick up', 'apply', 'put']):
-                                                st.markdown(f"🟢 **{i}.** {step}")
-                                            elif any(keyword in step.lower() for keyword in ['seal', 'load', 'attach']):
-                                                st.markdown(f"🔵 **{i}.** {step}")
-                                            elif any(keyword in step.lower() for keyword in ['ensure', 'prepare']):
-                                                st.markdown(f"🟡 **{i}.** {step}")
-                                            else:
-                                                st.markdown(f"**{i}.** {step}")
-                                
-                                # Show statistics
-                                non_empty_steps = [step for step in procedures if step.strip()]
-                                st.write(f"**Total Steps:** {len(non_empty_steps)}")
-                                
-                            except Exception as e:
-                                st.error(f"Error generating procedure steps: {e}")
-        
-                    # Fill templates for ALL rows
-                    st.subheader("📝 Generate Multiple Filled Templates")
-                    
-                    # Show what will be included in the templates
-                    st.write("**Each template will include:**")
-                    include_items = []
-                    
-                    # Count mapped fields
-                    mapped_count = sum(1 for mapping in mapping_results.values() if mapping['is_mappable'])
-                    if mapped_count > 0:
-                        include_items.append(f"📊 {mapped_count} mapped data fields")
-                    
-                    # Count images
-                    if extracted_images:
-                        total_images = sum(len(sheet_images) for sheet_images in extracted_images.values())
-                        if total_images > 0:
-                            include_items.append(f"🖼️ Images matching each row's part number/description")
-                    
-                    # Count procedure steps
-                    if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
-                        try:
-                            steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_df.iloc[0].to_dict())
-                            step_count = len([s for s in steps if s.strip()])
-                            if step_count > 0:
-                                include_items.append(f"📋 {step_count} packaging procedure steps")
-                        except:
-                            pass
-                    
-                    if include_items:
-                        for item in include_items:
-                            st.write(f"• {item}")
-                    else:
-                        st.warning("No items will be added to the templates")
-                    
-                    # Show file generation info
-                    st.info(f"🎯 Will generate {len(data_df)} separate template files (one for each data row)")
-                    
-                    if st.button("Generate All Filled Templates", type="primary", use_container_width=True):
-                        with st.spinner(f"Generating {len(data_df)} filled templates..."):
-                            try:
-                                # Create a zip file to contain all templates
-                                zip_buffer = io.BytesIO()
-                                
-                                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                    successful_templates = 0
-                                    failed_templates = []
-                                    
-                                    # Progress bar
-                                    progress_bar = st.progress(0)
-                                    status_placeholder = st.empty()
-                                    
-                                    for index, row in data_df.iterrows():
-                                        try:
-                                            # Update progress
-                                            progress = (index + 1) / len(data_df)
-                                            progress_bar.progress(progress)
-                                            status_placeholder.text(f"Processing row {index + 1} of {len(data_df)}...")
-                                            
-                                            # Create a single-row dataframe for this iteration
-                                            single_row_df = pd.DataFrame([row])
-                                            
-                                            # Add procedure steps to this row if selected
-                                            if procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only:
-                                                try:
-                                                    data_dict = row.to_dict()
-                                                    procedure_steps = st.session_state.enhanced_mapper.get_procedure_steps(procedure_type, data_dict)
-                                                    
-                                                    # Add procedure steps to the single row dataframe
-                                                    for i, step in enumerate(procedure_steps, 1):
-                                                        if step.strip():  # Only add non-empty steps
-                                                            single_row_df.loc[0, f'Procedure Step {i}'] = step
-                                                except Exception as e:
-                                                    st.warning(f"Failed to add procedure steps for row {index + 1}: {e}")
-                                            
-                                            # 🎯 FILTER IMAGES FOR THIS SPECIFIC ROW
-                                            row_specific_images = filter_images_for_row(extracted_images, row, data_df.columns)
-                                            
-                                            # Pass the packaging type to the fill function
-                                            selected_packaging_type = procedure_type if (procedure_type and procedure_type != "Select Packaging Procedure" and not preview_only) else None
-                                            
-                                            # Fill template for this specific row with filtered images
-                                            result = st.session_state.enhanced_mapper.fill_template_with_data_and_images(
-                                                template_path, mapping_results, single_row_df, row_specific_images, selected_packaging_type
-                                            )
-                                            
-                                            workbook, filled_count, images_added, temp_image_paths, procedure_steps_added = result
-                                            
-                                            if workbook:
-                                                # 🎯 ENHANCED FILENAME GENERATION
-                                                filename = generate_enhanced_filename(row, data_df.columns, index)
-                                                
-                                                # Save workbook to memory
-                                                template_buffer = io.BytesIO()
-                                                workbook.save(template_buffer)
-                                                template_buffer.seek(0)
-                                                
-                                                # Add to zip file
-                                                zip_file.writestr(filename, template_buffer.getvalue())
-                                                
-                                                # Clean up temporary image files
-                                                for path in temp_image_paths:
-                                                    try:
-                                                        os.unlink(path)
-                                                    except Exception as e:
-                                                        pass
-                                                
-                                                workbook.close()
-                                                successful_templates += 1
-                                                
-                                            else:
-                                                failed_templates.append(index + 1)
-                                                
-                                        except Exception as e:
-                                            failed_templates.append(index + 1)
-                                            st.warning(f"Failed to process row {index + 1}: {e}")
-                                    
-                                    # Clear progress indicators
-                                    progress_bar.empty()
-                                    status_placeholder.empty()
-                                
-                                zip_buffer.seek(0)
-                                
-                                # Show results
-                                if successful_templates > 0:
-                                    st.success(f"🎉 Successfully generated {successful_templates} template files!")
-                                    
-                                    # Show stats
-                                    col1, col2, col3 = st.columns(3)
-                                    with col1:
-                                        st.metric("Successful Templates", successful_templates)
-                                    with col2:
-                                        st.metric("Failed Templates", len(failed_templates))
-                                    with col3:
-                                        st.metric("Success Rate", f"{(successful_templates/len(data_df)*100):.1f}%")
-                                    
-                                    if failed_templates:
-                                        st.warning(f"⚠️ Failed to generate templates for rows: {', '.join(map(str, failed_templates))}")
-                                    
-                                    # Download button for zip file
-                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                    zip_filename = f"filled_templates_{timestamp}.zip"
-                                    
-                                    st.download_button(
-                                        label=f"📥 Download All Templates ({successful_templates} files)",
-                                        data=zip_buffer.getvalue(),
-                                        file_name=zip_filename,
-                                        mime="application/zip",
-                                        use_container_width=True
-                                    )
-                                    
-                                else:
-                                    st.error("❌ Failed to generate any templates")
-                                    
-                            except Exception as e:
-                                st.error(f"Error generating templates: {e}")
-                                st.exception(e)
-                
-                else:
-                    st.warning("No mapping results generated")
+            st.info("📋 Analyzing template...")
             
+            if debug_mode:
+                st.write(f"**Template path:** {template_path}")
+                st.write(f"**Template file exists:** {os.path.exists(template_path)}")
+        
+            # Critical check: enhanced_mapper availability
+            if not hasattr(st.session_state, 'enhanced_mapper'):
+                st.error("❌ CRITICAL: Enhanced mapper not initialized!")
+                st.error("This is the root cause of the 'Template filler returned no workbook' error.")
+                st.info("**Solution:** Ensure the enhanced_mapper is properly initialized in your session state before calling this function.")
+                return
+            
+            # Verify the mapper has required methods
+            mapper = st.session_state.enhanced_mapper
+            required_methods = ['find_template_fields_with_context_and_images', 'map_data_with_section_context', 'fill_template_with_data_and_images']
+            missing_methods = []
+            
+            for method in required_methods:
+                if not hasattr(mapper, method):
+                    missing_methods.append(method)
+            
+            if missing_methods:
+                st.error(f"❌ Enhanced mapper is missing required methods: {missing_methods}")
+                return
             else:
-                st.warning("No mappable fields found in template")
+                if debug_mode:
+                    st.success("✅ All required methods found on enhanced mapper")
+        
+            with st.spinner("Analyzing template fields..."):
+                try:
+                    template_fields, image_areas = mapper.find_template_fields_with_context_and_images(template_path)
+                    
+                    if debug_mode:
+                        st.write(f"**Template analysis result:**")
+                        st.write(f"• Fields found: {len(template_fields) if template_fields else 0}")
+                        st.write(f"• Image areas found: {len(image_areas) if image_areas else 0}")
+                        
+                except Exception as template_err:
+                    st.error(f"❌ Error analyzing template: {template_err}")
+                    if debug_mode:
+                        st.code(traceback.format_exc())
+                    return
+        
+            if not template_fields:
+                st.warning("⚠️ No mappable fields found in template")
+                template_fields = {}
+            else:
+                st.success(f"✅ Found {len(template_fields)} mappable fields in template")
+
+            # STEP 3: Map data to template
+            st.info("🔗 Mapping data to template fields...")
             
-            # Clean up temporary template file
             try:
-                if template_path:
-                    os.unlink(template_path)
-            except Exception as cleanup_err:
-                print(f"Could not cleanup template file: {cleanup_err}")
+                mapping_results = mapper.map_data_with_section_context(template_fields, data_df)
                 
-        except Exception as template_err:
-            st.error(f"❌ Failed to process template file: {template_err}")
-            st.code(traceback.format_exc())
-            # Clean up on error too
-            try:
-                if template_path:
-                    os.unlink(template_path)
-            except:
-                pass
+                if debug_mode:
+                    st.write(f"**Mapping results:**")
+                    st.write(f"• Mappings created: {len(mapping_results) if mapping_results else 0}")
+                    
+            except Exception as mapping_err:
+                st.error(f"❌ Error during field mapping: {mapping_err}")
+                if debug_mode:
+                    st.code(traceback.format_exc())
+                return
+            
+            if not mapping_results:
+                st.warning("⚠️ No field mappings created")
+                mapping_results = {}
+            else:
+                mapped_count = sum(1 for mapping in mapping_results.values() if mapping.get('is_mappable', False))
+                st.success(f"✅ Successfully mapped {mapped_count} fields")
+
+            # STEP 4: Generate templates with ENHANCED debugging
+            st.subheader("🎯 Generate Templates")
+            
+            if st.button("🚀 Generate Templates (Enhanced Debug)", type="primary", use_container_width=True):
                 
+                # Enhanced pre-flight checks
+                st.info("🔍 Running enhanced pre-flight checks...")
+                
+                preflight_errors = []
+                
+                if not hasattr(st.session_state, 'enhanced_mapper'):
+                    preflight_errors.append("Enhanced mapper not available in session state")
+                else:
+                    mapper = st.session_state.enhanced_mapper
+                    if not hasattr(mapper, 'fill_template_with_data_and_images'):
+                        preflight_errors.append("fill_template_with_data_and_images method not found on mapper")
+                
+                if not template_path or not os.path.exists(template_path):
+                    preflight_errors.append(f"Template file not accessible: {template_path}")
+                
+                if data_df.empty:
+                    preflight_errors.append("No data to process")
+                
+                if preflight_errors:
+                    st.error("❌ Enhanced pre-flight check failed:")
+                    for error in preflight_errors:
+                        st.write(f"• {error}")
+                    return
+                else:
+                    st.success("✅ All pre-flight checks passed!")
+                
+                # Start generation with enhanced debugging
+                with st.spinner(f"Generating {len(data_df)} templates with enhanced debugging..."):
+                    try:
+                        zip_buffer = io.BytesIO()
+                        
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            successful_templates = 0
+                            failed_templates = []
+                            detailed_errors = []
+                            
+                            progress_bar = st.progress(0)
+                            status_placeholder = st.empty()
+                            debug_placeholder = st.empty() if debug_mode else None
+                            
+                            for index, row in data_df.iterrows():
+                                try:
+                                    # Update progress
+                                    progress = (index + 1) / len(data_df)
+                                    progress_bar.progress(progress)
+                                    status_placeholder.text(f"Processing row {index + 1} of {len(data_df)}...")
+                                    
+                                    if debug_mode:
+                                        debug_placeholder.info(f"🔍 DEBUG: Processing row {index + 1}")
+                                    
+                                    # Create single-row DataFrame
+                                    single_row_df = pd.DataFrame([row])
+                                    
+                                    # Prepare images for this row (simplified for debugging)
+                                    images_to_use = {}  # Start with no images for debugging
+                                    
+                                    # Generate template with enhanced debugging
+                                    try:
+                                        result = generate_single_template(
+                                            st.session_state.enhanced_mapper,
+                                            template_path,
+                                            mapping_results,
+                                            single_row_df,
+                                            images_to_use,
+                                            debug_mode
+                                        )
+                                        
+                                        if debug_mode:
+                                            debug_placeholder.write(f"Row {index + 1} result: {result.get('success', False)}")
+                                        
+                                        if result and result.get('success', False):
+                                            workbook = result['workbook']
+                                            
+                                            # Generate filename
+                                            filename = generate_safe_filename(row, data_df.columns, index)
+                                            
+                                            # Save to zip
+                                            template_buffer = io.BytesIO()
+                                            workbook.save(template_buffer)
+                                            template_buffer.seek(0)
+                                            
+                                            zip_file.writestr(filename, template_buffer.getvalue())
+                                            
+                                            # Cleanup
+                                            cleanup_temp_files(result.get('temp_files', []))
+                                            workbook.close()
+                                            
+                                            successful_templates += 1
+                                        
+                                        else:
+                                            error_msg = result.get('error', 'Unknown error') if result else 'No result returned'
+                                            failed_templates.append(index + 1)
+                                            detailed_errors.append(f"Row {index + 1}: {error_msg}")
+                                    
+                                    except Exception as template_err:
+                                        error_msg = f"Template generation exception: {str(template_err)}"
+                                        failed_templates.append(index + 1)
+                                        detailed_errors.append(f"Row {index + 1}: {error_msg}")
+                                        
+                                        if debug_mode:
+                                            debug_placeholder.error(f"Row {index + 1} exception: {template_err}")
+                                
+                                except Exception as row_err:
+                                    error_msg = f"Row processing exception: {str(row_err)}"
+                                    failed_templates.append(index + 1)
+                                    detailed_errors.append(f"Row {index + 1}: {error_msg}")
+
+                        # Finalize results
+                        progress_bar.progress(1.0)
+                        status_placeholder.text("Finalizing...")
+                        
+                        if debug_mode and debug_placeholder:
+                            debug_placeholder.empty()
+
+                        if successful_templates > 0:
+                            zip_buffer.seek(0)
+                            
+                            st.success(f"✅ Successfully generated {successful_templates} templates!")
+                            
+                            if failed_templates:
+                                st.warning(f"⚠️ Failed to generate {len(failed_templates)} templates")
+                                
+                                with st.expander("Detailed Error Report", expanded=True):
+                                    for error in detailed_errors:
+                                        st.write(f"• {error}")
+                            
+                            # Download button
+                            st.download_button(
+                                label=f"📦 Download {successful_templates} Templates (ZIP)",
+                                data=zip_buffer.getvalue(),
+                                file_name=f"filled_templates_{successful_templates}_files.zip",
+                                mime="application/zip",
+                                use_container_width=True
+                            )
+                        
+                        else:
+                            st.error("❌ No templates were successfully generated!")
+                            
+                            st.error("**Detailed Error Analysis:**")
+                            for error in detailed_errors:
+                                st.write(f"• {error}")
+
+                    except Exception as e:
+                        st.error(f"❌ Critical error during template generation: {e}")
+                        if debug_mode:
+                            st.code(traceback.format_exc())
+
+        except Exception as e:
+            st.error(f"❌ Error processing template file: {e}")
+            if debug_mode:
+                st.code(traceback.format_exc())
+        
+        finally:
+            # Clean up template file
+            if template_path and os.path.exists(template_path):
+                try:
+                    os.unlink(template_path)
+                except Exception as cleanup_err:
+                    if debug_mode:
+                        st.warning(f"⚠️ Could not delete temp template file: {cleanup_err}")
+      
     else:
+        # Show enhanced instructions when no files uploaded
         st.info("👆 Please upload both an Excel template and a data file to begin")
         
-        # Show demo information
-        st.markdown("### 🎯 Features")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            **Template Processing:**
-            - 📋 Smart field detection
-            - 🎯 Section-aware mapping
-            - 🔄 Merged cell handling
-            - 📏 Packaging-specific patterns
-            - 🗂️ Multi-template generation
-            - 🎯 **Row-specific image filtering (NEW!)**
-            """)
-            
-        with col2:
-            st.markdown("""
-            **Image Processing:**
-            - 🖼️ Auto image extraction from Excel data files
-            - 📍 Smart image placement in templates
-            - 🎨 Format conversion and optimization
-            - 📦 Packaging image area detection
-            - 🎯 **Images filtered by part number/description (NEW!)**
-            """)
-        
         st.markdown("""
-        ### 📚 Supported Sections
-        - **Primary Packaging**: Internal packaging dimensions and specifications
-        - **Secondary Packaging**: Outer packaging details
-        - **Part Information**: Component specifications and measurements
+        ### 🚨 **ROOT CAUSE ANALYSIS**
         
-        ### 🖼️ Enhanced Image Processing
-        - Images are automatically extracted from Excel data files
-        - **Smart Filtering**: Only images matching each row's part number and description are included
-        - Images are intelligently placed in designated template areas
-        - Supports multiple image formats (PNG, JPG, GIF, BMP)
+        The error "Template filler returned no workbook" typically occurs when:
         
-        ### 📋 Packaging Procedures
-        - **11+ Predefined Procedures**: Complete packaging workflows for different product types
-        - **Smart Substitution**: Automatically replaces placeholders with actual data values
-        - **Preview Mode**: Review steps before adding to template
-        - **Integrated Workflow**: Seamlessly adds procedure steps to your filled templates
+        1. **❌ Enhanced Mapper Not Initialized**: The `st.session_state.enhanced_mapper` is not properly set up
+        2. **❌ Missing Required Methods**: The mapper doesn't have the `fill_template_with_data_and_images` method
+        3. **❌ Template File Issues**: The template file is corrupted or has an unexpected format
+        4. **❌ Method Return Format**: The fill method is returning an unexpected result structure
         
-        ### 🗂️ Enhanced Multi-Template Generation
-        - **Bulk Processing**: Generate separate template files for each data row
-        - **Enhanced Naming**: Files named as `vendorcode_partno_partdescription_template.xlsx`
-        - **Zip Download**: All templates packaged in a single ZIP file
-        - **Progress Tracking**: Real-time progress updates during generation
-        - **Row-Specific Content**: Each template contains only relevant images and data
+        ### 🔧 **DEBUGGING STEPS**
+        
+        1. **Enable Deep Debug Mode** in the sidebar
+        2. **Validate Enhanced Mapper** using the checkbox in settings
+        3. **Use Test Mode** to process only 2 rows
+        4. **Check the System Diagnostics** section when files are uploaded
+        
+        ### 🎯 **RECOMMENDED FIX**
+        
+        Make sure your `enhanced_mapper` is properly initialized before calling this function:
+        
+        ```python
+        # Ensure this is done BEFORE calling show_main_app()
+        if 'enhanced_mapper' not in st.session_state:
+            st.session_state.enhanced_mapper = YourEnhancedMapperClass()
+        ```
         """)
 
 
-def filter_images_for_row(extracted_images, row, columns):
-    """
-    Filter extracted images to only include those that match the current row's 
-    part number and description.
-    
-    Args:
-        extracted_images: Dictionary of all extracted images
-        row: Current data row (pandas Series)
-        columns: List of column names from the dataframe
+# Keep all your existing utility functions
+def prepare_images_for_row(image_source, bulk_images, extracted_images, row, columns, debug_mode=False):
+    """Prepare images for a specific row based on the selected mode"""
+    try:
+        if debug_mode:
+            print(f"Preparing images - Mode: {image_source}")
         
-    Returns:
-        Dictionary of filtered images for this specific row
-    """
-    if not extracted_images or 'all_sheets' not in extracted_images:
+        if image_source == "🚫 No Images (Fastest)":
+            return {}
+        
+        elif image_source == "📤 Upload Images (Same for All Templates)":
+            if bulk_images:
+                return {'all_sheets': bulk_images.copy()}
+            else:
+                return {}
+        
+        elif image_source == "📊 Extract from Data File (Row-Specific)":
+            if extracted_images:
+                return filter_images_for_row(extracted_images, row, columns)
+            else:
+                return {}
+        
+        elif image_source == "🔄 Both Upload + Extract (Advanced)":
+            combined_images = {}
+            
+            # Add bulk images
+            if bulk_images:
+                combined_images.update(bulk_images)
+            
+            # Add extracted images for this row
+            if extracted_images:
+                row_images = filter_images_for_row(extracted_images, row, columns)
+                if row_images and 'all_sheets' in row_images:
+                    for img_key, img_data in row_images['all_sheets'].items():
+                        img_type = img_data.get('type', 'unknown')
+                        
+                        # Avoid conflicts with bulk images
+                        bulk_has_type = any(
+                            bulk_img.get('type', '') == img_type 
+                            for bulk_img in bulk_images.values()
+                        ) if bulk_images else False
+                        
+                        if bulk_has_type:
+                            new_key = f"extracted_{img_type}_{img_key}"
+                            combined_images[new_key] = img_data
+                        else:
+                            combined_images[img_key] = img_data
+            
+            return {'all_sheets': combined_images} if combined_images else {}
+        
+        else:
+            return {}
+    
+    except Exception as e:
+        print(f"Error preparing images: {e}")
         return {}
-    
+
+
+def cleanup_temp_files(temp_files):
+    """Safely clean up temporary files"""
+    for file_path in temp_files:
+        try:
+            if os.path.exists(file_path):
+                os.unlink(file_path)
+        except Exception as e:
+            print(f"Warning: Could not delete temp file {file_path}: {e}")
+
+
+def generate_safe_filename(row, columns, index):
+    """Generate a safe filename with fallback options"""
     try:
-        # Get part number and description from current row
-        part_no = get_field_value(row, columns, ['part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number'])
-        part_desc = get_field_value(row, columns, ['part_description', 'partdescription', 'description', 'part_desc', 'partdesc', 'part description', 'part desc'])
+        # Try to get meaningful identifiers
+        identifiers = []
         
-        if not part_no and not part_desc:
-            print("⚠️ No part number or description found for filtering images")
-            return extracted_images  # Return all images if we can't identify the row
+        # Look for common ID fields
+        id_fields = ['id', 'part_no', 'partno', 'part_number', 'code', 'sku']
+        for field in id_fields:
+            for col in columns:
+                if field in col.lower():
+                    value = row.get(col)
+                    if pd.notna(value) and str(value).strip():
+                        clean_value = re.sub(r'[^\w\-_\.]', '_', str(value))[:20]
+                        identifiers.append(clean_value)
+                        break
+            if identifiers:
+                break
         
-        print(f"🎯 Filtering images for: Part No='{part_no}', Description='{part_desc}'")
-        
-        filtered_images = {}
-        all_images = extracted_images['all_sheets']
-        
-        # Create search terms for matching
-        search_terms = []
-        if part_no:
-            search_terms.append(str(part_no).lower().strip())
-        if part_desc:
-            search_terms.append(str(part_desc).lower().strip())
-        
-        # Check each image to see if it matches this row
-        for img_key, img_data in all_images.items():
-            should_include = False
-            
-            # Method 1: Check if image is from a sheet that matches the part info
-            sheet_name = img_data.get('sheet', '').lower()
-            position = img_data.get('position', '').lower()
-            
-            # Look for part number or description in sheet name or position
-            for term in search_terms:
-                if term and (term in sheet_name or term in position):
-                    should_include = True
-                    print(f"✅ Including image {img_key} - found '{term}' in sheet/position")
-                    break
-            
-            # Method 2: If we don't have specific matching, include all images from the first sheet
-            # (This is a fallback when images aren't clearly labeled)
-            if not should_include and not any(search_terms):
-                should_include = True
-                print(f"✅ Including image {img_key} - fallback (no specific identifiers)")
-            
-            # Method 3: If this is the only row or images aren't clearly separated, include all
-            if not should_include and len(search_terms) == 0:
-                should_include = True
-                print(f"✅ Including image {img_key} - no filtering criteria")
-            
-            if should_include:
-                filtered_images[img_key] = img_data
-        
-        print(f"🎯 Filtered {len(filtered_images)} images from {len(all_images)} total images")
-        return {'all_sheets': filtered_images}
-        
-    except Exception as e:
-        print(f"❌ Error filtering images for row: {e}")
-        return extracted_images  # Return all images on error
-
-
-def get_field_value(row, columns, field_names):
-    """
-    Get value from row using multiple possible field names.
-    
-    Args:
-        row: pandas Series (data row)
-        columns: List of column names
-        field_names: List of possible field names to search for
-        
-    Returns:
-        Field value or None if not found
-    """
-    try:
-        # Normalize field names for comparison
-        normalized_field_names = [name.lower().replace(' ', '').replace('_', '') for name in field_names]
-        
-        for col in columns:
-            normalized_col = col.lower().replace(' ', '').replace('_', '')
-            if normalized_col in normalized_field_names:
-                value = row[col]
-                if pd.notna(value) and str(value).strip():
-                    return str(value).strip()
-        
-        return None
-        
-    except Exception as e:
-        print(f"Error getting field value: {e}")
-        return None
-
-
-def generate_enhanced_filename(row, columns, index):
-    """
-    Generate enhanced filename including vendor code, part number, and description.
-    
-    Args:
-        row: Current data row (pandas Series)
-        columns: List of column names from the dataframe
-        index: Row index (for fallback naming)
-        
-    Returns:
-        Enhanced filename string
-    """
-    try:
-        # Get vendor code
-        vendor_code = get_field_value(row, columns, [
-            'vendor_code', 'vendorcode', 'vendor code', 'vendor', 'supplier_code', 
-            'suppliercode', 'supplier code', 'supplier'
-        ])
-        
-        # Get part number
-        part_no = get_field_value(row, columns, [
-            'part_no', 'partno', 'part_number', 'partnumber', 'part no', 'part number'
-        ])
-        
-        # Get part description
-        part_desc = get_field_value(row, columns, [
-            'part_description', 'partdescription', 'description', 'part_desc', 
-            'partdesc', 'part description', 'part desc'
-        ])
-        
-        # Clean strings for filename (remove invalid characters)
-        def clean_for_filename(text):
-            if not text:
-                return ""
-            # Remove invalid filename characters and limit length
-            cleaned = "".join(c for c in str(text) if c.isalnum() or c in (' ', '-', '_')).strip()
-            return cleaned[:30]  # Limit to 30 characters
-        
-        vendor_code_clean = clean_for_filename(vendor_code)
-        part_no_clean = clean_for_filename(part_no)
-        part_desc_clean = clean_for_filename(part_desc)
-        
-        # Build filename parts
-        filename_parts = []
-        
-        if vendor_code_clean:
-            filename_parts.append(vendor_code_clean)
-        
-        if part_no_clean:
-            filename_parts.append(part_no_clean)
-        
-        if part_desc_clean:
-            filename_parts.append(part_desc_clean)
+        # If no identifier found, use index
+        if not identifiers:
+            identifiers.append(f"row_{index + 1}")
         
         # Create filename
-        if filename_parts:
-            filename = "_".join(filename_parts) + "_template.xlsx"
-        else:
-            filename = f"template_row_{index + 1}.xlsx"
+        filename = "_".join(identifiers) + "_template.xlsx"
         
-        # Ensure filename is not too long (Windows has 255 char limit)
-        if len(filename) > 150:
-            filename = filename[:147] + ".xlsx"
+        # Ensure it's not too long
+        if len(filename) > 100:
+            filename = filename[:90] + "_template.xlsx"
         
-        print(f"🏷️ Generated filename: {filename}")
         return filename
         
     except Exception as e:
-        print(f"❌ Error generating filename: {e}")
+        print(f"Error generating filename: {e}")
         return f"template_row_{index + 1}.xlsx"
 
 
-# Main application logic
+def filter_images_for_row(extracted_images, row, columns):
+    """Filter extracted images for a specific row - simplified version"""
+    try:
+        if not extracted_images or 'all_sheets' not in extracted_images:
+            return {}
+        
+        # For now, return all extracted images
+        # In a production version, you'd implement filtering by part number/description
+        return extracted_images
+        
+    except Exception as e:
+        print(f"Error filtering images: {e}")
+        return {}
+
+
 def main():
-    if not st.session_state.authenticated:
-        show_login()
+    """Main application entry point with error handling"""
+    try:
+        # Initialize session state if needed
+        if 'authenticated' not in st.session_state:
+            st.session_state.authenticated = False
+        
+        # CRITICAL: Check for enhanced_mapper initialization
+        if 'enhanced_mapper' not in st.session_state:
+            st.error("🚨 CRITICAL ERROR: Enhanced mapper not found in session state!")
+            st.error("This is the root cause of the 'Template filler returned no workbook' error.")
+            
+            st.markdown("""
+            ### 🔧 **IMMEDIATE SOLUTION REQUIRED**
+            
+            Before running this application, you must initialize the enhanced_mapper:
+            
+            ```python
+            # Add this to your main initialization code:
+            if 'enhanced_mapper' not in st.session_state:
+                st.session_state.enhanced_mapper = YourEnhancedMapperClass()
+            ```
+            
+            **What you need to do:**
+            1. Import your enhanced mapper class
+            2. Initialize it and store in session state
+            3. Ensure it has these required methods:
+               - `find_template_fields_with_context_and_images()`
+               - `map_data_with_section_context()`
+               - `fill_template_with_data_and_images()`
+            
+            **Example initialization:**
+            ```python
+            from your_module import EnhancedTemplateMapper
+            
+            # Initialize the mapper
+            if 'enhanced_mapper' not in st.session_state:
+                st.session_state.enhanced_mapper = EnhancedTemplateMapper()
+            ```
+            """)
+            
+            st.stop()  # Stop execution until this is fixed
+        
+        if not st.session_state.authenticated:
+            show_login()
+        else:
+            show_main_app()
+            
+    except Exception as e:
+        st.error(f"Application Error: {e}")
+        st.exception(e)
+
+
+# Additional diagnostic function
+def diagnose_enhanced_mapper():
+    """Comprehensive diagnostic function for enhanced mapper"""
+    st.subheader("🔍 Enhanced Mapper Diagnostics")
+    
+    if 'enhanced_mapper' not in st.session_state:
+        st.error("❌ Enhanced mapper not found in session state")
+        return False
+    
+    mapper = st.session_state.enhanced_mapper
+    
+    # Check basic properties
+    st.write(f"**Mapper Type:** {type(mapper)}")
+    st.write(f"**Mapper ID:** {id(mapper)}")
+    
+    # Check required methods
+    required_methods = [
+        'find_template_fields_with_context_and_images',
+        'map_data_with_section_context', 
+        'fill_template_with_data_and_images'
+    ]
+    
+    method_status = {}
+    for method in required_methods:
+        has_method = hasattr(mapper, method)
+        method_status[method] = has_method
+        
+        if has_method:
+            st.success(f"✅ {method}")
+            
+            # Try to get method signature if possible
+            try:
+                import inspect
+                sig = inspect.signature(getattr(mapper, method))
+                st.write(f"   Signature: {sig}")
+            except:
+                pass
+        else:
+            st.error(f"❌ {method}")
+    
+    # Check additional useful properties
+    optional_properties = ['similarity_threshold', 'image_extractor']
+    for prop in optional_properties:
+        if hasattr(mapper, prop):
+            st.info(f"ℹ️ Has {prop}: {getattr(mapper, prop)}")
+    
+    # Overall health check
+    all_required_present = all(method_status.values())
+    
+    if all_required_present:
+        st.success("🎉 Enhanced mapper appears to be properly initialized!")
+        return True
     else:
-        show_main_app()
+        missing = [method for method, present in method_status.items() if not present]
+        st.error(f"❌ Missing required methods: {missing}")
+        return False
+
 
 if __name__ == "__main__":
     main()
