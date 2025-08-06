@@ -531,18 +531,18 @@ class ImageExtractor:
             return 'unknown'
 
     def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add uploaded images to template - COMPLETELY REWRITTEN FOR RELIABILITY"""
+        """Add uploaded images to template - FIXED VERSION"""
         try:
             added_images = 0
             temp_image_paths = []
-        
+    
             print("=== Adding images to template ===")
             print(f"Available images: {len(uploaded_images)}")
-        
+    
             # Debug: Print all available images
             for img_key, img_data in uploaded_images.items():
                 print(f"Available: {img_key} -> type: {img_data.get('type', 'unknown')}")
-        
+    
             # Process EACH image type separately and ensure they all get added
             row_42_column_position = 1  # Start at column A for row 42
 
@@ -570,6 +570,7 @@ class ImageExtractor:
             ]
             print(f"\n--- PRIMARY PACKAGING ({len(primary_images)} images) ---")
             for img_key, img_data in primary_images:
+                from openpyxl.utils import get_column_letter
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
@@ -578,7 +579,7 @@ class ImageExtractor:
                 if success:
                     added_images += 1
                     print(f"✅ PRIMARY placed at {cell_pos}: {img_key}")
-                    # Move to next position for row 42 (your spacing calculation)
+                    # Move to next position for row 42
                     image_width_cols = int(4.3 * 1.162)  # ≈ 5 columns
                     gap_cols = int(1.162 * 1.162)         # ≈ 3 columns gap  
                     row_42_column_position += image_width_cols + gap_cols
@@ -592,6 +593,7 @@ class ImageExtractor:
             ]
             print(f"\n--- SECONDARY PACKAGING ({len(secondary_images)} images) ---")
             for img_key, img_data in secondary_images:
+                from openpyxl.utils import get_column_letter
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
@@ -614,6 +616,7 @@ class ImageExtractor:
             ]
             print(f"\n--- LABEL ({len(label_images)} images) ---")
             for img_key, img_data in label_images:
+                from openpyxl.utils import get_column_letter
                 cell_pos = f"{get_column_letter(row_42_column_position)}42"
                 success = self._place_image_at_position(
                     worksheet, img_key, img_data, cell_pos,
@@ -627,7 +630,7 @@ class ImageExtractor:
 
             print(f"\n✅ TOTAL IMAGES ADDED: {added_images}")
             print(f"📁 Temporary files created: {len(temp_image_paths)}")
-        
+    
             return added_images, temp_image_paths
 
         except Exception as e:
@@ -640,34 +643,37 @@ class ImageExtractor:
         """Place a single image at the specified cell position"""
         try:
             print(f"  Placing {img_key} at {cell_position} ({width_cm}x{height_cm}cm)")
-            
+        
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
-            
+        
             # Create openpyxl image object
+            from openpyxl.drawing.image import Image as OpenpyxlImage  # Make sure this import is at the top
             img = OpenpyxlImage(tmp_img_path)
-            
+        
             # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
             img.width = int(width_cm * 37.8)
             img.height = int(height_cm * 37.8)
-            
+        
             # Set position using simple anchor
             img.anchor = cell_position
-            
+        
             # Add image to worksheet
             worksheet.add_image(img)
-            
+        
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            
+        
             print(f"    ✅ Successfully placed {img_key} at {cell_position}")
             return True
-            
+        
         except Exception as e:
             print(f"    ❌ Failed to place {img_key} at {cell_position}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def reclassify_extracted_images(self, extracted_images, classification_rules=None):
@@ -1622,16 +1628,16 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
-        """Fill template with mapped data, images, and procedure steps"""
+        """Fill template with mapped data, images, and procedure steps - FIXED VERSION"""
         try:
             workbook = openpyxl.load_workbook(template_file)
             worksheet = workbook.active
-        
+    
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-        
+    
             # Create data dictionary for procedure step replacement
             data_dict = {}
             if len(data_df) > 0:
@@ -1640,18 +1646,18 @@ class EnhancedTemplateMapperWithImages:
                         data_dict[col] = data_df.iloc[0][col]
                     except:
                         data_dict[col] = 'XXX'
-        
+    
             # Fill data fields
             for coord, mapping in mapping_results.items():
                 try:
                     if mapping['data_column'] is not None and mapping['is_mappable']:
                         field_info = mapping['field_info']
-                    
+                
                         target_cell = self.find_data_cell_for_label(worksheet, field_info)
-                    
+                
                         if target_cell and len(data_df) > 0:
                             data_value = data_df.iloc[0][mapping['data_column']]
-                        
+                    
                             cell_obj = worksheet[target_cell]
                             if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
                                 for merged_range in worksheet.merged_cells.ranges:
@@ -1662,18 +1668,50 @@ class EnhancedTemplateMapperWithImages:
                             else:
                                 cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
                             filled_count += 1
-                        
+                    
                 except Exception as e:
                     st.error(f"Error filling mapping {coord}: {e}")
                     continue
-        
-            # Add images if provided
+    
+            # 🆕 FIXED: Add images if provided (handle both formats)
             if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.image_extractor.add_images_to_template(worksheet, uploaded_images, image_areas)
-        
-            # Write procedure steps if packaging type is provided
+                print(f"\n🖼️ PROCESSING IMAGES: {type(uploaded_images)}")
+            
+                # Handle both extracted_images format and direct uploaded_images format
+                images_to_process = {}
+            
+                if isinstance(uploaded_images, dict):
+                    if 'all_sheets' in uploaded_images:
+                        # This is extracted_images format: {'all_sheets': {img_key: img_data}}
+                        images_to_process = uploaded_images['all_sheets']
+                        print(f"📋 Using extracted images format: {len(images_to_process)} images")
+                    else:
+                        # This is direct uploaded_images format: {img_key: img_data}
+                        images_to_process = uploaded_images
+                        print(f"📤 Using direct upload format: {len(images_to_process)} images")
+            
+                if images_to_process:
+                    print(f"🖼️ INSERTING IMAGES: Found {len(images_to_process)} images to insert")
+                
+                    # Debug: Print available images
+                    for img_key, img_data in images_to_process.items():
+                        print(f"  📸 Available: {img_key} -> type: {img_data.get('type', 'unknown')}")
+                
+                    # First, identify image upload areas (keep your existing logic)
+                    _, image_areas = self.find_template_fields_with_context_and_images(template_file)
+                
+                    # Actually add the images to the template
+                    images_added, temp_image_paths = self.image_extractor.add_images_to_template(
+                        worksheet, images_to_process, image_areas
+                    )
+                
+                    print(f"🖼️ RESULT: {images_added} images successfully inserted into template")
+                else:
+                    print("⚠️ No images found to process")
+            else:
+                print("⚠️ No uploaded_images provided")
+    
+            # Write procedure steps if packaging type is provided (KEEP YOUR EXISTING LOGIC)
             if packaging_type and packaging_type != "Select Packaging Procedure":
                 try:
                     procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
@@ -1682,28 +1720,19 @@ class EnhancedTemplateMapperWithImages:
                     st.error(f"Error adding procedure steps: {e}")
                     print(f"Error adding procedure steps: {e}")
                     procedure_steps_added = 0
-                    if packaging_type and packaging_type != "Select Packaging Procedure":
-                        try:
-                            # Create data dictionary for procedure step replacement
-                            data_dict = {}
-                            if len(data_df) > 0:
-                                for col in data_df.columns:
-                                    try:
-                                        data_dict[col] = data_df.iloc[0][col]
-                                    except:
-                                        data_dict[col] = 'XXX'
-                
-                            procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                            print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                        except Exception as e:
-                            st.error(f"Error adding procedure steps: {e}")
-                            print(f"Error adding procedure steps: {e}")
-                            procedure_steps_added = 0
-            
-            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
         
+            print(f"\n=== FILL SUMMARY ===")
+            print(f"📊 Data fields filled: {filled_count}")
+            print(f"📋 Procedure steps added: {procedure_steps_added}")
+            print(f"🖼️ Images added: {images_added}")
+            print(f"📁 Temp image files: {len(temp_image_paths)}")
+        
+            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+    
         except Exception as e:
             st.error(f"Error filling template: {e}")
+            print(f"❌ Error in fill_template_with_data_and_images: {e}")
+            traceback.print_exc()
             return None, 0, 0, [], 0
 
 # Initialize session state
@@ -2553,7 +2582,7 @@ def generate_enhanced_filename(row, columns, index):
     except Exception as e:
         print(f"Error generating filename: {e}")
         return f"template_row_{index + 1}.xlsx"
-
+	    
 def main():
     try:
         if not st.session_state.authenticated:
