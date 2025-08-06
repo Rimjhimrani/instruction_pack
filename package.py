@@ -1822,165 +1822,211 @@ def show_login():
         
         st.info("**Demo Credentials:**\n- Admin: admin/admin123\n- User: user1/user123")
 def generate_single_template(enhanced_mapper, template_path, mapping_results, single_row_df, images_to_use, debug_mode=False):
-    """Generate a single template with comprehensive error handling and deep debugging"""
+    """
+    Generate a single template with proper error handling and return format
+    
+    Args:
+        enhanced_mapper: The mapper instance
+        template_path: Path to the template file
+        mapping_results: Field mapping results
+        single_row_df: DataFrame with single row of data
+        images_to_use: Dictionary of images to add
+        debug_mode: Enable debug output
+    
+    Returns:
+        dict: {'success': bool, 'workbook': workbook_object, 'temp_files': list, 'error': str}
+    """
     try:
         if debug_mode:
-            print(f"=== GENERATE_SINGLE_TEMPLATE DEBUG ===")
-            print(f"Template path exists: {os.path.exists(template_path)}")
-            print(f"Mapping results count: {len(mapping_results) if mapping_results else 0}")
-            print(f"Data rows: {len(single_row_df)}")
-            print(f"Images available: {len(images_to_use.get('all_sheets', {}))}")
-            print(f"Enhanced mapper type: {type(enhanced_mapper)}")
-            
-            # Check if the method exists
-            if hasattr(enhanced_mapper, 'fill_template_with_data_and_images'):
-                print("✅ fill_template_with_data_and_images method found")
-            else:
-                print("❌ fill_template_with_data_and_images method NOT found")
-                available_methods = [method for method in dir(enhanced_mapper) if 'fill' in method.lower()]
-                print(f"Available 'fill' methods: {available_methods}")
-        
-        # Validate inputs with detailed logging
+            print(f"🔍 DEBUG: generate_single_template called")
+            print(f"  - Template path: {template_path}")
+            print(f"  - Template path exists: {os.path.exists(template_path) if template_path else False}")
+            print(f"  - Mapper type: {type(enhanced_mapper)}")
+            print(f"  - Data shape: {single_row_df.shape}")
+            print(f"  - Mapping results count: {len(mapping_results) if mapping_results else 0}")
+            print(f"  - Images count: {len(images_to_use) if images_to_use else 0}")
+
+        # Validate inputs
+        if not enhanced_mapper:
+            error_msg = "Enhanced mapper is None"
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
         if not template_path or not os.path.exists(template_path):
-            error_msg = f'Template file not accessible: {template_path}'
+            error_msg = f"Template path invalid or doesn't exist: {template_path}"
             if debug_mode:
                 print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
         if single_row_df.empty:
-            error_msg = 'No data provided'
+            error_msg = "Data DataFrame is empty"
             if debug_mode:
                 print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+        # Check if the required method exists
         if not hasattr(enhanced_mapper, 'fill_template_with_data_and_images'):
-            error_msg = 'Template filler method not available'
+            error_msg = "Enhanced mapper missing fill_template_with_data_and_images method"
             if debug_mode:
                 print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
-        # Additional validation checks
-        if not mapping_results:
-            if debug_mode:
-                print("⚠️ WARNING: No mapping results provided")
-        
-        # Try to get more info about the data
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
         if debug_mode:
-            print(f"Single row data preview:")
-            for col, val in single_row_df.iloc[0].items():
-                print(f"  {col}: {val}")
-        
-        # Call the template filling method with detailed error tracking
-        if debug_mode:
-            print("🔄 Calling fill_template_with_data_and_images...")
-        
+            print("✅ All validations passed, calling fill_template_with_data_and_images")
+
+        # Process images - extract the actual images if nested
+        processed_images = {}
+        if images_to_use:
+            if 'all_sheets' in images_to_use:
+                processed_images = images_to_use['all_sheets']
+                if debug_mode:
+                    print(f"  - Extracted {len(processed_images)} images from 'all_sheets'")
+            else:
+                processed_images = images_to_use
+                if debug_mode:
+                    print(f"  - Using {len(processed_images)} images directly")
+
+        # Call the enhanced mapper's fill method
         try:
             result = enhanced_mapper.fill_template_with_data_and_images(
-                template_path, 
-                mapping_results, 
-                single_row_df, 
-                images_to_use, 
-                None  # No packaging type for now
+                template_file=template_path,
+                mapping_results=mapping_results,
+                data_df=single_row_df,
+                uploaded_images=processed_images,
+                packaging_type=None  # You can add logic to determine this from data
             )
             
             if debug_mode:
-                print(f"✅ Method call completed. Result type: {type(result)}")
-                print(f"Result length: {len(result) if result and hasattr(result, '__len__') else 'N/A'}")
-                
-        except Exception as method_error:
-            error_msg = f'Error calling fill_template_with_data_and_images: {str(method_error)}'
+                print(f"  - Fill method returned: {type(result)}")
+                if isinstance(result, dict):
+                    print(f"  - Result keys: {list(result.keys())}")
+                    print(f"  - Success: {result.get('success', 'not specified')}")
+
+        except Exception as fill_error:
+            error_msg = f"Error calling fill_template_with_data_and_images: {str(fill_error)}"
             if debug_mode:
                 print(f"❌ {error_msg}")
+                import traceback
                 traceback.print_exc()
-            return {'success': False, 'error': error_msg}
-        
-        # Validate result structure
-        if not result:
-            error_msg = 'Template filler returned None/empty result'
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+        # Handle different return formats
+        if result is None:
+            error_msg = "Fill method returned None"
             if debug_mode:
                 print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
-        # Check if result is iterable and has expected structure
-        try:
-            if not hasattr(result, '__getitem__'):
-                error_msg = f'Template filler returned non-indexable result: {type(result)}'
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+        # If result is a dictionary (expected format)
+        if isinstance(result, dict):
+            if debug_mode:
+                print("  - Result is dictionary format")
+            
+            # Check if it has the expected structure
+            if 'success' in result:
+                if result['success'] and result.get('workbook'):
+                    if debug_mode:
+                        print("✅ Success with workbook")
+                    return result
+                else:
+                    error_msg = result.get('error', 'Unknown error from fill method')
+                    if debug_mode:
+                        print(f"❌ Fill method reported failure: {error_msg}")
+                    return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': result.get('temp_files', [])}
+            else:
+                # Legacy format - try to extract workbook
+                if 'workbook' in result and result['workbook']:
+                    if debug_mode:
+                        print("✅ Legacy format with workbook")
+                    return {
+                        'success': True,
+                        'workbook': result['workbook'],
+                        'temp_files': result.get('temp_files', [])
+                    }
+                else:
+                    error_msg = "Dictionary result missing workbook"
+                    if debug_mode:
+                        print(f"❌ {error_msg}")
+                    return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+        # If result is a tuple (old format)
+        elif isinstance(result, tuple):
+            if debug_mode:
+                print(f"  - Result is tuple format with {len(result)} elements")
+            
+            if len(result) >= 1 and result[0] is not None:
+                workbook = result[0]
+                temp_files = result[3] if len(result) > 3 else []
+                if debug_mode:
+                    print("✅ Tuple format with valid workbook")
+                return {
+                    'success': True,
+                    'workbook': workbook,
+                    'temp_files': temp_files
+                }
+            else:
+                error_msg = "Tuple result has None workbook"
                 if debug_mode:
                     print(f"❌ {error_msg}")
-                return {'success': False, 'error': error_msg}
-            
-            if len(result) < 1:
-                error_msg = 'Template filler returned empty result tuple'
-                if debug_mode:
-                    print(f"❌ {error_msg}")
-                return {'success': False, 'error': error_msg}
-                
-        except Exception as structure_error:
-            error_msg = f'Error checking result structure: {str(structure_error)}'
+                return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+        # If result is directly a workbook object
+        elif hasattr(result, 'worksheets'):  # Duck typing for workbook
+            if debug_mode:
+                print("✅ Result appears to be a workbook object")
+            return {
+                'success': True,
+                'workbook': result,
+                'temp_files': []
+            }
+
+        else:
+            error_msg = f"Unexpected result type: {type(result)}"
             if debug_mode:
                 print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
-        # Extract workbook with detailed checking
-        try:
-            workbook = result[0]
-            if debug_mode:
-                print(f"Workbook extracted. Type: {type(workbook)}")
-                print(f"Workbook is None: {workbook is None}")
-                
-                if workbook:
-                    print(f"Workbook has worksheets: {hasattr(workbook, 'worksheets')}")
-                    if hasattr(workbook, 'worksheets'):
-                        print(f"Number of worksheets: {len(workbook.worksheets)}")
-                
-        except (IndexError, TypeError) as extract_error:
-            error_msg = f'Error extracting workbook from result: {str(extract_error)}'
-            if debug_mode:
-                print(f"❌ {error_msg}")
-            return {'success': False, 'error': error_msg}
-        
-        if not workbook:
-            error_msg = 'Template filler returned None workbook'
-            if debug_mode:
-                print(f"❌ {error_msg}")
-                # Try to get more info about what was returned
-                print(f"Full result: {result}")
-            return {'success': False, 'error': error_msg}
-        
-        # Extract additional info from result with safe indexing
-        try:
-            filled_count = result[1] if len(result) > 1 else 0
-            images_added = result[2] if len(result) > 2 else 0
-            temp_files = result[3] if len(result) > 3 else []
-            
-            if debug_mode:
-                print(f"✅ Template filled successfully:")
-                print(f"  Filled count: {filled_count}")
-                print(f"  Images added: {images_added}")
-                print(f"  Temp files: {len(temp_files)}")
-                
-        except Exception as info_error:
-            # If we can't extract additional info, that's okay as long as we have the workbook
-            if debug_mode:
-                print(f"⚠️ Warning: Could not extract additional info: {info_error}")
-            filled_count = 0
-            images_added = 0
-            temp_files = []
-        
-        return {
-            'success': True,
-            'workbook': workbook,
-            'filled_count': filled_count,
-            'images_added': images_added,
-            'temp_files': temp_files
-        }
-        
+            return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
     except Exception as e:
-        error_msg = f'Unexpected error in generate_single_template: {str(e)}'
+        error_msg = f"Unexpected error in generate_single_template: {str(e)}"
         if debug_mode:
             print(f"❌ {error_msg}")
+            import traceback
             traceback.print_exc()
-        return {'success': False, 'error': error_msg}
+        return {'success': False, 'error': error_msg, 'workbook': None, 'temp_files': []}
+
+# Alternative simplified version if the above is too complex
+def generate_single_template_simple(enhanced_mapper, template_path, mapping_results, single_row_df, images_to_use, debug_mode=False):
+    """
+    Simplified version of generate_single_template with minimal error handling
+    """
+    try:
+        # Basic validation
+        if not enhanced_mapper or not template_path or not os.path.exists(template_path):
+            return {'success': False, 'error': 'Invalid inputs', 'workbook': None, 'temp_files': []}
+
+        # Process images
+        processed_images = images_to_use.get('all_sheets', {}) if isinstance(images_to_use, dict) else {}
+
+        # Call fill method
+        result = enhanced_mapper.fill_template_with_data_and_images(
+            template_file=template_path,
+            mapping_results=mapping_results or [],
+            data_df=single_row_df,
+            uploaded_images=processed_images,
+            packaging_type=None
+        )
+
+        # Handle result
+        if isinstance(result, dict) and result.get('success') and result.get('workbook'):
+            return result
+        elif isinstance(result, tuple) and len(result) > 0 and result[0] is not None:
+            return {'success': True, 'workbook': result[0], 'temp_files': result[3] if len(result) > 3 else []}
+        else:
+            return {'success': False, 'error': 'No valid workbook returned', 'workbook': None, 'temp_files': []}
+
+    except Exception as e:
+        return {'success': False, 'error': str(e), 'workbook': None, 'temp_files': []}
 
 
 def show_main_app():
