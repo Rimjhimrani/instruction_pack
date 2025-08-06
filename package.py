@@ -1657,9 +1657,17 @@ class EnhancedTemplateMapperWithImages:
         print(f"🧩 Number of mappings: {len(mapping_results)}")
         print(f"🖼️ Uploaded images: {list(uploaded_images.keys()) if uploaded_images else 'None'}")
         print(f"📦 Packaging type: {packaging_type}")
+
         try:
-            # ✅ Load template
-            workbook = openpyxl.load_workbook(template_file)
+            # ✅ Load template from UploadedFile or path
+            if hasattr(template_file, "read"):
+                print("📥 Reading template from UploadedFile")
+                template_bytes = template_file.read()
+                workbook = openpyxl.load_workbook(BytesIO(template_bytes))
+            else:
+                print("📁 Reading template from file path")
+                workbook = openpyxl.load_workbook(template_file)
+
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
@@ -1674,7 +1682,6 @@ class EnhancedTemplateMapperWithImages:
                     try:
                         value = data_df.iloc[0][column]
                         print(f"✍️ Writing value '{value}' to field '{field_name}'")
-                        # ➕ Replace this with your actual write logic:
                         for sheet in workbook.worksheets:
                             for row in sheet.iter_rows():
                                 for cell in row:
@@ -1706,6 +1713,7 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             print(f"❌ Critical error: {e}")
             return None, 0, 0, [], 0
+
 
 # Initialize session state
 if 'authenticated' not in st.session_state:
