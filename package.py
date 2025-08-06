@@ -1658,45 +1658,53 @@ class EnhancedTemplateMapperWithImages:
         print(f"🖼️ Uploaded images: {list(uploaded_images.keys()) if uploaded_images else 'None'}")
         print(f"📦 Packaging type: {packaging_type}")
         try:
+            # ✅ Load template
             workbook = openpyxl.load_workbook(template_file)
-
             filled_count = 0
             images_added = 0
             procedure_steps_added = 0
             temp_image_paths = []
-            # Step 1: Fill mapped fields
+
+            # ✅ Fill mapped fields
             for mapping in mapping_results:
                 field_name = mapping.get('template_field')
                 column = mapping.get('data_column')
 
                 if column and field_name and column in data_df.columns:
-                    value = data_df.iloc[0][column]
-                    print(f"✍️ Writing value '{value}' to field '{field_name}'")
-                    # You should insert value into the workbook here based on field_name
-                    # Placeholder: Replace with your actual cell-writing logic
-                    # For example: worksheet[field_name] = value
-                    filled_count += 1
+                    try:
+                        value = data_df.iloc[0][column]
+                        print(f"✍️ Writing value '{value}' to field '{field_name}'")
+                        # ➕ Replace this with your actual write logic:
+                        for sheet in workbook.worksheets:
+                            for row in sheet.iter_rows():
+                                for cell in row:
+                                    if cell.value == field_name:
+                                        cell.value = value
+                                        filled_count += 1
+                    except Exception as e:
+                        print(f"⚠️ Failed to fill field '{field_name}': {e}")
 
-            # Step 2: Add procedure steps
+            # ✅ Add procedure steps
             try:
                 procedure_steps_added = self.add_procedure_steps_to_template(workbook, data_df, packaging_type)
                 print(f"📜 Procedure steps added: {procedure_steps_added}")
             except Exception as pe:
-                print(f"⚠️ Error adding procedure steps: {pe}")
+                print(f"❌ Error adding procedure steps: {pe}")
 
-            # Step 3: Add images
+            # ✅ Add images
             try:
                 images_added = self.add_images_to_template(workbook, uploaded_images)
                 print(f"🖼️ Images added: {images_added}")
             except Exception as ie:
-                print(f"⚠️ Error adding images: {ie}")
+                print(f"❌ Error adding images: {ie}")
 
-            print(f"✅ Returning workbook: {workbook is not None}")
+            # ✅ Final debug before return
+            print(f"✅ Workbook ready: {workbook is not None}")
             print(f"📊 Summary — Fields: {filled_count}, Images: {images_added}, Procedure Steps: {procedure_steps_added}")
             return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
 
         except Exception as e:
-            print(f"❌ Critical failure in fill_template_with_data_and_images: {e}")
+            print(f"❌ Critical error: {e}")
             return None, 0, 0, [], 0
 
 # Initialize session state
