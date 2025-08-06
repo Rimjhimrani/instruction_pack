@@ -1650,7 +1650,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error adding images to template: {e}")
             return 0, []
     
-     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
+    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
         print("🛠️ Entered fill_template_with_data_and_images()")
         print(f"📂 Template file: {template_file}")
         print(f"📊 DataFrame shape: {data_df.shape}")
