@@ -1651,10 +1651,14 @@ class EnhancedTemplateMapperWithImages:
             return 0, []
     
     def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
+        """
+        Fill template with data and images - FIXED to return proper format
+        Returns: dict with 'success', 'workbook', 'temp_files', and optional 'error' keys
+        """
         print("🛠️ Entered fill_template_with_data_and_images()")
         print(f"📂 Template file: {template_file}")
         print(f"📊 DataFrame shape: {data_df.shape}")
-        print(f"🧩 Number of mappings: {len(mapping_results)}")
+        print(f"🧩 Number of mappings: {len(mapping_results) if mapping_results else 0}")
         print(f"🖼️ Uploaded images: {list(uploaded_images.keys()) if uploaded_images else 'None'}")
         print(f"📦 Packaging type: {packaging_type}")
 
@@ -1674,46 +1678,87 @@ class EnhancedTemplateMapperWithImages:
             temp_image_paths = []
 
             # ✅ Fill mapped fields
-            for mapping in mapping_results:
-                field_name = mapping.get('template_field')
-                column = mapping.get('data_column')
+            if mapping_results:
+                for mapping in mapping_results:
+                    field_name = mapping.get('template_field')
+                    column = mapping.get('data_column')
 
-                if column and field_name and column in data_df.columns:
-                    try:
-                        value = data_df.iloc[0][column]
-                        print(f"✍️ Writing value '{value}' to field '{field_name}'")
-                        for sheet in workbook.worksheets:
-                            for row in sheet.iter_rows():
-                                for cell in row:
-                                    if cell.value == field_name:
-                                        cell.value = value
-                                        filled_count += 1
-                    except Exception as e:
-                        print(f"⚠️ Failed to fill field '{field_name}': {e}")
+                    if column and field_name and column in data_df.columns:
+                        try:
+                            value = data_df.iloc[0][column]
+                            print(f"✍️ Writing value '{value}' to field '{field_name}'")
+                        
+                            # Search and replace in all worksheets
+                            for sheet in workbook.worksheets:
+                                for row in sheet.iter_rows():
+                                    for cell in row:
+                                        if cell.value == field_name:
+                                            cell.value = value
+                                            filled_count += 1
+                                            print(f"✅ Filled {field_name} with {value} at {cell.coordinate}")
+                        except Exception as e:
+                            print(f"⚠️ Failed to fill field '{field_name}': {e}")
 
             # ✅ Add procedure steps
             try:
-                procedure_steps_added = self.add_procedure_steps_to_template(workbook, data_df, packaging_type)
-                print(f"📜 Procedure steps added: {procedure_steps_added}")
+                if hasattr(self, 'add_procedure_steps_to_template'):
+                    procedure_steps_added = self.add_procedure_steps_to_template(workbook, data_df, packaging_type)
+                    print(f"📜 Procedure steps added: {procedure_steps_added}")
             except Exception as pe:
                 print(f"❌ Error adding procedure steps: {pe}")
 
             # ✅ Add images
             try:
-                images_added = self.add_images_to_template(workbook, uploaded_images)
-                print(f"🖼️ Images added: {images_added}")
+                if uploaded_images and hasattr(self, 'image_extractor'):
+                    # Get all worksheets to find image areas
+                    main_worksheet = workbook.active
+                
+                    # Add images using the image extractor
+                    images_added_count, temp_paths = self.image_extractor.add_images_to_template(
+                        main_worksheet, uploaded_images, []
+                    )
+                    images_added = images_added_count
+                    temp_image_paths.extend(temp_paths)
+                    print(f"🖼️ Images added: {images_added}")
             except Exception as ie:
                 print(f"❌ Error adding images: {ie}")
+
+            # ✅ Validate workbook before returning
+            if workbook is None:
+                print("❌ Workbook is None after processing!")
+                return {
+                    'success': False,
+                    'error': 'Workbook became None during processing',
+                    'workbook': None,
+                    'temp_files': temp_image_paths
+                }
 
             # ✅ Final debug before return
             print(f"✅ Workbook ready: {workbook is not None}")
             print(f"📊 Summary — Fields: {filled_count}, Images: {images_added}, Procedure Steps: {procedure_steps_added}")
-            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+        
+            # Return in the expected format
+            return {
+                'success': True,
+                'workbook': workbook,
+                'temp_files': temp_image_paths,
+                'filled_count': filled_count,
+                'images_added': images_added,
+                'procedure_steps_added': procedure_steps_added
+            }
 
         except Exception as e:
-            print(f"❌ Critical error: {e}")
-            return None, 0, 0, [], 0
-
+            error_msg = f"Critical error in fill_template_with_data_and_images: {str(e)}"
+            print(f"❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
+        
+            return {
+                'success': False,
+                'error': error_msg,
+                'workbook': None,
+                'temp_files': []
+            }
 
 # Initialize session state
 if 'authenticated' not in st.session_state:
