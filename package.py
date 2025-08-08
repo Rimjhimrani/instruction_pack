@@ -283,129 +283,322 @@ class EnhancedTemplateMapperWithImages:
         self.image_extractor = ImageExtractor()
         self.similarity_threshold = 0.3
         
-        # Section-based mapping rules from reference code
-        self.section_mappings = {
-            'primary_packaging': {
-                'section_keywords': [
-                    'primary packaging instruction', 'primary packaging', 'primary', 
-                    'internal', '( primary / internal )', 'primary / internal'
-                ],
-                'field_mappings': {
-                    'primary packaging type': 'Primary Packaging Type',
-                    'packaging type': 'Primary Packaging Type',
-                    'l-mm': 'Primary L-mm',
-                    'l mm': 'Primary L-mm',
-                    'length': 'Primary L-mm',
-                    'w-mm': 'Primary W-mm',
-                    'w mm': 'Primary W-mm', 
-                    'width': 'Primary W-mm',
-                    'h-mm': 'Primary H-mm',
-                    'h mm': 'Primary H-mm',
-                    'height': 'Primary H-mm',
-                    'qty/pack': 'Primary Qty/Pack',
-                    'quantity': 'Primary Qty/Pack',
-                    'empty weight': 'Primary Empty Weight',
-                    'pack weight': 'Primary Pack Weight'
-                }
-            },
-            'secondary_packaging': {
-                'section_keywords': [
-                    'secondary packaging instruction', 'secondary packaging', 'secondary', 
-                    'outer', 'external', '( outer / external )', 'outer / external'
-                ],
-                'field_mappings': {
-                    'secondary packaging type': 'Secondary Packaging Type',
-                    'packaging type': 'Secondary Packaging Type',
-                    'type': 'Secondary Packaging Type',
-                    'l-mm': 'Secondary L-mm',
-                    'l mm': 'Secondary L-mm',
-                    'length': 'Secondary L-mm',
-                    'w-mm': 'Secondary W-mm',
-                    'w mm': 'Secondary W-mm',
-                    'width': 'Secondary W-mm',
-                    'h-mm': 'Secondary H-mm',
-                    'h mm': 'Secondary H-mm',
-                    'height': 'Secondary H-mm',
-                    'qty/pack': 'Secondary Qty/Pack',
-                    'quantity': 'Secondary Qty/Pack',
-                    'empty weight': 'Secondary Empty Weight',
-                    'pack weight': 'Secondary Pack Weight'
-                }
-            },
-            'part_information': {
-                'section_keywords': [
-                    'part information', 'part info', 'part', 'component', 'item'
-                ],
-                'field_mappings': {
-                    'part no': 'Part No',
-                    'part number': 'Part No',
-                    'description': 'Part Description',
-                    'unit weight': 'Part Unit Weight',
-                    'L': 'Part L',
-                    'W': 'Part W',
-                    'H': 'Part H'
-                }
-            },
-            'vendor_information': {
-                'section_keywords': [
-                    'vendor information', 'vendor info', 'vendor', 'supplier'
-                ],
-                'field_mappings': {
-                    'vendor name': 'Vendor Name',
-                    'name': 'Vendor Name',
-                    'vendor code': 'Vendor Code',
-                    'vendor location': 'Vendor Location'
-                }
-            }
+        # Enhanced field mappings based on the template structure
+        self.field_mappings = {
+            # Vendor Information mappings
+            'vendor code': ['Code', 'vendor code'],
+            'vendor name': ['Name', 'vendor name'],  
+            'vendor location': ['Location', 'vendor location'],
+            
+            # Part Information mappings
+            'part no': ['Part No.', 'part number', 'part no'],
+            'part number': ['Part No.', 'part number', 'part no'],
+            'description': ['Description', 'part description'],
+            'unit weight': ['Unit Weight', 'weight'],
+            'part l': ['L', 'length', 'part l'],
+            'part w': ['W', 'width', 'part w'], 
+            'part h': ['H', 'height', 'part h'],
+            
+            # Primary Packaging mappings
+            'primary packaging type': ['Packaging Type', 'primary type'],
+            'primary l-mm': ['L-mm', 'primary length', 'length mm'],
+            'primary w-mm': ['W-mm', 'primary width', 'width mm'],
+            'primary h-mm': ['H-mm', 'primary height', 'height mm'],
+            'primary qty/pack': ['Qty/Pack', 'primary quantity'],
+            'primary empty weight': ['Empty Weight', 'primary empty weight'],
+            'primary pack weight': ['Pack Weight', 'primary pack weight'],
+            
+            # Secondary Packaging mappings
+            'secondary packaging type': ['Packaging Type', 'secondary type'],
+            'secondary l-mm': ['L-mm', 'secondary length'],
+            'secondary w-mm': ['W-mm', 'secondary width'],
+            'secondary h-mm': ['H-mm', 'secondary height'],
+            'secondary qty/pack': ['Qty/Pack', 'secondary quantity'],
+            'secondary empty weight': ['Empty Weight', 'secondary empty weight'],
+            'secondary pack weight': ['Pack Weight', 'secondary pack weight'],
+            
+            # Common dimension mappings
+            'length': ['L-mm', 'L', 'length'],
+            'width': ['W-mm', 'W', 'width'],
+            'height': ['H-mm', 'H', 'height'],
+            'l': ['L-mm', 'L'],
+            'w': ['W-mm', 'W'],
+            'h': ['H-mm', 'H']
         }
 
+    def is_merged_cell(self, worksheet, row, col):
+        """Check if a cell is part of a merged range"""
+        cell = worksheet.cell(row=row, column=col)
+        for merged_range in worksheet.merged_cells.ranges:
+            if cell.coordinate in merged_range:
+                return True, merged_range
+        return False, None
+
+    def get_writable_cell_in_merged_range(self, worksheet, merged_range):
+        """Get the top-left cell of a merged range (the writable one)"""
+        min_col, min_row, max_col, max_row = merged_range.bounds
+        return worksheet.cell(row=min_row, column=min_col)
+
+    def find_template_sections(self, worksheet):
+        """Identify different sections in the template"""
+        sections = {
+            'vendor_info': [],
+            'part_info': [],
+            'primary_packaging': [],
+            'secondary_packaging': [],
+            'packaging_procedure': []
+        }
+        
+        section_keywords = {
+            'vendor_info': ['vendor information', 'code', 'name', 'location'],
+            'part_info': ['part information', 'part no', 'description', 'unit weight'],
+            'primary_packaging': ['primary packaging instruction', 'primary', 'internal'],
+            'secondary_packaging': ['secondary packaging instruction', 'secondary', 'outer', 'external'],
+            'packaging_procedure': ['packaging procedure', 'procedure']
+        }
+        
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    for section_name, keywords in section_keywords.items():
+                        if any(keyword.lower() in cell_text for keyword in keywords):
+                            sections[section_name].append((row_num, col_num, cell_text))
+        
+        return sections
+
+    def find_field_cells(self, worksheet, search_terms, start_row=1, end_row=None, start_col=1, end_col=None):
+        """Find cells containing specific field names"""
+        if end_row is None:
+            end_row = worksheet.max_row
+        if end_col is None:
+            end_col = worksheet.max_column
+            
+        found_cells = []
+        
+        for row_num in range(start_row, end_row + 1):
+            for col_num in range(start_col, end_col + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    for term in search_terms:
+                        if term.lower() in cell_text or cell_text in term.lower():
+                            found_cells.append((row_num, col_num, cell_text))
+                            break
+        
+        return found_cells
+
+    def find_adjacent_writable_cell(self, worksheet, row, col, max_distance=3):
+        """Find the nearest writable cell to place data"""
+        directions = [
+            (0, 1),   # Right
+            (0, 2),   # Right +2
+            (1, 0),   # Down
+            (1, 1),   # Down-Right
+            (0, -1),  # Left
+            (-1, 0),  # Up
+        ]
+        
+        for distance in range(1, max_distance + 1):
+            for dr, dc in directions:
+                try:
+                    target_row = row + (dr * distance)
+                    target_col = col + (dc * distance)
+                    
+                    if target_row < 1 or target_col < 1:
+                        continue
+                    
+                    target_cell = worksheet.cell(row=target_row, column=target_col)
+                    
+                    # Check if it's a merged cell
+                    is_merged, merged_range = self.is_merged_cell(worksheet, target_row, target_col)
+                    
+                    if is_merged:
+                        # Get the writable cell in merged range
+                        writable_cell = self.get_writable_cell_in_merged_range(worksheet, merged_range)
+                        if not writable_cell.value:  # Only use if empty
+                            return writable_cell
+                    else:
+                        # Regular cell
+                        if not target_cell.value:  # Only use if empty
+                            return target_cell
+                            
+                except Exception:
+                    continue
+        
+        return None
+
     def map_template_with_data(self, template_path, data_path):
-        """Map template with data from Excel file"""
+        """Enhanced mapping with merged cell support"""
         try:
             # Read data from Excel
             data_df = pd.read_excel(data_path)
+            st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
             
             # Load template
             workbook = openpyxl.load_workbook(template_path)
             worksheet = workbook.active
             
-            mapped_fields = {}
+            st.write(f"📋 Template has {worksheet.max_row} rows and {worksheet.max_column} columns")
+            st.write(f"🔗 Found {len(worksheet.merged_cells.ranges)} merged cell ranges")
             
-            # Simple mapping - look for matching field names
+            # Create data mapping
+            mapped_fields = {}
+            data_map = {}
+            
+            # Process each row in data
             for index, row in data_df.iterrows():
                 for col_name, value in row.items():
                     if pd.notna(value) and col_name:
-                        # Clean column name for matching
                         clean_col = str(col_name).lower().strip()
-                        mapped_fields[clean_col] = str(value)
+                        clean_value = str(value).strip()
+                        data_map[clean_col] = clean_value
+                        mapped_fields[clean_col] = clean_value
             
-            # Apply mappings to template
-            for row_num in range(1, worksheet.max_row + 1):
-                for col_num in range(1, worksheet.max_column + 1):
-                    cell = worksheet.cell(row=row_num, column=col_num)
-                    if cell.value and isinstance(cell.value, str):
-                        cell_text = cell.value.lower().strip()
+            st.write(f"📝 Created data map with {len(data_map)} fields")
+            
+            # Find template sections
+            sections = self.find_template_sections(worksheet)
+            
+            # Apply mappings with enhanced logic
+            mapping_count = 0
+            
+            # Strategy 1: Direct field mapping
+            for data_field, data_value in data_map.items():
+                if data_field in self.field_mappings:
+                    template_terms = self.field_mappings[data_field]
+                    
+                    # Search for these terms in the template
+                    found_cells = self.find_field_cells(worksheet, template_terms)
+                    
+                    for row_num, col_num, cell_text in found_cells:
+                        # Find adjacent writable cell
+                        writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
                         
-                        # Check for direct matches
-                        for field_key, field_value in mapped_fields.items():
-                            if field_key in cell_text or cell_text in field_key:
-                                # Look for adjacent empty cell to fill
-                                adjacent_cells = [
-                                    worksheet.cell(row=row_num, column=col_num + 1),
-                                    worksheet.cell(row=row_num + 1, column=col_num),
-                                    worksheet.cell(row=row_num, column=col_num + 2)
-                                ]
-                                
-                                for adj_cell in adjacent_cells:
-                                    if not adj_cell.value:
-                                        adj_cell.value = field_value
-                                        break
+                        if writable_cell:
+                            try:
+                                writable_cell.value = data_value
+                                mapping_count += 1
+                                st.write(f"✅ Mapped '{data_field}' = '{data_value}' to cell {writable_cell.coordinate}")
+                                break  # Only fill the first match
+                            except Exception as e:
+                                st.write(f"⚠️ Failed to write to {writable_cell.coordinate}: {e}")
+            
+            # Strategy 2: Fuzzy matching for unmapped fields
+            for data_field, data_value in data_map.items():
+                if data_field not in [k for k in self.field_mappings.keys()]:
+                    # Try fuzzy matching
+                    best_match = self.find_best_fuzzy_match(worksheet, data_field)
+                    
+                    if best_match:
+                        row_num, col_num, match_text, similarity = best_match
+                        writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
+                        
+                        if writable_cell and similarity > self.similarity_threshold:
+                            try:
+                                writable_cell.value = data_value
+                                mapping_count += 1
+                                st.write(f"🎯 Fuzzy matched '{data_field}' to '{match_text}' (similarity: {similarity:.2f})")
+                            except Exception as e:
+                                st.write(f"⚠️ Failed fuzzy mapping: {e}")
+            
+            st.success(f"🎉 Successfully mapped {mapping_count} fields to template!")
             
             return workbook, mapped_fields
             
         except Exception as e:
-            st.error(f"Error mapping template: {e}")
+            st.error(f"❌ Error mapping template: {e}")
+            st.write("📋 Traceback:", traceback.format_exc())
             return None, {}
+
+    def find_best_fuzzy_match(self, worksheet, search_term):
+        """Find the best fuzzy match for a search term"""
+        best_match = None
+        best_similarity = 0
+        
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    # Calculate similarity
+                    similarity = SequenceMatcher(None, search_term.lower(), cell_text).ratio()
+                    
+                    if similarity > best_similarity and similarity > 0.3:
+                        best_similarity = similarity
+                        best_match = (row_num, col_num, cell_text, similarity)
+        
+        return best_match
+
+    def add_packaging_procedure(self, worksheet, packaging_type, data_map):
+        """Add packaging procedure text to the template"""
+        try:
+            if packaging_type in PACKAGING_PROCEDURES:
+                procedures = PACKAGING_PROCEDURES[packaging_type]
+                
+                # Find procedure section (around rows with "Packaging Procedure")
+                procedure_start_row = None
+                for row_num in range(1, worksheet.max_row + 1):
+                    for col_num in range(1, worksheet.max_column + 1):
+                        cell = worksheet.cell(row=row_num, column=col_num)
+                        if cell.value and isinstance(cell.value, str):
+                            if 'packaging procedure' in str(cell.value).lower():
+                                procedure_start_row = row_num + 1
+                                break
+                    if procedure_start_row:
+                        break
+                
+                if procedure_start_row:
+                    # Add procedures starting from the identified row
+                    for i, procedure in enumerate(procedures[:10], 1):  # Limit to first 10 steps
+                        try:
+                            procedure_row = procedure_start_row + i - 1
+                            if procedure_row <= worksheet.max_row:
+                                # Find the first cell in the procedure row (usually column A or B)
+                                step_cell = worksheet.cell(row=procedure_row, column=1)
+                                desc_cell = worksheet.cell(row=procedure_row, column=2)
+                                
+                                # Format procedure text with data substitution
+                                formatted_procedure = self.format_procedure_text(procedure, data_map)
+                                
+                                # Write step number and description
+                                if not step_cell.value:
+                                    step_cell.value = str(i)
+                                if not desc_cell.value:
+                                    desc_cell.value = formatted_procedure
+                                    
+                        except Exception as e:
+                            st.write(f"⚠️ Failed to add procedure step {i}: {e}")
+                    
+                    st.success(f"✅ Added {len(procedures)} packaging procedure steps")
+                    
+        except Exception as e:
+            st.write(f"⚠️ Error adding packaging procedure: {e}")
+
+    def format_procedure_text(self, procedure_text, data_map):
+        """Format procedure text by replacing placeholders with actual data"""
+        formatted_text = procedure_text
+        
+        # Common replacements
+        replacements = {
+            '{Inner L}': data_map.get('primary l-mm', data_map.get('length', 'XXX')),
+            '{Inner W}': data_map.get('primary w-mm', data_map.get('width', 'XXX')),
+            '{Inner H}': data_map.get('primary h-mm', data_map.get('height', 'XXX')),
+            '{Inner Qty/Pack}': data_map.get('primary qty/pack', data_map.get('quantity', 'XXX')),
+            '{Qty/Veh}': data_map.get('qty/veh', data_map.get('quantity per vehicle', '1')),
+            '{Layer}': data_map.get('layer', '4'),
+            '{Level}': data_map.get('level', '5'),
+            '{Qty/Pack}': data_map.get('qty/pack', data_map.get('quantity', 'XXX'))
+        }
+        
+        for placeholder, value in replacements.items():
+            formatted_text = formatted_text.replace(placeholder, str(value))
+        
+        return formatted_text
 
 # Packaging types and procedures from reference code
 PACKAGING_TYPES = [
