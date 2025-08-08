@@ -233,8 +233,8 @@ class ImageExtractor:
             positions = {
                 'current': 'T3',  # Current packaging at T3
                 'primary': 'A42',  # Primary packaging at A42
-                'secondary': 'I42',  # Secondary packaging at I42 (next column set)
-                'label': 'Q42'  # Label at Q42 (next column set)
+                'secondary': 'F42',  # Secondary packaging at F42 (next column set)
+                'label': 'K42'  # Label at K42 (next column set)
             }
             
             for img_key, img_data in uploaded_images.items():
@@ -441,23 +441,23 @@ class EnhancedTemplateMapperWithImages:
         return None
 
     def map_template_with_data(self, template_path, data_path):
-        """Enhanced mapping with merged cell support"""
+        """Enhanced mapping with dynamic field detection and smart target cell finding"""
         try:
             # Read data from Excel
             data_df = pd.read_excel(data_path)
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
-            
+        
             # Load template
             workbook = openpyxl.load_workbook(template_path)
             worksheet = workbook.active
-            
+        
             st.write(f"📋 Template has {worksheet.max_row} rows and {worksheet.max_column} columns")
             st.write(f"🔗 Found {len(worksheet.merged_cells.ranges)} merged cell ranges")
-            
+        
             # Create data mapping
             mapped_fields = {}
             data_map = {}
-            
+         
             # Process each row in data
             for index, row in data_df.iterrows():
                 for col_name, value in row.items():
@@ -466,62 +466,232 @@ class EnhancedTemplateMapperWithImages:
                         clean_value = str(value).strip()
                         data_map[clean_col] = clean_value
                         mapped_fields[clean_col] = clean_value
-            
+        
             st.write(f"📝 Created data map with {len(data_map)} fields")
-            
-            # Find template sections
-            sections = self.find_template_sections(worksheet)
-            
-            # Apply mappings with enhanced logic
+        
+            # Build template field map with precise target cells
+            template_field_map = self.build_template_field_map(worksheet)
+            st.write(f"🗺️ Found {len(template_field_map)} template fields")
+        
+            # Apply mappings using smart matching
             mapping_count = 0
-            
-            # Strategy 1: Direct field mapping
+        
             for data_field, data_value in data_map.items():
-                if data_field in self.field_mappings:
-                    template_terms = self.field_mappings[data_field]
-                    
-                    # Search for these terms in the template
-                    found_cells = self.find_field_cells(worksheet, template_terms)
-                    
-                    for row_num, col_num, cell_text in found_cells:
-                        # Find adjacent writable cell
-                        writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
-                        
-                        if writable_cell:
-                            try:
-                                writable_cell.value = data_value
-                                mapping_count += 1
-                                st.write(f"✅ Mapped '{data_field}' = '{data_value}' to cell {writable_cell.coordinate}")
-                                break  # Only fill the first match
-                            except Exception as e:
-                                st.write(f"⚠️ Failed to write to {writable_cell.coordinate}: {e}")
+                # Try direct mapping first
+                target_cell = self.find_target_cell_for_field(worksheet, data_field, template_field_map)
             
-            # Strategy 2: Fuzzy matching for unmapped fields
-            for data_field, data_value in data_map.items():
-                if data_field not in [k for k in self.field_mappings.keys()]:
-                    # Try fuzzy matching
-                    best_match = self.find_best_fuzzy_match(worksheet, data_field)
-                    
-                    if best_match:
-                        row_num, col_num, match_text, similarity = best_match
-                        writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
-                        
-                        if writable_cell and similarity > self.similarity_threshold:
-                            try:
-                                writable_cell.value = data_value
-                                mapping_count += 1
-                                st.write(f"🎯 Fuzzy matched '{data_field}' to '{match_text}' (similarity: {similarity:.2f})")
-                            except Exception as e:
-                                st.write(f"⚠️ Failed fuzzy mapping: {e}")
-            
+                if target_cell:
+                    success = self.write_to_target_cell(worksheet, target_cell, data_value, data_field)
+                    if success:
+                        mapping_count += 1
+                else:
+                    # Try enhanced field mapping
+                    mapped_target = self.try_enhanced_field_mapping(worksheet, data_field, data_value)
+                    if mapped_target:
+                        mapping_count += 1
+        
             st.success(f"🎉 Successfully mapped {mapping_count} fields to template!")
-            
+        
             return workbook, mapped_fields
-            
+        
         except Exception as e:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
             return None, {}
+
+    def build_template_field_map(self, worksheet):
+        """Build a comprehensive map of template fields and their target cells"""
+        template_fields = {}
+    
+        # Scan all cells to find field labels and their corresponding input cells
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+            
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                
+                    # Skip cells that look like they contain data (not labels)
+                    if self.looks_like_data_cell(cell_text):
+                        continue
+                
+                    # Find potential input cells for this label
+                    input_cells = self.find_input_cells_for_label(worksheet, row_num, col_num, cell_text)
+                
+                    if input_cells:
+                        # Store all variations of the field name
+                        field_variations = self.generate_field_variations(cell_text)
+                        for variation in field_variations:
+                            if variation not in template_fields:
+                                template_fields[variation] = input_cells
+    
+        return template_fields
+
+    def looks_like_data_cell(self, text):
+        """Check if text looks like data rather than a field label"""
+        # Skip very long texts, numbers, dates, etc.
+        if len(text) > 50:
+            return True
+        if text.replace('.', '').replace('-', '').isdigit():
+            return True
+        if any(word in text for word in ['mm', 'kg', 'gm', 'cm', 'inch']):
+            return True
+        return False
+
+    def generate_field_variations(self, field_text):
+        """Generate variations of field names for better matching"""
+        variations = set()
+    
+        # Original text
+        variations.add(field_text)
+    
+        # Remove common suffixes/prefixes
+        clean_text = field_text.replace(':', '').replace('*', '').replace('(', '').replace(')', '')
+        variations.add(clean_text)
+    
+        # Add variations with common words
+        if 'packaging' in clean_text:
+            variations.add(clean_text.replace('packaging', 'pack'))
+        if 'instruction' in clean_text:
+            variations.add(clean_text.replace(' instruction', ''))
+        if 'information' in clean_text:
+            variations.add(clean_text.replace(' information', ''))
+    
+        # Add short versions
+        words = clean_text.split()
+        if len(words) > 1:
+            variations.add(words[0])  # First word only
+            variations.add(words[-1])  # Last word only
+    
+        return variations
+
+    def find_input_cells_for_label(self, worksheet, label_row, label_col, label_text):
+        """Find the most likely input cells for a given label"""
+        input_cells = []
+    
+        # Define search patterns - cells where users typically input data
+        search_patterns = [
+            # Right side patterns (most common)
+            (0, 1), (0, 2), (0, 3),  # Same row, 1-3 columns right
+            # Below patterns  
+            (1, 0), (1, 1),          # One row down, same or next column
+            # Diagonal patterns
+            (1, -1), (0, -1),        # Down-left, left (for right-aligned labels)
+        ]
+    
+        for row_offset, col_offset in search_patterns:
+            target_row = label_row + row_offset
+            target_col = label_col + col_offset
+        
+            if target_row < 1 or target_col < 1:
+                continue
+            
+            try:
+                target_cell = worksheet.cell(row=target_row, column=target_col)
+            
+                # Check if this looks like an input cell
+                if self.is_likely_input_cell(worksheet, target_cell, target_row, target_col):
+                    input_cells.append(target_cell)
+                
+                    # For primary match, break after finding first good candidate
+                    if row_offset == 0 and col_offset in [1, 2]:
+                        break
+                    
+            except Exception:
+                continue
+    
+        return input_cells
+
+    def is_likely_input_cell(self, worksheet, cell, row, col):
+        """Determine if a cell is likely meant for user input"""
+        # Empty cells are good candidates
+        if not cell.value:
+            return True
+    
+        # Cells with placeholder text
+        if cell.value and isinstance(cell.value, str):
+            placeholder_indicators = ['xxx', '___', 'tbd', 'enter', 'input', '?']
+            if any(indicator in str(cell.value).lower() for indicator in placeholder_indicators):
+                return True
+    
+        # Check if it's in a merged range (often used for input fields)
+        is_merged, merged_range = self.is_merged_cell(worksheet, row, col)
+        if is_merged:
+            # If it's the top-left cell of a merged range, it's likely an input cell
+            min_col, min_row, max_col, max_row = merged_range.bounds
+            if row == min_row and col == min_col:
+                return True
+    
+        return False
+
+    def find_target_cell_for_field(self, worksheet, data_field, template_field_map):
+        """Find the best target cell for a data field"""
+        data_field_clean = data_field.lower().strip()
+    
+        # Direct match
+        if data_field_clean in template_field_map:
+            return template_field_map[data_field_clean][0]  # Return first match
+    
+        # Try field mappings
+        if data_field_clean in self.field_mappings:
+            template_terms = self.field_mappings[data_field_clean]
+        
+            for term in template_terms:
+                term_clean = term.lower().strip()
+                if term_clean in template_field_map:
+                    return template_field_map[term_clean][0]
+    
+        # Fuzzy matching with template fields
+        best_match_cell = None
+        best_similarity = 0
+    
+        for template_field, input_cells in template_field_map.items():
+            similarity = SequenceMatcher(None, data_field_clean, template_field).ratio()
+        
+            if similarity > best_similarity and similarity > self.similarity_threshold:
+                best_similarity = similarity
+                best_match_cell = input_cells[0]
+    
+        return best_match_cell
+
+    def try_enhanced_field_mapping(self, worksheet, data_field, data_value):
+        """Enhanced mapping for fields not found in template map"""
+        # Use the original fuzzy search as fallback
+        best_match = self.find_best_fuzzy_match(worksheet, data_field)
+    
+        if best_match:
+            row_num, col_num, match_text, similarity = best_match
+            if similarity > self.similarity_threshold:
+                writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
+            
+                if writable_cell:
+                    return self.write_to_target_cell(worksheet, writable_cell, data_value, data_field)
+    
+        return False
+
+    def write_to_target_cell(self, worksheet, target_cell, data_value, data_field):
+        """Write data to target cell with proper error handling"""
+        try:
+            # Check if target cell is part of merged range
+            is_merged, merged_range = self.is_merged_cell(worksheet, target_cell.row, target_cell.column)
+        
+            if is_merged:
+                # Get the writable cell in merged range
+                writable_cell = self.get_writable_cell_in_merged_range(worksheet, merged_range)
+                if writable_cell:
+                    writable_cell.value = data_value
+                    st.write(f"✅ Mapped '{data_field}' = '{data_value}' to merged cell {writable_cell.coordinate}")
+                    return True
+            else:
+                # Regular cell
+                target_cell.value = data_value
+                st.write(f"✅ Mapped '{data_field}' = '{data_value}' to cell {target_cell.coordinate}")
+                return True
+            
+        except Exception as e:
+            st.write(f"⚠️ Failed to write '{data_field}' to {target_cell.coordinate}: {e}")
+        
+        return False
 
     def find_best_fuzzy_match(self, worksheet, search_term):
         """Find the best fuzzy match for a search term"""
@@ -626,7 +796,7 @@ PACKAGING_PROCEDURES = {
     "BOX IN BOX SENSITIVE": [
         "Pick up 1 quantity of part and apply bubble wrapping over it",
         "Apply tape and Put 1 such bubble wrapped part into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
+        "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
         "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
         "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
@@ -639,7 +809,7 @@ PACKAGING_PROCEDURES = {
     "BOX IN BOX": [
         "Pick up 1 quantity of part and put it in a polybag",
         "seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
+        "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
         "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
         "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
