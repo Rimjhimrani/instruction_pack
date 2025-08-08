@@ -21,6 +21,12 @@ import re
 from datetime import datetime
 from difflib import SequenceMatcher
 
+def navigate_to_step(step_number):
+    """Helper function to navigate between steps"""
+    if 1 <= step_number <= 6:
+        st.session_state.current_step = step_number
+        st.rerun()
+
 # Configure Streamlit page
 st.set_page_config(
     page_title="AI Packaging Template Mapper",
@@ -28,7 +34,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
+if 'mapping_completed' not in st.session_state:
+    st.session_state.mapping_completed = False
+if 'auto_fill_started' not in st.session_state:
+    st.session_state.auto_fill_started = False
 # Initialize session state
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 1
@@ -764,8 +773,7 @@ def main():
             with cols[i % 3]:
                 if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
                     st.session_state.selected_packaging_type = packaging_type
-                    st.session_state.current_step = 2
-                    st.rerun()
+                    navigate_to_step(2)
         
         # Show selected packaging details
         if st.session_state.selected_packaging_type:
@@ -796,9 +804,12 @@ def main():
             
             st.success("✅ Template file uploaded successfully!")
             
-            if st.button("Continue to Data Upload"):
-                st.session_state.current_step = 3
-                st.rerun()
+            if st.button("Continue to Data Upload", key="continue_to_step3"):
+                navigate_to_step(3)
+        
+        # Back navigation
+        if st.button("← Go Back", key="back_from_2"):
+            navigate_to_step(1)
     
     # Step 3: Upload Data File
     elif st.session_state.current_step == 3:
@@ -825,48 +836,68 @@ def main():
             except Exception as e:
                 st.error(f"Error reading data file: {e}")
             
-            if st.button("Continue to Auto-Fill"):
-                st.session_state.current_step = 4
-                st.rerun()
+            if st.button("Continue to Auto-Fill", key="continue_to_step4"):
+                navigate_to_step(4)
+        
+        # Back navigation
+        if st.button("← Go Back", key="back_from_3"):
+            navigate_to_step(2)
     
     # Step 4: Auto-Fill Template
     elif st.session_state.current_step == 4:
         st.header("🔄 Step 4: Auto-Fill Template")
         
-        if st.button("Start Auto-Fill Process"):
-            with st.spinner("Processing template and data mapping..."):
-                try:
-                    mapper = EnhancedTemplateMapperWithImages()
-                    
-                    # Map template with data
-                    workbook, mapped_fields = mapper.map_template_with_data(
-                        st.session_state.template_file,
-                        st.session_state.data_file
-                    )
-                    
-                    if workbook:
-                        # Save the mapped workbook
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                            workbook.save(tmp_file.name)
-                            st.session_state.mapped_data = tmp_file.name
+        # Check if mapping is already completed
+        if st.session_state.mapping_completed and st.session_state.mapped_data:
+            st.success("✅ Template auto-filling completed!")
+            
+            # Show mapped fields if available
+            if hasattr(st.session_state, 'last_mapped_fields') and st.session_state.last_mapped_fields:
+                with st.expander("View Mapped Fields"):
+                    for field, value in st.session_state.last_mapped_fields.items():
+                        st.write(f"**{field}**: {value}")
+            
+            # Always show the continue button if mapping is completed
+            if st.button("Continue to Image Options", key="continue_to_images"):
+                navigate_to_step(5)
+        
+        else:
+            # Show the start button if mapping hasn't been completed
+            if st.button("Start Auto-Fill Process", key="start_autofill"):
+                st.session_state.auto_fill_started = True
+                
+                with st.spinner("Processing template and data mapping..."):
+                    try:
+                        mapper = EnhancedTemplateMapperWithImages()
                         
-                        st.success(f"✅ Template auto-filled with {len(mapped_fields)} data fields!")
+                        # Map template with data
+                        workbook, mapped_fields = mapper.map_template_with_data(
+                            st.session_state.template_file,
+                            st.session_state.data_file
+                        )
                         
-                        # Show mapped fields
-                        if mapped_fields:
-                            with st.expander("View Mapped Fields"):
-                                for field, value in mapped_fields.items():
-                                    st.write(f"**{field}**: {value}")
-                        
-                        if st.button("Continue to Image Options"):
-                            st.session_state.current_step = 5
-                            st.rerun()
-                    else:
-                        st.error("Failed to process template mapping")
-                        
-                except Exception as e:
-                    st.error(f"Error during auto-fill: {e}")
-                    st.write("Traceback:", traceback.format_exc())
+                        if workbook:
+                            # Save the mapped workbook
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                                workbook.save(tmp_file.name)
+                                st.session_state.mapped_data = tmp_file.name
+                            
+                            # Mark as completed and store mapped fields
+                            st.session_state.mapping_completed = True
+                            st.session_state.last_mapped_fields = mapped_fields
+                            
+                            st.success(f"✅ Template auto-filled with {len(mapped_fields)} data fields!")
+                            st.rerun()  # Refresh to show the continue button
+                        else:
+                            st.error("Failed to process template mapping")
+                            
+                    except Exception as e:
+                        st.error(f"Error during auto-fill: {e}")
+                        st.write("Traceback:", traceback.format_exc())
+        
+        # Back navigation
+        if st.button("← Go Back", key="back_from_4"):
+            navigate_to_step(3)
     
     # Step 5: Choose Image Option
     elif st.session_state.current_step == 5:
@@ -934,9 +965,12 @@ def main():
         # Continue button
         if (st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images) or \
            (st.session_state.image_option == 'upload' and st.session_state.uploaded_images):
-            if st.button("Continue to Final Generation"):
-                st.session_state.current_step = 6
-                st.rerun()
+            if st.button("Continue to Final Generation", key="continue_to_step6"):
+                navigate_to_step(6)
+        
+        # Back navigation
+        if st.button("← Go Back", key="back_from_5"):
+            navigate_to_step(4)
     
     # Step 6: Generate Final Document
     elif st.session_state.current_step == 6:
@@ -1004,6 +1038,10 @@ def main():
                 except Exception as e:
                     st.error(f"Error generating final document: {e}")
                     st.write("Traceback:", traceback.format_exc())
+        
+        # Back navigation
+        if st.button("← Go Back", key="back_from_6"):
+            navigate_to_step(5)
     
     # Sidebar with help and information
     with st.sidebar:
