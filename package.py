@@ -860,12 +860,15 @@ class EnhancedTemplateMapperWithImages:
             for procedure in procedures:
                 filled_procedure = procedure
                 replacements = {
+                    '{x No. of Parts}': self.clean_data_value(data_dict.get('x No. of Parts', data_dict.get('Qty/Veh', 'XXX'))),
                     '{Inner L}': self.clean_data_value(data_dict.get('Inner L', 'XXX')),
                     '{Inner W}': self.clean_data_value(data_dict.get('Inner W', 'XXX')),
                     '{Inner H}': self.clean_data_value(data_dict.get('Inner H', 'XXX')),
                     '{Inner Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', 'XXX')),
-                    '{Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
-                    '{Qty/Veh}': self.clean_data_value(data_dict.get('Qty/Veh', 'XXX')),
+                    '{Outer L}': self.clean_data_value(data_dict.get('Outer L', 'XXX')),
+                    '{Outer W}': self.clean_data_value(data_dict.get('Outer W', 'XXX')),
+                    '{Outer H}': self.clean_data_value(data_dict.get('Outer H', 'XXX')),
+                    '{Primary Qty/Pack}': self.clean_data_value(data_dict.get('Primary Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
                     '{Layer}': self.clean_data_value(data_dict.get('Layer', 'XXX')),
                     '{Level}': self.clean_data_value(data_dict.get('Level', 'XXX')),
                 }
@@ -963,114 +966,114 @@ PACKAGING_TYPES = [
 
 PACKAGING_PROCEDURES = {
     "BOX IN BOX SENSITIVE": [
-        "Pick up 1 quantity of part and apply bubble wrapping over it",
+        "Pick up {x No. of Parts} quantity of part and apply bubble wrapping over it",
         "Apply tape and Put 1 such bubble wrapped part into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
         "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level (max height including pallet -1000 mm)",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "BOX IN BOX": [
-        "Pick up 1 quantity of part and put it in a polybag",
-        "seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
+        "Seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
         "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level (max height including pallet -1000 mm)",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "CARTON BOX WITH SEPARATOR FOR ONE PART": [
-        "Pick up {Qty/Veh} parts and apply bubble wrapping over it (individually)",
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
         "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
         "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "INDIVIDUAL NOT SENSITIVE": [
-        "Pick up one part and put it into a polybag",
+        "Pick up {x No. of Parts} part and put it into a polybag",
         "Seal polybag and Put polybag into a carton box",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- Maximum 20 boxes per layer & Maximum 5 level (max height including pallet - 1000 mm)",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- Maximum {Layer} boxes per layer & Maximum {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": [
-        "Pick up {Qty/Veh} parts and apply bubble wrapping over it (individually)",
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
         "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule ( multiple of primary pack quantity – {Qty/Pack})",
-        "Load carton boxes on base wooden pallet – {Layer} boxes per layer & max {Level} level",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of primary pack quantity -- {Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
         "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap ( 2 times – cross way)",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
         "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "INDIVIDUAL PROTECTION FOR EACH PART": [
-        "Pick up {Qty/Veh} parts and apply bubble wrapping over it (individually)",
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
         "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level (max height including pallet - 1000 mm)",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "INDIVIDUAL SENSITIVE": [
-        "Pick up one part and apply bubble wrapping over it",
+        "Pick up {x No. of Parts} part and apply bubble wrapping over it",
         "Apply tape and Put bubble wrapped part into a carton box",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level (max height including pallet - 1000 mm)",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "MANY IN ONE TYPE": [
-        "Pick up {Qty/Veh} quantity of part and put it in a polybag",
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
         "Seal polybag and Put it into a carton box",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level (max height including pallet - 1000 mm)",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
         "Put corner / edge protector and apply pet strap (2 times -- cross way)",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ],
     "SINGLE BOX": [
-        "Pick up 1 quantity of part and put it in a polybag",
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
         "Put into a carton box",
         "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Inner Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet.",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
         "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
         "Put corner / edge protector and apply pet strap (2 times -- cross way) and stretch wrap it",
         "Apply traceability label on complete pack",
         "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only."
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
     ]
 }
 
