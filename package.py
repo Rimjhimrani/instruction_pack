@@ -767,52 +767,56 @@ class EnhancedTemplateMapperWithImages:
         return str_value
 
     def map_template_with_data(self, template_path, data_path):
-        """Enhanced mapping with section-based approach"""
+        """Enhanced mapping with section-based approach and procedure steps integration"""
         try:
             # Read data from Excel with proper NaN handling
             data_df = pd.read_excel(data_path)
-            
+        
             # Replace NaN values with empty strings in the entire dataframe
             data_df = data_df.fillna("")
-            
+        
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
-            
+        
             # Load template
             workbook = openpyxl.load_workbook(template_path)
             worksheet = workbook.active
-            
+        
             st.write(f"📋 Template has {worksheet.max_row} rows and {worksheet.max_column} columns")
-            
+        
             # Find template fields with section context
             template_fields, _ = self.find_template_fields_with_context_and_images(template_path)
             st.write(f"🗺️ Found {len(template_fields)} template fields")
-            
+        
             # Map data with section context
             mapping_results = self.map_data_with_section_context(template_fields, data_df)
-            
+        
             # Apply mappings to template
             mapping_count = 0
             successful_mappings = []
             failed_mappings = []
-            
+            data_dict = {}  # Store mapped data for procedure generation
+        
             for coord, mapping in mapping_results.items():
                 if mapping['is_mappable'] and mapping['data_column']:
                     try:
                         # Get data value with proper NaN handling
                         data_col = mapping['data_column']
-                        
+                    
                         if not data_df[data_col].empty and len(data_df[data_col]) > 0:
                             raw_value = data_df[data_col].iloc[0]
                             data_value = self.clean_data_value(raw_value)
                         else:
                             data_value = ""
-                        
+                    
+                        # Store in data_dict for procedure generation
+                        data_dict[mapping['template_field']] = data_value
+                    
                         # Find target cell for writing
                         target_cell_coord = self.find_data_cell_for_label(worksheet, mapping['field_info'])
-                        
+                    
                         if target_cell_coord:
                             target_cell = worksheet[target_cell_coord]
-                            
+                        
                             # Only write non-empty values to avoid cluttering template with empty strings
                             if data_value:  # Only write if there's actual data
                                 target_cell.value = data_value
@@ -825,58 +829,82 @@ class EnhancedTemplateMapperWithImages:
                         else:
                             failed_mappings.append(mapping['template_field'])
                             st.write(f"❌ Could not find target cell for '{mapping['template_field']}'")
-                            
+                        
                     except Exception as e:
                         failed_mappings.append(mapping['template_field'])
                         st.write(f"⚠️ Error writing '{mapping['template_field']}': {e}")
                 else:
                     failed_mappings.append(mapping['template_field'])
+        
+            # ===== ADD PROCEDURE STEPS INTEGRATION HERE =====
+            st.write(f"\n🔄 Adding procedure steps for packaging type...")
+        
+            # Get packaging type from session state (assuming it's stored there)
+            if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
+                packaging_type = st.session_state.selected_packaging_type
+                st.write(f"📦 Packaging type: {packaging_type}")
             
+                # Write procedure steps to template
+                steps_written = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
+                st.write(f"✅ Added {steps_written} procedure steps to template")
+            else:
+                st.warning("⚠️ No packaging type selected - skipping procedure steps")
+        
             # Summary
             st.success(f"🎉 Successfully mapped {mapping_count}/{len(mapping_results)} fields!")
-            
+        
             if successful_mappings:
                 st.write("✅ Successful mappings:")
                 for mapping in successful_mappings[:10]:
                     st.write(f"  - {mapping}")
-                    
+                
             if failed_mappings:
                 st.write("❌ Failed mappings:")
                 for field in failed_mappings[:5]:
                     st.write(f"  - {field}")
-            
+        
             return workbook, mapping_results
-            
+        
         except Exception as e:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
             return None, {}
-
+    
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
-        procedures = self.packaging_procedures.get(packaging_type, [""] * 11)
+        """Get procedure steps with data substitution"""
+        # Use the PACKAGING_PROCEDURES from your constants
+        procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
+    
         if data_dict:
             filled_procedures = []
             for procedure in procedures:
                 filled_procedure = procedure
+            
+                # Define all possible replacements
                 replacements = {
-                    '{x No. of Parts}': self.clean_data_value(data_dict.get('x No. of Parts', data_dict.get('Qty/Veh', 'XXX'))),
-                    '{Inner L}': self.clean_data_value(data_dict.get('Inner L', 'XXX')),
-                    '{Inner W}': self.clean_data_value(data_dict.get('Inner W', 'XXX')),
-                    '{Inner H}': self.clean_data_value(data_dict.get('Inner H', 'XXX')),
+                    '{x No. of Parts}': self.clean_data_value(data_dict.get('x No. of Parts', data_dict.get('Qty/Veh', data_dict.get('Quantity', 'XXX')))),
+                    '{Inner L}': self.clean_data_value(data_dict.get('Inner L', data_dict.get('Inner Length', 'XXX'))),
+                    '{Inner W}': self.clean_data_value(data_dict.get('Inner W', data_dict.get('Inner Width', 'XXX'))),
+                    '{Inner H}': self.clean_data_value(data_dict.get('Inner H', data_dict.get('Inner Height', 'XXX'))),
                     '{Inner Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', 'XXX')),
-                    '{Outer L}': self.clean_data_value(data_dict.get('Outer L', 'XXX')),
-                    '{Outer W}': self.clean_data_value(data_dict.get('Outer W', 'XXX')),
-                    '{Outer H}': self.clean_data_value(data_dict.get('Outer H', 'XXX')),
+                    '{Outer L}': self.clean_data_value(data_dict.get('Outer L', data_dict.get('Outer Length', 'XXX'))),
+                    '{Outer W}': self.clean_data_value(data_dict.get('Outer W', data_dict.get('Outer Width', 'XXX'))),
+                    '{Outer H}': self.clean_data_value(data_dict.get('Outer H', data_dict.get('Outer Height', 'XXX'))),
                     '{Primary Qty/Pack}': self.clean_data_value(data_dict.get('Primary Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
                     '{Layer}': self.clean_data_value(data_dict.get('Layer', 'XXX')),
                     '{Level}': self.clean_data_value(data_dict.get('Level', 'XXX')),
+                    '{Qty/Pack}': self.clean_data_value(data_dict.get('Qty/Pack', 'XXX')),
+                    '{Qty/Veh}': self.clean_data_value(data_dict.get('Qty/Veh', 'XXX')),
                 }
+            
+                # Apply replacements
                 for placeholder, value in replacements.items():
                     # If value is empty after cleaning, keep XXX as placeholder
-                    if not value or value == '':
+                    if not value or value == '' or value == 'nan':
                         value = 'XXX'
                     filled_procedure = filled_procedure.replace(placeholder, str(value))
+            
                 filled_procedures.append(filled_procedure)
             return filled_procedures
         else:
@@ -889,65 +917,94 @@ class EnhancedTemplateMapperWithImages:
             from openpyxl.styles import Font, Alignment
 
             print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
+            st.write(f"🔄 Processing procedure steps for: {packaging_type}")
 
+            # Get procedure steps with data substitution
             steps = self.get_procedure_steps(packaging_type, data_dict)
             if not steps:
                 print(f"❌ No procedure steps found for packaging type: {packaging_type}")
+                st.error(f"No procedure steps found for packaging type: {packaging_type}")
                 return 0
 
             print(f"📋 Retrieved {len(steps)} procedure steps")
+            st.write(f"📋 Retrieved {len(steps)} procedure steps")
 
             start_row = 28
-            target_col = 2
+            target_col = 2  # Column B
 
+            # Filter out empty steps
             non_empty_steps = [step for step in steps if step and step.strip()]
             steps_to_write = non_empty_steps
 
             print(f"✏️  Will write {len(steps_to_write)} non-empty steps")
+            st.write(f"✏️ Writing {len(steps_to_write)} non-empty steps to template")
 
             steps_written = 0
 
             for i, step in enumerate(steps_to_write):
                 step_row = start_row + i
                 step_text = step.strip()
-                target_cell = worksheet.cell(row=step_row, column=target_col)
-                print(f"📝 Writing step {i + 1} to B{step_row}: {step_text[:50]}...")
+            
+                # Make sure we don't exceed template boundaries
+                if step_row > worksheet.max_row + 20:  # Safety check
+                    st.warning(f"⚠️ Stopping at row {step_row} to avoid exceeding template boundaries")
+                    break
+            
+                try:
+                    target_cell = worksheet.cell(row=step_row, column=target_col)
+                    print(f"📝 Writing step {i + 1} to B{step_row}: {step_text[:50]}...")
+                    st.write(f"📝 Step {i + 1} -> B{step_row}: {step_text[:50]}...")
 
-                if step_row == 37:
+                    # Handle merged cells - unmerge if necessary
+                    merged_ranges_to_remove = []
                     for merged_range in worksheet.merged_cells.ranges:
-                        if "B37" in str(merged_range):
-                            print(f"🔧 Forcing unmerge of B37 range: {merged_range}")
-                            worksheet.unmerge_cells(str(merged_range))
-                            break
-                    target_cell = worksheet.cell(row=37, column=2)
+                        if target_cell.coordinate in merged_range:
+                            merged_ranges_to_remove.append(merged_range)
+                            print(f"🔧 Found merged range containing {target_cell.coordinate}: {merged_range}")
 
-                target_cell.value = step_text
-                target_cell.font = Font(name='Calibri', size=10)
-                target_cell.alignment = Alignment(wrap_text=True, vertical='top')
+                    # Unmerge cells that contain our target cell
+                    for merged_range in merged_ranges_to_remove:
+                        worksheet.unmerge_cells(str(merged_range))
+                        print(f"🔧 Unmerged range: {merged_range}")
 
-                if step_row == 37:
-                    try:
-                        merge_range = f"B37:P37"
-                        worksheet.merge_cells(merge_range)
-                        print(f"✅ Re-merged row 37: {merge_range}")
-                    except Exception as merge_error:
-                        print(f"⚠️ Warning: Could not re-merge B37: {merge_error}")
+                    # Write the step text
+                    target_cell.value = step_text
+                    target_cell.font = Font(name='Calibri', size=10)
+                    target_cell.alignment = Alignment(wrap_text=True, vertical='top')
 
-                max_chars_per_line = 100
-                num_lines = max(1, len(step_text) // max_chars_per_line + 1)
-                estimated_height = 15 + (num_lines - 1) * 15
-                worksheet.row_dimensions[step_row].height = estimated_height
+                    # Re-merge cells if it was row 37 (special handling based on your original code)
+                    if step_row == 37:
+                        try:
+                            merge_range = f"B37:P37"
+                            worksheet.merge_cells(merge_range)
+                            print(f"✅ Re-merged row 37: {merge_range}")
+                        except Exception as merge_error:
+                            print(f"⚠️ Warning: Could not re-merge B37: {merge_error}")
 
-                steps_written += 1
+                    # Adjust row height based on text length
+                    max_chars_per_line = 100
+                    num_lines = max(1, len(step_text) // max_chars_per_line + 1)
+                    estimated_height = 15 + (num_lines - 1) * 15
+                    worksheet.row_dimensions[step_row].height = estimated_height
+
+                    steps_written += 1
+                
+                except Exception as step_error:
+                    print(f"❌ Error writing step {i + 1}: {step_error}")
+                    st.error(f"Error writing step {i + 1}: {step_error}")
+                    continue
 
             print(f"\n✅ PROCEDURE STEPS COMPLETED")
             print(f"   Total steps written: {steps_written}")
             print(f"   Location: Column B, starting from Row 28")
+        
+            st.success(f"✅ Successfully wrote {steps_written} procedure steps to template")
 
             return steps_written
 
         except Exception as e:
             print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
+            st.error(f"Critical error writing procedure steps: {e}")
             traceback.print_exc()
             return 0
 
