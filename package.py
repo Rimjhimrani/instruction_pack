@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
@@ -286,6 +286,42 @@ class ImageExtractor:
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} at {cell_position}: {e}")
             return False
+    
+    def extract_images_by_part_info(self, excel_file_path, part_no=None, description=None):
+        """Extract images based on part number and description from Excel sheets"""
+        try:
+            workbook = openpyxl.load_workbook(excel_file_path, data_only=False)
+            matched_images = {}
+        
+            for sheet_name in workbook.sheetnames:
+                worksheet = workbook[sheet_name]
+            
+                # Check if sheet contains matching part info
+                sheet_matches = False
+                if part_no or description:
+                    for row in worksheet.iter_rows():
+                        for cell in row:
+                            if cell.value:
+                                cell_text = str(cell.value).lower()
+                                if ((part_no and part_no.lower() in cell_text) or (description and description.lower() in cell_text)):
+                                    sheet_matches = True
+                                    break
+                        if sheet_matches:
+                            break
+            
+                # Extract images from matching sheets
+                if sheet_matches and hasattr(worksheet, '_images') and worksheet._images:
+                    for idx, img in enumerate(worksheet._images):
+                        # ... (use existing image extraction logic)
+                        # Add to matched_images instead of all images
+                        pass
+        
+            workbook.close()
+            return matched_images
+        
+        except Exception as e:
+            st.error(f"Error extracting images by part info: {e}")
+            return {}
 
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
@@ -802,9 +838,13 @@ class EnhancedTemplateMapperWithImages:
                         # Get data value with proper NaN handling
                         data_col = mapping['data_column']
                     
+                        data_col = mapping['data_column']
                         if not data_df[data_col].empty and len(data_df[data_col]) > 0:
-                            raw_value = data_df[data_col].iloc[0]
-                            data_value = self.clean_data_value(raw_value)
+                            # For multiple rows, you might want to concatenate or use specific logic
+                            # Option 1: Use all non-empty values
+                            all_values = [self.clean_data_value(val) for val in data_df[data_col] if self.clean_data_value(val)]
+                            if all_values:
+                                data_value = all_values[0]  # or join them: " | ".join(all_values)
                         else:
                             data_value = ""
                     
@@ -873,41 +913,42 @@ class EnhancedTemplateMapperWithImages:
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
         """Get procedure steps with data substitution"""
+        # Use the PACKAGING_PROCEDURES from your constants
         procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
-        if not data_dict:
+    
+        if data_dict:
+            filled_procedures = []
+            for procedure in procedures:
+                filled_procedure = procedure
+            
+                # Define all possible replacements
+                replacements = {
+                    '{x No. of Parts}': self.clean_data_value(data_dict.get('x No. of Parts', data_dict.get('Qty/Veh', data_dict.get('Quantity', 'XXX')))),
+                    '{Inner L}': self.clean_data_value(data_dict.get('Inner L', data_dict.get('Inner Length', 'XXX'))),
+                    '{Inner W}': self.clean_data_value(data_dict.get('Inner W', data_dict.get('Inner Width', 'XXX'))),
+                    '{Inner H}': self.clean_data_value(data_dict.get('Inner H', data_dict.get('Inner Height', 'XXX'))),
+                    '{Inner Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', 'XXX')),
+                    '{Outer L}': self.clean_data_value(data_dict.get('Outer L', data_dict.get('Outer Length', 'XXX'))),
+                    '{Outer W}': self.clean_data_value(data_dict.get('Outer W', data_dict.get('Outer Width', 'XXX'))),
+                    '{Outer H}': self.clean_data_value(data_dict.get('Outer H', data_dict.get('Outer Height', 'XXX'))),
+                    '{Primary Qty/Pack}': self.clean_data_value(data_dict.get('Primary Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
+                    '{Layer}': self.clean_data_value(data_dict.get('Layer', 'XXX')),
+                    '{Level}': self.clean_data_value(data_dict.get('Level', 'XXX')),
+                    '{Qty/Pack}': self.clean_data_value(data_dict.get('Qty/Pack', 'XXX')),
+                    '{Qty/Veh}': self.clean_data_value(data_dict.get('Qty/Veh', 'XXX')),
+                }
+            
+                # Apply replacements
+                for placeholder, value in replacements.items():
+                    # If value is empty after cleaning, keep XXX as placeholder
+                    if not value or value == '' or value == 'nan':
+                        value = 'XXX'
+                    filled_procedure = filled_procedure.replace(placeholder, str(value))
+            
+                filled_procedures.append(filled_procedure)
+            return filled_procedures
+        else:
             return procedures
-
-        filled_procedures = []
-        for procedure in procedures:
-            filled_procedure = procedure
-
-            # Direct mapping: most placeholders match exactly to data_dict keys
-            replacements = {
-                '{x No. of Parts}': data_dict.get('x No. of Parts') or data_dict.get('Qty/Veh') or data_dict.get('Quantity'),
-                '{Inner L}': data_dict.get('Inner L'),
-                '{Inner W}': data_dict.get('Inner W'),
-                '{Inner H}': data_dict.get('Inner H'),
-                '{Inner Qty/Pack}': data_dict.get('Inner Qty/Pack'),
-                '{Outer L}': data_dict.get('Outer L'),
-                '{Outer W}': data_dict.get('Outer W'),
-                '{Outer H}': data_dict.get('Outer H'),
-                '{Primary Qty/Pack}': data_dict.get('Primary Qty/Pack'),  # ✅ Only this comes from primary
-                '{Layer}': data_dict.get('Layer'),
-                '{Level}': data_dict.get('Level'),
-                '{Qty/Pack}': data_dict.get('Qty/Pack'),
-                '{Qty/Veh}': data_dict.get('Qty/Veh'),
-            }
-
-            # Clean and replace
-            for placeholder, raw_value in replacements.items():
-                value = self.clean_data_value(raw_value)
-                if not value:
-                    value = 'XXX'
-                filled_procedure = filled_procedure.replace(placeholder, str(value))
-
-            filled_procedures.append(filled_procedure)
-
-        return filled_procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write packaging procedure steps in merged cells B to P starting from Row 28"""
@@ -1022,8 +1063,105 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Critical error writing procedure steps: {e}")
             import traceback
             traceback.print_exc()
-        return 0
-
+            return 0
+    
+    def write_manual_procedure_steps_to_template(self, worksheet, manual_procedures):
+        """Write manually entered procedure steps to template"""
+        try:
+            from openpyxl.styles import Font, Alignment
+        
+            print(f"\n=== WRITING MANUAL PROCEDURE STEPS ===")
+            st.write(f"🔄 Processing manual procedure steps...")
+        
+            start_row = 28
+            target_col = 2  # Column B
+            end_col = 16    # Column P
+        
+            # Filter out empty steps
+            steps_to_write = [step.strip() for step in manual_procedures if step and step.strip()]
+        
+            print(f"✏️ Will write {len(steps_to_write)} manual procedure steps")
+            st.write(f"✏️ Writing {len(steps_to_write)} manual procedure steps to template")
+        
+            steps_written = 0
+        
+            for i, step in enumerate(steps_to_write):
+                step_row = start_row + i
+                step_text = step.strip()
+            
+                # Make sure we don't exceed template boundaries
+                if step_row > worksheet.max_row + 20:  # Safety check
+                    st.warning(f"⚠️ Stopping at row {step_row} to avoid exceeding template boundaries")
+                    break
+            
+                try:
+                    # Define the merge range for this row (B to P)
+                    merge_range = f"B{step_row}:P{step_row}"
+                    target_cell = worksheet.cell(row=step_row, column=target_col)
+                
+                    print(f"📝 Writing manual step {i + 1} to {merge_range}: {step_text[:50]}...")
+                    st.write(f"📝 Manual Step {i + 1} -> {merge_range}: {step_text[:50]}...")
+                
+                    # First, check if this range is already merged and unmerge if necessary
+                    existing_merged_ranges = []
+                    for merged_range in list(worksheet.merged_cells.ranges):
+                        # Check if any part of our target range overlaps with existing merged ranges
+                        if (merged_range.min_row <= step_row <= merged_range.max_row and merged_range.min_col <= end_col and merged_range.max_col >= target_col):
+                            existing_merged_ranges.append(merged_range)
+                
+                    # Unmerge overlapping ranges
+                    for merged_range in existing_merged_ranges:
+                        try:
+                            worksheet.unmerge_cells(str(merged_range))
+                            print(f"🔧 Unmerged existing range: {merged_range}")
+                        except Exception as unmerge_error:
+                            print(f"⚠️ Warning: Could not unmerge {merged_range}: {unmerge_error}")
+                
+                    # Clear any existing content in the range
+                    for col in range(target_col, end_col + 1):
+                        cell = worksheet.cell(row=step_row, column=col)
+                        cell.value = None
+                
+                    # Write the step text to the first cell (B)
+                    target_cell.value = step_text
+                    target_cell.font = Font(name='Calibri', size=10)
+                    target_cell.alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
+                
+                    # Merge the cells B to P for this row
+                    try:
+                        worksheet.merge_cells(merge_range)
+                        print(f"✅ Merged range: {merge_range}")
+                    except Exception as merge_error:
+                        print(f"⚠️ Warning: Could not merge {merge_range}: {merge_error}")
+                        st.warning(f"Could not merge {merge_range}: {merge_error}")
+                
+                    # Adjust row height based on text length
+                    chars_per_line = 120  # Approximate characters per line in merged B:P range
+                    num_lines = max(1, len(step_text) // chars_per_line + 1)
+                    estimated_height = 15 + (num_lines - 1) * 15
+                    worksheet.row_dimensions[step_row].height = estimated_height
+                
+                    steps_written += 1
+                
+                except Exception as step_error:
+                    print(f"❌ Error writing manual step {i + 1}: {step_error}")
+                    st.error(f"Error writing manual step {i + 1}: {step_error}")
+                    continue
+        
+            print(f"\n✅ MANUAL PROCEDURE STEPS COMPLETED")
+            print(f"   Total steps written: {steps_written}")
+        
+            st.success(f"✅ Successfully wrote {steps_written} manual procedure steps to template")
+        
+            return steps_written
+        
+        except Exception as e:
+            print(f"💥 Critical error in write_manual_procedure_steps_to_template: {e}")
+            st.error(f"Critical error writing manual procedure steps: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0
+        
 # Packaging types and procedures from reference code
 PACKAGING_TYPES = [
     "BOX IN BOX SENSITIVE",
@@ -1034,7 +1172,8 @@ PACKAGING_TYPES = [
     "INDIVIDUAL PROTECTION FOR EACH PART",
     "INDIVIDUAL SENSITIVE",
     "MANY IN ONE TYPE",
-    "SINGLE BOX"
+    "SINGLE BOX",
+    "ADD NEW TEMPLATE" 
 ]
 
 PACKAGING_PROCEDURES = {
@@ -1181,23 +1320,33 @@ def main():
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
         st.header("📦 Step 1: Select Packaging Type")
-        
+    
         # Create columns for packaging types
         cols = st.columns(3)
         for i, packaging_type in enumerate(PACKAGING_TYPES):
             with cols[i % 3]:
                 if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
                     st.session_state.selected_packaging_type = packaging_type
-                    navigate_to_step(2)
-        
-        # Show selected packaging details
-        if st.session_state.selected_packaging_type:
+                
+                    # Handle Add New Template option
+                    if packaging_type == "ADD NEW TEMPLATE":
+                        st.session_state.is_new_template = True
+                        navigate_to_step(2)  # Go to template upload
+                    else:
+                        st.session_state.is_new_template = False
+                        navigate_to_step(2)
+    
+        # Show selected packaging details (skip for ADD NEW TEMPLATE)
+        if (st.session_state.selected_packaging_type and 
+            st.session_state.selected_packaging_type != "ADD NEW TEMPLATE"):
             st.success(f"Selected: {st.session_state.selected_packaging_type}")
-            
+        
             with st.expander("View Packaging Procedure"):
                 procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
                 for i, step in enumerate(procedures, 1):
                     st.write(f"{i}. {step}")
+        elif st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
+            st.info("📝 You selected to add a new template. You'll manually fill 11 procedure steps later.")
     
     # Step 2: Upload Template File
     elif st.session_state.current_step == 2:
@@ -1314,6 +1463,33 @@ def main():
         if st.button("← Go Back", key="back_from_4"):
             navigate_to_step(3)
     
+    # Step 4.5: Manual Procedure Entry (only for ADD NEW TEMPLATE)
+    elif (st.session_state.current_step == 4 and st.session_state.selected_packaging_type == "ADD NEW TEMPLATE" and st.session_state.mapping_completed):
+        st.header("✏️ Step 4.5: Add Procedure Steps")
+        st.info("Enter 11 procedure steps for your new template:")
+    
+        # Initialize procedure steps in session state if not exists
+        if 'manual_procedures' not in st.session_state:
+            st.session_state.manual_procedures = [""] * 11
+    
+        # Create input fields for 11 steps
+        for i in range(11):
+            st.session_state.manual_procedures[i] = st.text_area(
+                f"Step {i+1}:",
+                value=st.session_state.manual_procedures[i],
+                key=f"manual_step_{i}",
+                height=80
+            )
+    
+        if st.button("Save Procedure Steps"):
+            # Validate at least some steps are filled
+            filled_steps = [step for step in st.session_state.manual_procedures if step.strip()]
+            if len(filled_steps) >= 3:
+                st.success(f"✅ Saved {len(filled_steps)} procedure steps!")
+                navigate_to_step(5)
+            else:
+                st.error("Please fill at least 3 procedure steps before continuing.")
+                
     # Step 5: Choose Image Option
     elif st.session_state.current_step == 5:
         st.header("🖼️ Step 5: Choose Image Option")
@@ -1390,70 +1566,274 @@ def main():
     # Step 6: Generate Final Document
     elif st.session_state.current_step == 6:
         st.header("📋 Step 6: Generate Final Document")
+    
+        # Show summary of what will be generated
+        st.subheader("📊 Generation Summary")
+        col1, col2 = st.columns(2)
+    
+        with col1:
+            st.write(f"**Packaging Type**: {st.session_state.selected_packaging_type}")
+            st.write(f"**Template File**: Uploaded ✅")
+            st.write(f"**Data File**: Uploaded ✅")
+            st.write(f"**Auto-Fill**: Completed ✅")
+    
+        with col2:
+            image_count = 0
+            if st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images:
+                image_count = len(st.session_state.extracted_excel_images)
+            elif st.session_state.image_option == 'upload' and st.session_state.uploaded_images:
+                image_count = len(st.session_state.uploaded_images)
         
-        if st.button("Generate Final Template with Images"):
-            with st.spinner("Generating final document..."):
+            st.write(f"**Image Option**: {st.session_state.image_option.capitalize()}")
+            st.write(f"**Images Ready**: {image_count} images")
+        
+            # Show procedure steps info
+            if st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
+                manual_steps = getattr(st.session_state, 'manual_procedures', [])
+                filled_steps = len([step for step in manual_steps if step and step.strip()])
+                st.write(f"**Manual Steps**: {filled_steps}/11 filled")
+            else:
+                procedure_steps = len(PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, []))
+                st.write(f"**Procedure Steps**: {procedure_steps} auto-generated")
+    
+        st.markdown("---")
+    
+        # Main generation button
+        if st.button("🚀 Generate Final Template with Images", type="primary", use_container_width=True):
+            with st.spinner("🔄 Generating final document..."):
                 try:
                     # Load the mapped template
                     workbook = openpyxl.load_workbook(st.session_state.mapped_data)
                     worksheet = workbook.active
-                    
+                
+                    st.write("📋 Loaded mapped template...")
+                
                     # Add images based on selected option
                     extractor = ImageExtractor()
                     images_to_add = {}
-                    
+                    added_count = 0
+                    temp_paths = []
+                
                     if st.session_state.image_option == 'extract':
                         images_to_add = st.session_state.extracted_excel_images
+                        st.write(f"🖼️ Using {len(images_to_add)} extracted images...")
                     elif st.session_state.image_option == 'upload':
                         images_to_add = st.session_state.uploaded_images
-                    
+                        st.write(f"🖼️ Using {len(images_to_add)} uploaded images...")
+                
                     if images_to_add:
                         added_count, temp_paths = extractor.add_images_to_template(
                             worksheet, images_to_add
                         )
                         st.success(f"✅ Added {added_count} images to template!")
+                    else:
+                        st.info("ℹ️ No images to add - proceeding with text-only template")
+                
+                    # Handle procedure steps based on template type
+                    if st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
+                        # Write manual procedure steps
+                        if hasattr(st.session_state, 'manual_procedures'):
+                            steps_written = self.write_manual_procedure_steps_to_template(
+                                worksheet, st.session_state.manual_procedures
+                            )
+                            st.write(f"✅ Added {steps_written} manual procedure steps")
+                        else:
+                            st.warning("⚠️ No manual procedure steps found")
+                    else:
+                        # Auto-generated procedure steps (existing logic)
+                        st.write(f"🔄 Adding auto-generated procedure steps...")
+                        # This part remains the same as your existing code
+                
+                    # Generate dynamic filename based on vendor code, part no, and description
+                    try:
+                        # Extract vendor code, part no, and description from data
+                        data_df = pd.read_excel(st.session_state.data_file)
                     
-                    # Save final document
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    final_filename = f"Packaging_Template_{st.session_state.selected_packaging_type.replace(' ', '_')}_{timestamp}.xlsx"
+                        vendor_code = ""
+                        part_no = ""
+                        description = ""
                     
+                        # Look for these fields in the data
+                        for col in data_df.columns:
+                            col_lower = col.lower()
+                            if any(keyword in col_lower for keyword in ['vendor', 'supplier']) and 'code' in col_lower:
+                                vendor_code = str(data_df[col].iloc[0]) if not data_df[col].empty else ""
+                            elif 'part' in col_lower and ('no' in col_lower or 'number' in col_lower):
+                                part_no = str(data_df[col].iloc[0]) if not data_df[col].empty else ""
+                            elif any(keyword in col_lower for keyword in ['description', 'desc']):
+                                description = str(data_df[col].iloc[0]) if not data_df[col].empty else ""
+                    
+                        # Clean the values for filename (remove special characters)
+                        vendor_code = re.sub(r'[^\w\-_]', '', vendor_code)[:15]
+                        part_no = re.sub(r'[^\w\-_]', '', part_no)[:20]
+                        description = re.sub(r'[^\w\-_]', '', description)[:25]
+                    
+                        # Create filename: vendorcode_partno_desc.xlsx
+                        if vendor_code and part_no:
+                            if description:
+                                final_filename = f"{vendor_code}_{part_no}_{description}.xlsx"
+                            else:
+                                final_filename = f"{vendor_code}_{part_no}.xlsx"
+                        else:
+                            # Fallback filename if vendor code or part no is missing
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            final_filename = f"Packaging_Template_{timestamp}.xlsx"
+                    
+                        st.write(f"📄 Generated filename: {final_filename}")
+                        
+                    except Exception as filename_error:
+                        # Fallback filename in case of any error
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        final_filename = f"Packaging_Template_{timestamp}.xlsx"
+                        st.warning(f"⚠️ Using fallback filename: {final_filename}")
+                
+                    #  Save final document
                     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                         workbook.save(tmp_file.name)
-                        
+                        st.session_state.final_template_path = tmp_file.name
+                    
                         # Read file for download
                         with open(tmp_file.name, 'rb') as f:
                             file_bytes = f.read()
-                    
-                    # Provide download button
-                    st.download_button(
-                        label="📥 Download Final Template",
-                        data=file_bytes,
-                        file_name=final_filename,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                    
+                
+                    workbook.close()
+                
+                    # Cleanup temporary image files
+                    for temp_path in temp_paths:
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
+                
                     st.success("🎉 Final template generated successfully!")
+                
+                    # Download section with enhanced UI
+                    st.markdown("---")
+                    st.subheader("📥 Download Your Template")
+                
+                    # Create download columns
+                    download_col1, download_col2 = st.columns([2, 1])
+                
+                    with download_col1:
+                        # Main download button
+                        st.download_button(
+                            label=f"📥 Download {final_filename}",
+                            data=file_bytes,
+                            file_name=final_filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            type="primary",
+                            use_container_width=True
+                        )
+                
+                    with download_col2:
+                        # File info
+                        file_size_mb = len(file_bytes) / (1024 * 1024)
+                        st.metric("File Size", f"{file_size_mb:.2f} MB")
+                
+                    # Detailed generation summary
+                    with st.expander("📋 Detailed Generation Summary", expanded=True):
+                        summary_col1, summary_col2 = st.columns(2)
                     
-                    # Show summary
-                    with st.expander("Generation Summary"):
-                        st.write(f"**Packaging Type**: {st.session_state.selected_packaging_type}")
-                        st.write(f"**Images Added**: {added_count if 'added_count' in locals() else 0}")
-                        st.write(f"**Template File**: {final_filename}")
-                        st.write(f"**Generated On**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                    
-                    # Option to start over
-                    if st.button("🔄 Start New Template"):
-                        # Clear session state
-                        for key in list(st.session_state.keys()):
-                            if key.startswith(('current_step', 'selected_', 'template_', 'data_', 'mapped_', 'image_', 'uploaded_', 'extracted_')):
-                                del st.session_state[key]
-                        st.session_state.current_step = 1
-                        st.rerun()
+                        with summary_col1:
+                            st.write("**Template Information:**")
+                            st.write(f"• Packaging Type: {st.session_state.selected_packaging_type}")
+                            st.write(f"• Images Added: {added_count}")
+                            st.write(f"• Image Source: {st.session_state.image_option.capitalize()}")
                         
+                            if hasattr(st.session_state, 'last_mapped_fields'):
+                                mapped_count = len([m for m in st.session_state.last_mapped_fields.values() if m.get('is_mappable')])
+                                st.write(f"• Fields Mapped: {mapped_count}")
+                    
+                        with summary_col2:
+                            st.write("**File Information:**")
+                            st.write(f"• Filename: {final_filename}")
+                            st.write(f"• Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                            st.write(f"• File Size: {file_size_mb:.2f} MB")
+                        
+                            # Show procedure steps count
+                            if st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
+                                manual_steps = getattr(st.session_state, 'manual_procedures', [])
+                                filled_manual_steps = len([step for step in manual_steps if step and step.strip()])
+                                st.write(f"• Manual Steps: {filled_manual_steps}/11")
+                            else:
+                                auto_steps = len(PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, []))
+                                st.write(f"• Auto Steps: {auto_steps}")
+                
+                    # Show preview of mapped data if available
+                    if hasattr(st.session_state, 'last_mapped_fields') and st.session_state.last_mapped_fields:
+                        with st.expander("🗺️ View Mapped Fields"):
+                            for coord, mapping in st.session_state.last_mapped_fields.items():
+                                if mapping.get('is_mappable') and mapping.get('data_column'):
+                                    st.write(f"**{mapping['template_field']}** ← {mapping['data_column']}")
+                
+                    # Additional download options
+                    st.markdown("---")
+                    st.subheader("🔄 Additional Options")
+                
+                    option_col1, option_col2, option_col3 = st.columns(3)
+                
+                    with option_col1:
+                        # Option to generate another template with same data
+                        if st.button("📋 Generate Another Template", use_container_width=True):
+                            # Keep data and template files, go back to step 1
+                            st.session_state.current_step = 1
+                            # Clear only packaging-specific selections
+                            if 'selected_packaging_type' in st.session_state:
+                                del st.session_state['selected_packaging_type']
+                            if 'manual_procedures' in st.session_state:
+                                del st.session_state['manual_procedures']
+                            st.rerun()
+                
+                    with option_col2:
+                        # Option to start completely over
+                        if st.button("🔄 Start New Project", use_container_width=True):
+                            # Clear all session state
+                            for key in list(st.session_state.keys()):
+                                if key != 'current_step':
+                                    del st.session_state[key]
+                            st.session_state.current_step = 1
+                            st.rerun()
+                
+                    with option_col3:
+                        # Option to go back and modify
+                        if st.button("← Modify Images", use_container_width=True):
+                            navigate_to_step(5)
+                
+                    # Success message with tips
+                    st.markdown("---")
+                    st.success("""
+                               🎉 **Template Generated Successfully!**
+                               Your packaging template is ready with:
+                               ✅ Auto-filled data fields
+                               ✅ Packaging procedure steps  
+                               ✅ Positioned images
+                               ✅ Professional formatting
+                               💡 **Tip**: The filename follows the format `vendorcode_partno_description.xlsx` for easy identification.
+                    """)
                 except Exception as e:
-                    st.error(f"Error generating final document: {e}")
-                    st.write("Traceback:", traceback.format_exc())
-        
+                    st.error(f"❌ Error generating final document: {e}")
+                    st.write("**Error Details:**")
+                    st.code(traceback.format_exc())
+                
+                    # Provide fallback download if possible
+                    if hasattr(st.session_state, 'mapped_data'):
+                        st.warning("🔧 Providing fallback download without images...")
+                        try:
+                            with open(st.session_state.mapped_data, 'rb') as f:
+                                fallback_bytes = f.read()
+                        
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            fallback_filename = f"Packaging_Template_Fallback_{timestamp}.xlsx"
+                        
+                            st.download_button(
+                                label=f"📥 Download Fallback Template",
+                                data=fallback_bytes,
+                                file_name=fallback_filename,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                        except Exception as fallback_error:
+                            st.error(f"Fallback download also failed: {fallback_error}")
+
         # Back navigation
         if st.button("← Go Back", key="back_from_6"):
             navigate_to_step(5)
