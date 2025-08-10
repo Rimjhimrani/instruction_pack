@@ -911,7 +911,7 @@ class EnhancedTemplateMapperWithImages:
             return procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write packaging procedure steps in Column B starting from Row 28"""
+        """Write packaging procedure steps in merged cells B to P starting from Row 28"""
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font, Alignment
@@ -931,6 +931,7 @@ class EnhancedTemplateMapperWithImages:
 
             start_row = 28
             target_col = 2  # Column B
+            end_col = 16    # Column P
 
             # Filter out empty steps
             non_empty_steps = [step for step in steps if step and step.strip()]
@@ -951,39 +952,52 @@ class EnhancedTemplateMapperWithImages:
                     break
             
                 try:
+                    # Define the merge range for this row (B to P)
+                    merge_range = f"B{step_row}:P{step_row}"
                     target_cell = worksheet.cell(row=step_row, column=target_col)
-                    print(f"📝 Writing step {i + 1} to B{step_row}: {step_text[:50]}...")
-                    st.write(f"📝 Step {i + 1} -> B{step_row}: {step_text[:50]}...")
+                
+                    print(f"📝 Writing step {i + 1} to {merge_range}: {step_text[:50]}...")
+                    st.write(f"📝 Step {i + 1} -> {merge_range}: {step_text[:50]}...")
 
-                    # Handle merged cells - unmerge if necessary
-                    merged_ranges_to_remove = []
-                    for merged_range in worksheet.merged_cells.ranges:
-                        if target_cell.coordinate in merged_range:
-                            merged_ranges_to_remove.append(merged_range)
-                            print(f"🔧 Found merged range containing {target_cell.coordinate}: {merged_range}")
+                    # First, check if this range is already merged and unmerge if necessary
+                    existing_merged_ranges = []
+                    for merged_range in list(worksheet.merged_cells.ranges):
+                        # Check if any part of our target range overlaps with existing merged ranges
+                        if (merged_range.min_row <= step_row <= merged_range.max_row and
+                            merged_range.min_col <= end_col and merged_range.max_col >= target_col):
+                            existing_merged_ranges.append(merged_range)
 
-                    # Unmerge cells that contain our target cell
-                    for merged_range in merged_ranges_to_remove:
-                        worksheet.unmerge_cells(str(merged_range))
-                        print(f"🔧 Unmerged range: {merged_range}")
+                    # Unmerge overlapping ranges
+                    for merged_range in existing_merged_ranges:
+                        try:
+                            worksheet.unmerge_cells(str(merged_range))
+                            print(f"🔧 Unmerged existing range: {merged_range}")
+                        except Exception as unmerge_error:
+                            print(f"⚠️ Warning: Could not unmerge {merged_range}: {unmerge_error}")
 
-                    # Write the step text
+                    # Clear any existing content in the range
+                    for col in range(target_col, end_col + 1):
+                        cell = worksheet.cell(row=step_row, column=col)
+                        cell.value = None
+
+                    # Write the step text to the first cell (B)
                     target_cell.value = step_text
                     target_cell.font = Font(name='Calibri', size=10)
-                    target_cell.alignment = Alignment(wrap_text=True, vertical='top')
+                    target_cell.alignment = Alignment(wrap_text=True, vertical='top', horizontal='left')
 
-                    # Re-merge cells if it was row 37 (special handling based on your original code)
-                    if step_row == 37:
-                        try:
-                            merge_range = f"B37:P37"
-                            worksheet.merge_cells(merge_range)
-                            print(f"✅ Re-merged row 37: {merge_range}")
-                        except Exception as merge_error:
-                            print(f"⚠️ Warning: Could not re-merge B37: {merge_error}")
-
+                    # Merge the cells B to P for this row
+                    try:
+                        worksheet.merge_cells(merge_range)
+                        print(f"✅ Merged range: {merge_range}")
+                        st.write(f"✅ Merged cells: {merge_range}")
+                    except Exception as merge_error:
+                        print(f"⚠️ Warning: Could not merge {merge_range}: {merge_error}")
+                        st.warning(f"Could not merge {merge_range}: {merge_error}")
+  
                     # Adjust row height based on text length
-                    max_chars_per_line = 100
-                    num_lines = max(1, len(step_text) // max_chars_per_line + 1)
+                    # Calculate approximate number of lines needed
+                    chars_per_line = 120  # Approximate characters per line in merged B:P range
+                    num_lines = max(1, len(step_text) // chars_per_line + 1)
                     estimated_height = 15 + (num_lines - 1) * 15
                     worksheet.row_dimensions[step_row].height = estimated_height
 
@@ -992,11 +1006,13 @@ class EnhancedTemplateMapperWithImages:
                 except Exception as step_error:
                     print(f"❌ Error writing step {i + 1}: {step_error}")
                     st.error(f"Error writing step {i + 1}: {step_error}")
+                    import traceback
+                    traceback.print_exc()
                     continue
 
             print(f"\n✅ PROCEDURE STEPS COMPLETED")
             print(f"   Total steps written: {steps_written}")
-            print(f"   Location: Column B, starting from Row 28")
+            print(f"   Location: Merged cells B:P, starting from Row 28")
         
             st.success(f"✅ Successfully wrote {steps_written} procedure steps to template")
 
@@ -1005,6 +1021,7 @@ class EnhancedTemplateMapperWithImages:
         except Exception as e:
             print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
             st.error(f"Critical error writing procedure steps: {e}")
+            import traceback
             traceback.print_exc()
             return 0
 
