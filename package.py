@@ -873,42 +873,41 @@ class EnhancedTemplateMapperWithImages:
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
         """Get procedure steps with data substitution"""
-        # Use the PACKAGING_PROCEDURES from your constants
         procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
-    
-        if data_dict:
-            filled_procedures = []
-            for procedure in procedures:
-                filled_procedure = procedure
-            
-                # Define all possible replacements
-                replacements = {
-                    '{x No. of Parts}': self.clean_data_value(data_dict.get('x No. of Parts', data_dict.get('Qty/Veh', data_dict.get('Quantity', 'XXX')))),
-                    '{Inner L}': self.clean_data_value(data_dict.get('Inner L', data_dict.get('Inner Length', 'XXX'))),
-                    '{Inner W}': self.clean_data_value(data_dict.get('Inner W', data_dict.get('Inner Width', 'XXX'))),
-                    '{Inner H}': self.clean_data_value(data_dict.get('Inner H', data_dict.get('Inner Height', 'XXX'))),
-                    '{Inner Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', 'XXX')),
-                    '{Outer L}': self.clean_data_value(data_dict.get('Outer L', data_dict.get('Outer Length', 'XXX'))),
-                    '{Outer W}': self.clean_data_value(data_dict.get('Outer W', data_dict.get('Outer Width', 'XXX'))),
-                    '{Outer H}': self.clean_data_value(data_dict.get('Outer H', data_dict.get('Outer Height', 'XXX'))),
-                    '{Primary Qty/Pack}': self.clean_data_value(data_dict.get('Primary Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
-                    '{Layer}': self.clean_data_value(data_dict.get('Layer', 'XXX')),
-                    '{Level}': self.clean_data_value(data_dict.get('Level', 'XXX')),
-                    '{Qty/Pack}': self.clean_data_value(data_dict.get('Qty/Pack', 'XXX')),
-                    '{Qty/Veh}': self.clean_data_value(data_dict.get('Qty/Veh', 'XXX')),
-                }
-            
-                # Apply replacements
-                for placeholder, value in replacements.items():
-                    # If value is empty after cleaning, keep XXX as placeholder
-                    if not value or value == '' or value == 'nan':
-                        value = 'XXX'
-                    filled_procedure = filled_procedure.replace(placeholder, str(value))
-            
-                filled_procedures.append(filled_procedure)
-            return filled_procedures
-        else:
+        if not data_dict:
             return procedures
+
+        filled_procedures = []
+        for procedure in procedures:
+            filled_procedure = procedure
+
+            # Direct mapping: most placeholders match exactly to data_dict keys
+            replacements = {
+                '{x No. of Parts}': data_dict.get('x No. of Parts') or data_dict.get('Qty/Veh') or data_dict.get('Quantity'),
+                '{Inner L}': data_dict.get('Inner L'),
+                '{Inner W}': data_dict.get('Inner W'),
+                '{Inner H}': data_dict.get('Inner H'),
+                '{Inner Qty/Pack}': data_dict.get('Inner Qty/Pack'),
+                '{Outer L}': data_dict.get('Outer L'),
+                '{Outer W}': data_dict.get('Outer W'),
+                '{Outer H}': data_dict.get('Outer H'),
+                '{Primary Qty/Pack}': data_dict.get('Primary Qty/Pack'),  # ✅ Only this comes from primary
+                '{Layer}': data_dict.get('Layer'),
+                '{Level}': data_dict.get('Level'),
+                '{Qty/Pack}': data_dict.get('Qty/Pack'),
+                '{Qty/Veh}': data_dict.get('Qty/Veh'),
+            }
+
+            # Clean and replace
+            for placeholder, raw_value in replacements.items():
+                value = self.clean_data_value(raw_value)
+                if not value:
+                    value = 'XXX'
+                filled_procedure = filled_procedure.replace(placeholder, str(value))
+
+            filled_procedures.append(filled_procedure)
+
+        return filled_procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write packaging procedure steps in merged cells B to P starting from Row 28"""
@@ -1023,7 +1022,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Critical error writing procedure steps: {e}")
             import traceback
             traceback.print_exc()
-            return 0
+        return 0
 
 # Packaging types and procedures from reference code
 PACKAGING_TYPES = [
