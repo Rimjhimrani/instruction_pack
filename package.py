@@ -288,7 +288,7 @@ class ImageExtractor:
             return False
 
 class EnhancedTemplateMapperWithImages:
-     def __init__(self):
+    def __init__(self):
         self.image_extractor = ImageExtractor()
         self.similarity_threshold = 0.3
         
