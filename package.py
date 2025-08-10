@@ -292,589 +292,492 @@ class EnhancedTemplateMapperWithImages:
         self.image_extractor = ImageExtractor()
         self.similarity_threshold = 0.3
         
-        # Enhanced section-based mapping rules (from first code)
-        self.section_mappings = {
-            'primary_packaging': {
-                'section_keywords': [
-                    'primary packaging instruction', 'primary packaging', 'primary', 
-                    'internal', '( primary / internal )', 'primary / internal'
-                ],
-                'field_mappings': {
-                    'primary packaging type': 'Primary Packaging Type',
-                    'packaging type': 'Primary Packaging Type',
-                    'l-mm': 'Primary L-mm',
-                    'l mm': 'Primary L-mm',
-                    'length': 'Primary L-mm',
-                    'w-mm': 'Primary W-mm',
-                    'w mm': 'Primary W-mm', 
-                    'width': 'Primary W-mm',
-                    'h-mm': 'Primary H-mm',
-                    'h mm': 'Primary H-mm',
-                    'height': 'Primary H-mm',
-                    'qty/pack': 'Primary Qty/Pack',
-                    'quantity': 'Primary Qty/Pack',
-                    'empty weight': 'Primary Empty Weight',
-                    'pack weight': 'Primary Pack Weight'
-                }
-            },
-            'secondary_packaging': {
-                'section_keywords': [
-                    'secondary packaging instruction', 'secondary packaging', 'secondary', 
-                    'outer', 'external', '( outer / external )', 'outer / external'
-                ],
-                'field_mappings': {
-                    'secondary packaging type': 'Secondary Packaging Type',
-                    'packaging type': 'Secondary Packaging Type',
-                    'type': 'Secondary Packaging Type',
-                    'l-mm': 'Secondary L-mm',
-                    'l mm': 'Secondary L-mm',
-                    'length': 'Secondary L-mm',
-                    'w-mm': 'Secondary W-mm',
-                    'w mm': 'Secondary W-mm',
-                    'width': 'Secondary W-mm',
-                    'h-mm': 'Secondary H-mm',
-                    'h mm': 'Secondary H-mm',
-                    'height': 'Secondary H-mm',
-                    'qty/pack': 'Secondary Qty/Pack',
-                    'quantity': 'Secondary Qty/Pack',
-                    'empty weight': 'Secondary Empty Weight',
-                    'pack weight': 'Secondary Pack Weight'
-                }
-            },
-            'part_information': {
-                'section_keywords': [
-                    'part information', 'part info', 'part', 'component', 'item', 'component information'
-                ],
-                'field_mappings': {
-                    'L': 'Part L',
-                    'l': 'Part L',
-                    'length': 'Part L',
-                    'part l': 'Part L',
-                    'component l': 'Part L',
-                    'W': 'Part W',
-                    'w': 'Part W',
-                    'width': 'Part W',
-                    'part w': 'Part W',
-                    'component w': 'Part W',
-                    'H': 'Part H',
-                    'h': 'Part H',
-                    'height': 'Part H',
-                    'part h': 'Part H',
-                    'component h': 'Part H',
-                    'part no': 'Part No',
-                    'part number': 'Part No',
-                    'description': 'Part Description',
-                    'unit weight': 'Part Unit Weight'
-                }
-            },
-            'vendor_information': {
-                'section_keywords': [
-                    'vendor information', 'vendor info', 'vendor', 'supplier', 'supplier information', 'supplier info'
-                ],
-                'field_mappings': {
-                    'vendor name': 'Vendor Name',
-                    'name': 'Vendor Name',
-                    'supplier name': 'Vendor Name',
-                    'vendor code': 'Vendor Code',
-                    'supplier code': 'Vendor Code',
-                    'code': 'Vendor Code',
-                    'vendor location': 'Vendor Location',
-                    'location': 'Vendor Location',
-                    'supplier location': 'Vendor Location',
-                    'address': 'Vendor Location'
-                }
-            }
+        # Enhanced field mappings based on the template structure
+        self.field_mappings = {
+            # Vendor Information mappings
+            'vendor code': ['Code', 'vendor code'],
+            'vendor name': ['Name', 'vendor name'],  
+            'vendor location': ['Location', 'vendor location'],
+            
+            # Part Information mappings
+            'part no': ['Part No.', 'part number', 'part no'],
+            'part number': ['Part No.', 'part number', 'part no'],
+            'description': ['Description', 'part description'],
+            'unit weight': ['Unit Weight', 'weight'],
+            'part l': ['L', 'length', 'part l'],
+            'part w': ['W', 'width', 'part w'], 
+            'part h': ['H', 'height', 'part h'],
+            
+            # Primary Packaging mappings
+            'primary packaging type': ['Packaging Type', 'primary type'],
+            'primary l-mm': ['L-mm', 'primary length', 'length mm'],
+            'primary w-mm': ['W-mm', 'primary width', 'width mm'],
+            'primary h-mm': ['H-mm', 'primary height', 'height mm'],
+            'primary qty/pack': ['Qty/Pack', 'primary quantity'],
+            'primary empty weight': ['Empty Weight', 'primary empty weight'],
+            'primary pack weight': ['Pack Weight', 'primary pack weight'],
+            
+            # Secondary Packaging mappings
+            'secondary packaging type': ['Packaging Type', 'secondary type'],
+            'secondary l-mm': ['L-mm', 'secondary length'],
+            'secondary w-mm': ['W-mm', 'secondary width'],
+            'secondary h-mm': ['H-mm', 'secondary height'],
+            'secondary qty/pack': ['Qty/Pack', 'secondary quantity'],
+            'secondary empty weight': ['Empty Weight', 'secondary empty weight'],
+            'secondary pack weight': ['Pack Weight', 'secondary pack weight'],
+            
+            # Common dimension mappings
+            'length': ['L-mm', 'L', 'length'],
+            'width': ['W-mm', 'W', 'width'],
+            'height': ['H-mm', 'H', 'height'],
+            'l': ['L-mm', 'L'],
+            'w': ['W-mm', 'W'],
+            'h': ['H-mm', 'H']
         }
 
-    def preprocess_text(self, text):
-        """Preprocess text for better matching"""
-        try:
-            if pd.isna(text) or text is None:
-                return ""
-            
-            text = str(text).lower()
-            # Remove parentheses and special characters but keep spaces
-            text = re.sub(r'[()[\]{}]', ' ', text)
-            text = re.sub(r'[^\w\s/-]', ' ', text)
-            text = re.sub(r'\s+', ' ', text).strip()
-            
-            return text
-        except Exception as e:
-            print(f"Error in preprocess_text: {e}")
-            return ""
+    def is_merged_cell(self, worksheet, row, col):
+        """Check if a cell is part of a merged range"""
+        cell = worksheet.cell(row=row, column=col)
+        for merged_range in worksheet.merged_cells.ranges:
+            if cell.coordinate in merged_range:
+                return True, merged_range
+        return False, None
 
-    def identify_section_context(self, worksheet, row, col, max_search_rows=15):
-        """Enhanced section identification with better pattern matching"""
-        try:
-            # Search upwards and in nearby cells for section headers
-            for search_row in range(max(1, row - max_search_rows), row + 2):
-                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
-                    try:
-                        cell = worksheet.cell(row=search_row, column=search_col)
-                        if cell.value:
-                            cell_text = self.preprocess_text(str(cell.value))
-                        
-                            # Check for section keywords with more flexible matching
-                            for section_name, section_info in self.section_mappings.items():
-                                for keyword in section_info['section_keywords']:
-                                    keyword_processed = self.preprocess_text(keyword)
-                                
-                                    # Exact match
-                                    if keyword_processed == cell_text:
-                                        return section_name
-                                
-                                    # Partial match for key phrases
-                                    if keyword_processed in cell_text or cell_text in keyword_processed:
-                                        return section_name
-                                
-                                    # Enhanced context matching
-                                    if section_name == 'primary_packaging':
-                                        if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'secondary_packaging':
-                                        if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'part_information':
-                                        if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
-                                    elif section_name == 'vendor_information':
-                                        if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
-                    except:
-                        continue
-        
-            return None
-        
-        except Exception as e:
-            print(f"Error in identify_section_context: {e}")
-            return None
+    def get_writable_cell_in_merged_range(self, worksheet, merged_range):
+        """Get the top-left cell of a merged range (the writable one)"""
+        min_col, min_row, max_col, max_row = merged_range.bounds
+        return worksheet.cell(row=min_row, column=min_col)
 
-    def is_mappable_field(self, text):
-        """Enhanced field detection for packaging templates"""
-        try:
-            if not text or pd.isna(text):
-                return False
-            
-            text = str(text).lower().strip()
-            if not text:
-                return False
+    def find_template_sections(self, worksheet):
+        """Identify different sections in the template"""
+        sections = {
+            'vendor_info': [],
+            'part_info': [],
+            'primary_packaging': [],
+            'secondary_packaging': [],
+            'packaging_procedure': []
+        }
         
-            print(f"DEBUG is_mappable_field: Checking '{text}'")
+        section_keywords = {
+            'vendor_info': ['vendor information', 'code', 'name', 'location'],
+            'part_info': ['part information', 'part no', 'description', 'unit weight'],
+            'primary_packaging': ['primary packaging instruction', 'primary', 'internal'],
+            'secondary_packaging': ['secondary packaging instruction', 'secondary', 'outer', 'external'],
+            'packaging_procedure': ['packaging procedure', 'procedure']
+        }
         
-            # Skip header-like patterns that should not be treated as fields
-            header_exclusions = [
-                'vendor information', 'part information', 'primary packaging', 'secondary packaging',
-                'packaging instruction', 'procedure', 'steps', 'process'
-            ]
-        
-            for exclusion in header_exclusions:
-                if exclusion in text and 'type' not in text:
-                    print(f"DEBUG: Excluding '{text}' as header")
-                    return False
-        
-            # Define mappable field patterns for packaging templates
-            mappable_patterns = [
-                # Packaging type fields
-                r'packaging\s+type', r'\btype\b',
-            
-                # Dimension fields
-                r'\bl[-\s]*mm\b', r'\bw[-\s]*mm\b', r'\bh[-\s]*mm\b',
-                r'\bl\b', r'\bw\b', r'\bh\b',  # Single letter dimensions
-            
-                # Part-specific dimension fields
-                r'part\s+l\b', r'part\s+w\b', r'part\s+h\b',
-            
-                # Basic dimensions
-                r'\blength\b', r'\bwidth\b', r'\bheight\b',
-            
-                # Other fields
-                r'qty[/\s]*pack', r'quantity\b', r'weight\b', r'empty\s+weight',
-                r'\bcode\b', r'\bname\b', r'\bdescription\b', r'\blocation\b',
-                r'part\s+no\b', r'part\s+number\b'
-            ]
-        
-            for pattern in mappable_patterns:
-                if re.search(pattern, text):
-                    print(f"DEBUG: '{text}' matches pattern '{pattern}'")
-                    return True
-        
-            # Check if it ends with colon
-            if text.endswith(':'):
-                print(f"DEBUG: '{text}' ends with colon")
-                return True
-                
-            print(f"DEBUG: '{text}' is NOT mappable")
-            return False
-        except Exception as e:
-            print(f"Error in is_mappable_field: {e}")
-            return False
-
-    def find_template_fields_with_context_and_images(self, template_file):
-        """Find template fields and image upload areas using the improved logic from first code"""
-        fields = {}
-        image_areas = []
-        try:
-            workbook = openpyxl.load_workbook(template_file)
-            worksheet = workbook.active
-        
-            merged_ranges = worksheet.merged_cells.ranges
-        
-            # Find mappable fields
-            for row in worksheet.iter_rows():
-                for cell in row:
-                    try:
-                        if cell.value is not None:
-                            cell_value = str(cell.value).strip()
-                        
-                            if cell_value and self.is_mappable_field(cell_value):
-                                cell_coord = cell.coordinate
-                                merged_range = None
-                            
-                                for merge_range in merged_ranges:
-                                    if cell.coordinate in merge_range:
-                                        merged_range = str(merge_range)
-                                        break
-                            
-                                # Identify section context
-                                section_context = self.identify_section_context(
-                                    worksheet, cell.row, cell.column
-                                )
-                            
-                                print(f"DEBUG: Found field '{cell_value}' at {cell_coord}")
-                                print(f"DEBUG: Section context: {section_context}")
-                                print("---")
-                            
-                                fields[cell_coord] = {
-                                    'value': cell_value,
-                                    'row': cell.row,
-                                    'column': cell.column,
-                                    'merged_range': merged_range,
-                                    'section_context': section_context,
-                                    'is_mappable': True
-                                }
-                    except Exception as e:
-                        continue
-        
-            # Find image upload areas
-            image_areas = self.image_extractor.identify_image_upload_areas(worksheet)
-        
-            workbook.close()
-        
-        except Exception as e:
-            st.error(f"Error reading template: {e}")
-    
-        return fields, image_areas
-
-    def find_data_cell_for_label(self, worksheet, field_info):
-        """Find data cell for a label with improved merged cell handling - FIXED VERSION"""
-        try:
-            row = field_info['row']
-            col = field_info['column']
-            merged_ranges = list(worksheet.merged_cells.ranges)
-        
-            def is_suitable_data_cell(target_row, target_col):
-                """Check if a cell is suitable for data entry"""
-                try:
-                    if target_row < 1 or target_col < 1 or target_row > worksheet.max_row or target_col > worksheet.max_column:
-                        return False
-                        
-                    cell = worksheet.cell(row=target_row, column=target_col)
-                    
-                    # Check if it's a merged cell - if so, skip it for now
-                    if hasattr(cell, '__class__') and cell.__class__.__name__ == 'MergedCell':
-                        return False
-                    
-                    # Empty cells are good candidates
-                    if cell.value is None or str(cell.value).strip() == "":
-                        return True
-                        
-                    # Check for data placeholder patterns
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
                     cell_text = str(cell.value).lower().strip()
-                    data_patterns = [r'^_+$', r'^\.*$', r'^-+$', r'enter', r'fill', r'data', r'xxx']
-                    if any(re.search(pattern, cell_text) for pattern in data_patterns):
-                        return True
-                        
-                    return False
-                except Exception as e:
-                    print(f"Error checking cell suitability: {e}")
-                    return False
-            
-            # Strategy 1: Look right of label (most common pattern) - ENHANCED
-            print(f"Looking for data cell for label '{field_info['value']}' at row {row}, col {col}")
-            
-            # Try immediate right cells first
-            for offset in range(1, 6):
-                target_col = col + offset
-                if is_suitable_data_cell(row, target_col):
-                    cell_coord = worksheet.cell(row=row, column=target_col).coordinate
-                    print(f"Found suitable cell to the right: {cell_coord}")
-                    return cell_coord
-            
-            # Strategy 2: Look below label
-            for offset in range(1, 4):
-                target_row = row + offset
-                if is_suitable_data_cell(target_row, col):
-                    cell_coord = worksheet.cell(row=target_row, column=col).coordinate
-                    print(f"Found suitable cell below: {cell_coord}")
-                    return cell_coord
-            
-            # Strategy 3: Look diagonally (down-right)
-            for row_offset in range(1, 3):
-                for col_offset in range(1, 4):
-                    target_row = row + row_offset
-                    target_col = col + col_offset
-                    if is_suitable_data_cell(target_row, target_col):
-                        cell_coord = worksheet.cell(row=target_row, column=target_col).coordinate
-                        print(f"Found suitable cell diagonally: {cell_coord}")
-                        return cell_coord
-            
-            # Strategy 4: Handle merged cells specially
-            # Look for merged ranges that might be data input areas
-            for merged_range in merged_ranges:
-                min_col, min_row, max_col, max_row = merged_range.bounds
-                
-                # Check if this merged range is in the vicinity of our label
-                if (abs(min_row - row) <= 2 and abs(min_col - col) <= 5):
-                    # Get the top-left cell of the merged range
-                    anchor_cell = worksheet.cell(row=min_row, column=min_col)
-                    if anchor_cell.value is None or str(anchor_cell.value).strip() == "":
-                        print(f"Found suitable merged cell: {anchor_cell.coordinate}")
-                        return anchor_cell.coordinate
-            
-            print(f"No suitable data cell found for label '{field_info['value']}'")
-            return None
-            
-        except Exception as e:
-            print(f"Error in find_data_cell_for_label: {e}")
-            return None
+                    
+                    for section_name, keywords in section_keywords.items():
+                        if any(keyword.lower() in cell_text for keyword in keywords):
+                            sections[section_name].append((row_num, col_num, cell_text))
+        
+        return sections
 
-    def map_data_with_section_context(self, template_fields, data_df):
-        """Enhanced mapping with better section-aware logic - FIXED VERSION"""
-        mapping_results = {}
-        used_columns = set()
+    def find_field_cells(self, worksheet, search_terms, start_row=1, end_row=None, start_col=1, end_col=None):
+        """Find cells containing specific field names"""
+        if end_row is None:
+            end_row = worksheet.max_row
+        if end_col is None:
+            end_col = worksheet.max_column
+            
+        found_cells = []
+        
+        for row_num in range(start_row, end_row + 1):
+            for col_num in range(start_col, end_col + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    for term in search_terms:
+                        if term.lower() in cell_text or cell_text in term.lower():
+                            found_cells.append((row_num, col_num, cell_text))
+                            break
+        
+        return found_cells
 
-        try:
-            data_columns = data_df.columns.tolist()
-            print(f"DEBUG: Available data columns: {data_columns}")
-
-            for coord, field in template_fields.items():
+    def find_adjacent_writable_cell(self, worksheet, row, col, max_distance=3):
+        """Find the nearest writable cell to place data"""
+        directions = [
+            (0, 1),   # Right
+            (0, 2),   # Right +2
+            (1, 0),   # Down
+            (1, 1),   # Down-Right
+            (0, -1),  # Left
+            (-1, 0),  # Up
+        ]
+        
+        for distance in range(1, max_distance + 1):
+            for dr, dc in directions:
                 try:
-                    best_match = None
-                    best_score = 0.0
-                    field_value = field['value']
-                    section_context = field.get('section_context')
-
-                    print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")
-
-                    # If section context exists, use its field mappings
-                    if section_context and section_context in self.section_mappings:
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"DEBUG: Section mappings: {list(section_mappings.keys())}")
-
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            normalized_field_value = self.preprocess_text(field_value)
-                            normalized_template_key = self.preprocess_text(template_field_key)
-
-                            print(f"DEBUG: Comparing '{normalized_field_value}' with '{normalized_template_key}'")
-
-                            if normalized_field_value == normalized_template_key or normalized_template_key in normalized_field_value:
-                                # Look for exact column match first
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(data_column_pattern):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        print(f"DEBUG: EXACT MATCH FOUND: {data_col}")
-                                        break
-
-                                # If no exact match, try similarity matching
-                                if not best_match:
-                                    for data_col in data_columns:
-                                        if data_col in used_columns:
-                                            continue
-                                        similarity = self.calculate_similarity(data_column_pattern, data_col)
-                                        if similarity > best_score and similarity >= self.similarity_threshold:
-                                            best_score = similarity
-                                            best_match = data_col
-                                            print(f"DEBUG: SIMILARITY MATCH: {data_col} (score: {similarity})")
-                                
-                                if best_match:
-                                    break
-
-                    # Fallback mappings for fields without clear section context
-                    if not best_match:
-                        # Handle common cases
-                        normalized_field = self.preprocess_text(field_value)
-                        
-                        if normalized_field == 'type' and not section_context:
-                            # Assume secondary packaging type
-                            for data_col in data_columns:
-                                if data_col in used_columns:
-                                    continue
-                                if 'secondary' in data_col.lower() and 'type' in data_col.lower():
-                                    best_match = data_col
-                                    best_score = 1.0
-                                    break
-                        
-                        elif normalized_field in ['l', 'w', 'h'] and not section_context:
-                            # Assume part dimensions
-                            for data_col in data_columns:
-                                if data_col in used_columns:
-                                    continue
-                                if f'part {normalized_field}' == data_col.lower():
-                                    best_match = data_col
-                                    best_score = 1.0
-                                    break
-
-                        # General similarity matching as final fallback
-                        if not best_match:
-                            for data_col in data_columns:
-                                if data_col in used_columns:
-                                    continue
-                                similarity = self.calculate_similarity(field_value, data_col)
-                                if similarity > best_score and similarity >= self.similarity_threshold:
-                                    best_score = similarity
-                                    best_match = data_col
-
-                    print(f"DEBUG: Final mapping result - Field: '{field_value}' -> Column: '{best_match}' (Score: {best_score})")
-                    print("=" * 50)
-
-                    # Save mapping
-                    mapping_results[coord] = {
-                        'template_field': field_value,
-                        'data_column': best_match,
-                        'similarity': best_score,
-                        'field_info': field,
-                        'section_context': section_context,
-                        'is_mappable': best_match is not None
-                    }
-
-                    # Prevent reuse of the same column
-                    if best_match:
-                        used_columns.add(best_match)
-
-                except Exception as e:
-                    print(f"Error mapping field {coord}: {e}")
+                    target_row = row + (dr * distance)
+                    target_col = col + (dc * distance)
+                    
+                    if target_row < 1 or target_col < 1:
+                        continue
+                    
+                    target_cell = worksheet.cell(row=target_row, column=target_col)
+                    
+                    # Check if it's a merged cell
+                    is_merged, merged_range = self.is_merged_cell(worksheet, target_row, target_col)
+                    
+                    if is_merged:
+                        # Get the writable cell in merged range
+                        writable_cell = self.get_writable_cell_in_merged_range(worksheet, merged_range)
+                        if not writable_cell.value:  # Only use if empty
+                            return writable_cell
+                    else:
+                        # Regular cell
+                        if not target_cell.value:  # Only use if empty
+                            return target_cell
+                            
+                except Exception:
                     continue
+        
+        return None
 
-        except Exception as e:
-            print(f"Error in map_data_with_section_context: {e}")
-
-        return mapping_results
-
-    def calculate_similarity(self, text1, text2):
-        """Calculate similarity between two texts"""
+    def map_template_with_data(self, template_path, data_path):
+        """Enhanced mapping with dynamic field detection and smart target cell finding"""
         try:
-            if not text1 or not text2:
-                return 0.0
-            
-            text1 = self.preprocess_text(text1)
-            text2 = self.preprocess_text(text2)
-            
-            if not text1 or not text2:
-                return 0.0
-            
-            # Use SequenceMatcher for similarity
-            from difflib import SequenceMatcher
-            return SequenceMatcher(None, text1, text2).ratio()
-            
-        except Exception as e:
-            print(f"Error in calculate_similarity: {e}")
-            return 0.0
-
-    def fill_template_with_data_and_images(self, template_file, mapping_results, data_df, uploaded_images=None, packaging_type=None):
-        """Fill template with mapped data, images, and procedure steps - FIXED VERSION"""
-        try:
-            workbook = openpyxl.load_workbook(template_file)
+            # Read data from Excel
+            data_df = pd.read_excel(data_path)
+            st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
+        
+            # Load template
+            workbook = openpyxl.load_workbook(template_path)
             worksheet = workbook.active
         
-            filled_count = 0
-            images_added = 0
-            procedure_steps_added = 0
-            temp_image_paths = []
+            st.write(f"📋 Template has {worksheet.max_row} rows and {worksheet.max_column} columns")
+            st.write(f"🔗 Found {len(worksheet.merged_cells.ranges)} merged cell ranges")
         
-            # Create data dictionary for procedure step replacement
-            data_dict = {}
-            if len(data_df) > 0:
-                for col in data_df.columns:
-                    try:
-                        data_dict[col] = data_df.iloc[0][col]
-                    except:
-                        data_dict[col] = 'XXX'
+            # Create data mapping
+            mapped_fields = {}
+            data_map = {}
+         
+            # Process each row in data
+            for index, row in data_df.iterrows():
+                for col_name, value in row.items():
+                    if pd.notna(value) and col_name:
+                        clean_col = str(col_name).lower().strip()
+                        clean_value = str(value).strip()
+                        data_map[clean_col] = clean_value
+                        mapped_fields[clean_col] = clean_value
         
-            # Fill data fields - ENHANCED LOGIC
-            for coord, mapping in mapping_results.items():
-                try:
-                    if mapping['data_column'] is not None and mapping['is_mappable']:
-                        field_info = mapping['field_info']
-                    
-                        # Find the target cell where data should be written
-                        target_cell_coord = self.find_data_cell_for_label(worksheet, field_info)
-                    
-                        if target_cell_coord and len(data_df) > 0:
-                            # Get the data value
-                            data_value = data_df.iloc[0][mapping['data_column']]
-                            
-                            # Write to the target cell
-                            cell_obj = worksheet[target_cell_coord]
-                            
-                            # Handle merged cells properly
-                            if hasattr(cell_obj, '__class__') and cell_obj.__class__.__name__ == 'MergedCell':
-                                # Find the anchor cell of the merged range
-                                for merged_range in worksheet.merged_cells.ranges:
-                                    if target_cell_coord in merged_range:
-                                        min_col, min_row, max_col, max_row = merged_range.bounds
-                                        anchor_cell = worksheet.cell(row=min_row, column=min_col)
-                                        anchor_cell.value = str(data_value) if not pd.isna(data_value) else ""
-                                        print(f"✅ Filled merged cell {anchor_cell.coordinate} with '{data_value}' for field '{field_info['value']}'")
-                                        filled_count += 1
-                                        break
-                            else:
-                                # Regular cell
-                                cell_obj.value = str(data_value) if not pd.isna(data_value) else ""
-                                print(f"✅ Filled cell {target_cell_coord} with '{data_value}' for field '{field_info['value']}'")
-                                filled_count += 1
-                        else:
-                            print(f"❌ Could not find target cell for field '{field_info['value']}'")
-                        
-                except Exception as e:
-                    print(f"Error filling mapping {coord}: {e}")
-                    continue
+            st.write(f"📝 Created data map with {len(data_map)} fields")
         
-            # Add images if provided
-            if uploaded_images:
-                # First, identify image upload areas
-                _, image_areas = self.find_template_fields_with_context_and_images(template_file)
-                images_added, temp_image_paths = self.add_images_to_template(worksheet, uploaded_images, image_areas)
+            # Build template field map with precise target cells
+            template_field_map = self.build_template_field_map(worksheet)
+            st.write(f"🗺️ Found {len(template_field_map)} template fields")
         
-            # Write procedure steps if packaging type is provided
-            if packaging_type and packaging_type != "Select Packaging Procedure":
-                try:
-                    procedure_steps_added = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                    print(f"Added {procedure_steps_added} procedure steps for packaging type: {packaging_type}")
-                except Exception as e:
-                    print(f"Error adding procedure steps: {e}")
-                    procedure_steps_added = 0
+            # Apply mappings using smart matching
+            mapping_count = 0
+        
+            for data_field, data_value in data_map.items():
+                # Try direct mapping first
+                target_cell = self.find_target_cell_for_field(worksheet, data_field, template_field_map)
             
-            return workbook, filled_count, images_added, temp_image_paths, procedure_steps_added
+                if target_cell:
+                    success = self.write_to_target_cell(worksheet, target_cell, data_value, data_field)
+                    if success:
+                        mapping_count += 1
+                else:
+                    # Try enhanced field mapping
+                    mapped_target = self.try_enhanced_field_mapping(worksheet, data_field, data_value)
+                    if mapped_target:
+                        mapping_count += 1
+        
+            st.success(f"🎉 Successfully mapped {mapping_count} fields to template!")
+        
+            return workbook, mapped_fields
         
         except Exception as e:
-            print(f"Error filling template: {e}")
-            return None, 0, 0, [], 0
+            st.error(f"❌ Error mapping template: {e}")
+            st.write("📋 Traceback:", traceback.format_exc())
+            return None, {}
 
-    # Include other necessary methods from the first code...
-    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write packaging procedure steps (implementation from first code)"""
-        # Implementation would be the same as in your first code
-        pass
+    def build_template_field_map(self, worksheet):
+        """Build a comprehensive map of template fields and their target cells"""
+        template_fields = {}
     
-    def add_images_to_template(self, worksheet, uploaded_images, image_areas):
-        """Add images to template (implementation from first code)"""
-        # Implementation would be the same as in your first code
-        pass
+        # Scan all cells to find field labels and their corresponding input cells
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+            
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                
+                    # Skip cells that look like they contain data (not labels)
+                    if self.looks_like_data_cell(cell_text):
+                        continue
+                
+                    # Find potential input cells for this label
+                    input_cells = self.find_input_cells_for_label(worksheet, row_num, col_num, cell_text)
+                
+                    if input_cells:
+                        # Store all variations of the field name
+                        field_variations = self.generate_field_variations(cell_text)
+                        for variation in field_variations:
+                            if variation not in template_fields:
+                                template_fields[variation] = input_cells
+    
+        return template_fields
+
+    def looks_like_data_cell(self, text):
+        """Check if text looks like data rather than a field label"""
+        # Skip very long texts, numbers, dates, etc.
+        if len(text) > 50:
+            return True
+        if text.replace('.', '').replace('-', '').isdigit():
+            return True
+        if any(word in text for word in ['mm', 'kg', 'gm', 'cm', 'inch']):
+            return True
+        return False
+
+    def generate_field_variations(self, field_text):
+        """Generate variations of field names for better matching"""
+        variations = set()
+    
+        # Original text
+        variations.add(field_text)
+    
+        # Remove common suffixes/prefixes
+        clean_text = field_text.replace(':', '').replace('*', '').replace('(', '').replace(')', '')
+        variations.add(clean_text)
+    
+        # Add variations with common words
+        if 'packaging' in clean_text:
+            variations.add(clean_text.replace('packaging', 'pack'))
+        if 'instruction' in clean_text:
+            variations.add(clean_text.replace(' instruction', ''))
+        if 'information' in clean_text:
+            variations.add(clean_text.replace(' information', ''))
+    
+        # Add short versions
+        words = clean_text.split()
+        if len(words) > 1:
+            variations.add(words[0])  # First word only
+            variations.add(words[-1])  # Last word only
+    
+        return variations
+
+    def find_input_cells_for_label(self, worksheet, label_row, label_col, label_text):
+        """Find the most likely input cells for a given label"""
+        input_cells = []
+    
+        # Define search patterns - cells where users typically input data
+        search_patterns = [
+            # Right side patterns (most common)
+            (0, 1), (0, 2), (0, 3),  # Same row, 1-3 columns right
+            # Below patterns  
+            (1, 0), (1, 1),          # One row down, same or next column
+            # Diagonal patterns
+            (1, -1), (0, -1),        # Down-left, left (for right-aligned labels)
+        ]
+    
+        for row_offset, col_offset in search_patterns:
+            target_row = label_row + row_offset
+            target_col = label_col + col_offset
+        
+            if target_row < 1 or target_col < 1:
+                continue
+            
+            try:
+                target_cell = worksheet.cell(row=target_row, column=target_col)
+            
+                # Check if this looks like an input cell
+                if self.is_likely_input_cell(worksheet, target_cell, target_row, target_col):
+                    input_cells.append(target_cell)
+                
+                    # For primary match, break after finding first good candidate
+                    if row_offset == 0 and col_offset in [1, 2]:
+                        break
+                    
+            except Exception:
+                continue
+    
+        return input_cells
+
+    def is_likely_input_cell(self, worksheet, cell, row, col):
+        """Determine if a cell is likely meant for user input"""
+        # Empty cells are good candidates
+        if not cell.value:
+            return True
+    
+        # Cells with placeholder text
+        if cell.value and isinstance(cell.value, str):
+            placeholder_indicators = ['xxx', '___', 'tbd', 'enter', 'input', '?']
+            if any(indicator in str(cell.value).lower() for indicator in placeholder_indicators):
+                return True
+    
+        # Check if it's in a merged range (often used for input fields)
+        is_merged, merged_range = self.is_merged_cell(worksheet, row, col)
+        if is_merged:
+            # If it's the top-left cell of a merged range, it's likely an input cell
+            min_col, min_row, max_col, max_row = merged_range.bounds
+            if row == min_row and col == min_col:
+                return True
+    
+        return False
+
+    def find_target_cell_for_field(self, worksheet, data_field, template_field_map):
+        """Find the best target cell for a data field"""
+        data_field_clean = data_field.lower().strip()
+    
+        # Direct match
+        if data_field_clean in template_field_map:
+            return template_field_map[data_field_clean][0]  # Return first match
+    
+        # Try field mappings
+        if data_field_clean in self.field_mappings:
+            template_terms = self.field_mappings[data_field_clean]
+        
+            for term in template_terms:
+                term_clean = term.lower().strip()
+                if term_clean in template_field_map:
+                    return template_field_map[term_clean][0]
+    
+        # Fuzzy matching with template fields
+        best_match_cell = None
+        best_similarity = 0
+    
+        for template_field, input_cells in template_field_map.items():
+            similarity = SequenceMatcher(None, data_field_clean, template_field).ratio()
+        
+            if similarity > best_similarity and similarity > self.similarity_threshold:
+                best_similarity = similarity
+                best_match_cell = input_cells[0]
+    
+        return best_match_cell
+
+    def try_enhanced_field_mapping(self, worksheet, data_field, data_value):
+        """Enhanced mapping for fields not found in template map"""
+        # Use the original fuzzy search as fallback
+        best_match = self.find_best_fuzzy_match(worksheet, data_field)
+    
+        if best_match:
+            row_num, col_num, match_text, similarity = best_match
+            if similarity > self.similarity_threshold:
+                writable_cell = self.find_adjacent_writable_cell(worksheet, row_num, col_num)
+            
+                if writable_cell:
+                    return self.write_to_target_cell(worksheet, writable_cell, data_value, data_field)
+    
+        return False
+
+    def write_to_target_cell(self, worksheet, target_cell, data_value, data_field):
+        """Write data to target cell with proper error handling"""
+        try:
+            # Check if target cell is part of merged range
+            is_merged, merged_range = self.is_merged_cell(worksheet, target_cell.row, target_cell.column)
+        
+            if is_merged:
+                # Get the writable cell in merged range
+                writable_cell = self.get_writable_cell_in_merged_range(worksheet, merged_range)
+                if writable_cell:
+                    writable_cell.value = data_value
+                    st.write(f"✅ Mapped '{data_field}' = '{data_value}' to merged cell {writable_cell.coordinate}")
+                    return True
+            else:
+                # Regular cell
+                target_cell.value = data_value
+                st.write(f"✅ Mapped '{data_field}' = '{data_value}' to cell {target_cell.coordinate}")
+                return True
+            
+        except Exception as e:
+            st.write(f"⚠️ Failed to write '{data_field}' to {target_cell.coordinate}: {e}")
+        
+        return False
+
+    def find_best_fuzzy_match(self, worksheet, search_term):
+        """Find the best fuzzy match for a search term"""
+        best_match = None
+        best_similarity = 0
+        
+        for row_num in range(1, worksheet.max_row + 1):
+            for col_num in range(1, worksheet.max_column + 1):
+                cell = worksheet.cell(row=row_num, column=col_num)
+                if cell.value and isinstance(cell.value, str):
+                    cell_text = str(cell.value).lower().strip()
+                    
+                    # Calculate similarity
+                    similarity = SequenceMatcher(None, search_term.lower(), cell_text).ratio()
+                    
+                    if similarity > best_similarity and similarity > 0.3:
+                        best_similarity = similarity
+                        best_match = (row_num, col_num, cell_text, similarity)
+        
+        return best_match
+
+    def add_packaging_procedure(self, worksheet, packaging_type, data_map):
+        """Add packaging procedure text to the template"""
+        try:
+            if packaging_type in PACKAGING_PROCEDURES:
+                procedures = PACKAGING_PROCEDURES[packaging_type]
+                
+                # Find procedure section (around rows with "Packaging Procedure")
+                procedure_start_row = None
+                for row_num in range(1, worksheet.max_row + 1):
+                    for col_num in range(1, worksheet.max_column + 1):
+                        cell = worksheet.cell(row=row_num, column=col_num)
+                        if cell.value and isinstance(cell.value, str):
+                            if 'packaging procedure' in str(cell.value).lower():
+                                procedure_start_row = row_num + 1
+                                break
+                    if procedure_start_row:
+                        break
+                
+                if procedure_start_row:
+                    # Add procedures starting from the identified row
+                    for i, procedure in enumerate(procedures[:10], 1):  # Limit to first 10 steps
+                        try:
+                            procedure_row = procedure_start_row + i - 1
+                            if procedure_row <= worksheet.max_row:
+                                # Find the first cell in the procedure row (usually column A or B)
+                                step_cell = worksheet.cell(row=procedure_row, column=1)
+                                desc_cell = worksheet.cell(row=procedure_row, column=2)
+                                
+                                # Format procedure text with data substitution
+                                formatted_procedure = self.format_procedure_text(procedure, data_map)
+                                
+                                # Write step number and description
+                                if not step_cell.value:
+                                    step_cell.value = str(i)
+                                if not desc_cell.value:
+                                    desc_cell.value = formatted_procedure
+                                    
+                        except Exception as e:
+                            st.write(f"⚠️ Failed to add procedure step {i}: {e}")
+                    
+                    st.success(f"✅ Added {len(procedures)} packaging procedure steps")
+                    
+        except Exception as e:
+            st.write(f"⚠️ Error adding packaging procedure: {e}")
+
+    def format_procedure_text(self, procedure_text, data_map):
+        """Format procedure text by replacing placeholders with actual data"""
+        formatted_text = procedure_text
+        
+        # Common replacements
+        replacements = {
+            '{Inner L}': data_map.get('primary l-mm', data_map.get('length', 'XXX')),
+            '{Inner W}': data_map.get('primary w-mm', data_map.get('width', 'XXX')),
+            '{Inner H}': data_map.get('primary h-mm', data_map.get('height', 'XXX')),
+            '{Inner Qty/Pack}': data_map.get('primary qty/pack', data_map.get('quantity', 'XXX')),
+            '{Qty/Veh}': data_map.get('qty/veh', data_map.get('quantity per vehicle', '1')),
+            '{Layer}': data_map.get('layer', '4'),
+            '{Level}': data_map.get('level', '5'),
+            '{Qty/Pack}': data_map.get('qty/pack', data_map.get('quantity', 'XXX'))
+        }
+        
+        for placeholder, value in replacements.items():
+            formatted_text = formatted_text.replace(placeholder, str(value))
+        
+        return formatted_text
 
 # Packaging types and procedures from reference code
 PACKAGING_TYPES = [
