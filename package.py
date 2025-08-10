@@ -870,108 +870,13 @@ class EnhancedTemplateMapperWithImages:
             st.write("📋 Traceback:", traceback.format_exc())
             return None, {}
     
-    def extract_value_from_excel(self, data_df, possible_column_names):
-        """Extract value from Excel data using multiple possible column names"""
-        for col_name in possible_column_names:
-            # Try exact match first
-            if col_name in data_df.columns:
-                if not data_df[col_name].empty and len(data_df[col_name]) > 0:
-                    value = self.clean_data_value(data_df[col_name].iloc[0])
-                    if value and value != '':
-                        print(f"✅ Found exact match: '{col_name}' = '{value}'")
-                        return value
-        
-            # Try case-insensitive and partial match
-            for actual_col in data_df.columns:
-                if (col_name.lower().replace(' ', '') in actual_col.lower().replace(' ', '') or
-                    actual_col.lower().replace(' ', '') in col_name.lower().replace(' ', '')):
-                    if not data_df[actual_col].empty and len(data_df[actual_col]) > 0:
-                        value = self.clean_data_value(data_df[actual_col].iloc[0])
-                        if value and value != '':
-                            print(f"✅ Found partial match: '{actual_col}' for '{col_name}' = '{value}'")
-                            return value
-    
-        return 'XXX'
-    
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
-        """Get procedure steps with data substitution - enhanced to use Excel data directly"""
+        """Get procedure steps with data substitution"""
         # Use the PACKAGING_PROCEDURES from your constants
         procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
     
-        if data_df is not None:
-            # Extract values directly from Excel DataFrame
-            print(f"\n🔍 Extracting data from Excel columns: {list(data_df.columns)}")
-        
-            filled_procedures = []
-            for procedure in procedures:
-                filled_procedure = procedure
-            
-                # Define replacement mappings with multiple possible column names
-                replacement_mappings = {
-                    '{x No. of Parts}': [
-                        'x No. of Parts', 'Qty/Veh', 'Quantity', 'Parts Qty', 'No of Parts',
-                        'Qty Per Vehicle', 'Part Quantity', 'Vehicle Qty'
-                    ],
-                    '{Inner L}': [
-                        'Inner L', 'Inner Length', 'Inner L-mm', 'Inner_L', 'Inner Dimension L',
-                        'Primary L', 'Primary Length'
-                    ],
-                    '{Inner W}': [
-                        'Inner W', 'Inner Width', 'Inner W-mm', 'Inner_W', 'Inner Dimension W',
-                        'Primary W', 'Primary Width'
-                    ],
-                    '{Inner H}': [
-                        'Inner H', 'Inner Height', 'Inner H-mm', 'Inner_H', 'Inner Dimension H',
-                        'Primary H', 'Primary Height'
-                    ],
-                    '{Inner Qty/Pack}': [
-                        'Inner Qty/Pack', 'Inner Quantity', 'Inner Pack Qty', 'Primary Qty/Pack',
-                        'Inner Package Quantity'
-                    ],
-                    '{Outer L}': [
-                        'Outer L', 'Outer Length', 'Outer L-mm', 'Outer_L', 'Outer Dimension L',
-                        'Secondary L', 'Secondary Length'
-                    ],
-                    '{Outer W}': [
-                        'Outer W', 'Outer Width', 'Outer W-mm', 'Outer_W', 'Outer Dimension W',
-                        'Secondary W', 'Secondary Width'
-                    ],
-                    '{Outer H}': [
-                        'Outer H', 'Outer Height', 'Outer H-mm', 'Outer_H', 'Outer Dimension H',
-                        'Secondary H', 'Secondary Height'
-                    ],
-                    '{Primary Qty/Pack}': [
-                        'Primary Qty/Pack', 'Qty/Pack', 'Pack Quantity', 'Package Qty',
-                        'Quantity per Pack', 'Parts per Pack'
-                    ],
-                    '{Layer}': [
-                        'Layer', 'Layers', 'No of Layers', 'Layer Count', 'Pallet Layers'
-                    ],
-                    '{Level}': [
-                        'Level', 'Levels', 'No of Levels', 'Level Count', 'Stack Levels', 
-                        'Pallet Levels'
-                    ],
-                    '{Qty/Pack}': [
-                        'Qty/Pack', 'Quantity per Pack', 'Pack Qty', 'Package Quantity'
-                    ],
-                    '{Qty/Veh}': [
-                        'Qty/Veh', 'Qty Per Vehicle', 'Vehicle Quantity', 'Parts per Vehicle'
-                    ]
-                }
-            
-                # Apply replacements using direct Excel extraction
-                for placeholder, possible_columns in replacement_mappings.items():
-                    value = self.extract_value_from_excel(data_df, possible_columns)
-                    print(f"🔄 Replacing '{placeholder}' with '{value}'")
-                    filled_procedure = filled_procedure.replace(placeholder, str(value))
-            
-                filled_procedures.append(filled_procedure)
-        
-            return filled_procedures
-    
-        elif data_dict:
-            # Fallback to using data_dict if DataFrame not available
+        if data_dict:
             filled_procedures = []
             for procedure in procedures:
                 filled_procedure = procedure
