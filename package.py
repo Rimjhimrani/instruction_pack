@@ -752,11 +752,29 @@ class EnhancedTemplateMapperWithImages:
 
         return mapping_results
 
+    def clean_data_value(self, value):
+        """Clean data value to handle NaN, None, and empty values"""
+        if pd.isna(value) or value is None:
+            return ""
+        
+        # Convert to string and strip whitespace
+        str_value = str(value).strip()
+        
+        # Handle common representations of empty/null values
+        if str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a', '']:
+            return ""
+            
+        return str_value
+
     def map_template_with_data(self, template_path, data_path):
         """Enhanced mapping with section-based approach"""
         try:
-            # Read data from Excel
+            # Read data from Excel with proper NaN handling
             data_df = pd.read_excel(data_path)
+            
+            # Replace NaN values with empty strings in the entire dataframe
+            data_df = data_df.fillna("")
+            
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
             
             # Load template
@@ -780,20 +798,30 @@ class EnhancedTemplateMapperWithImages:
             for coord, mapping in mapping_results.items():
                 if mapping['is_mappable'] and mapping['data_column']:
                     try:
-                        # Get data value
+                        # Get data value with proper NaN handling
                         data_col = mapping['data_column']
-                        data_value = data_df[data_col].iloc[0] if not data_df[data_col].empty else ""
+                        
+                        if not data_df[data_col].empty and len(data_df[data_col]) > 0:
+                            raw_value = data_df[data_col].iloc[0]
+                            data_value = self.clean_data_value(raw_value)
+                        else:
+                            data_value = ""
                         
                         # Find target cell for writing
                         target_cell_coord = self.find_data_cell_for_label(worksheet, mapping['field_info'])
                         
                         if target_cell_coord:
                             target_cell = worksheet[target_cell_coord]
-                            target_cell.value = str(data_value)
                             
-                            mapping_count += 1
-                            successful_mappings.append(f"{mapping['template_field']} -> {data_col} -> {target_cell_coord}")
-                            st.write(f"✅ Mapped '{mapping['template_field']}' = '{data_value}' to cell {target_cell_coord}")
+                            # Only write non-empty values to avoid cluttering template with empty strings
+                            if data_value:  # Only write if there's actual data
+                                target_cell.value = data_value
+                                mapping_count += 1
+                                successful_mappings.append(f"{mapping['template_field']} -> {data_col} -> {target_cell_coord}")
+                                st.write(f"✅ Mapped '{mapping['template_field']}' = '{data_value}' to cell {target_cell_coord}")
+                            else:
+                                # Log empty values but don't write them
+                                st.write(f"ℹ️ Skipped empty value for '{mapping['template_field']}' from column '{data_col}'")
                         else:
                             failed_mappings.append(mapping['template_field'])
                             st.write(f"❌ Could not find target cell for '{mapping['template_field']}'")
@@ -832,17 +860,20 @@ class EnhancedTemplateMapperWithImages:
             for procedure in procedures:
                 filled_procedure = procedure
                 replacements = {
-                    '{Inner L}': str(data_dict.get('Inner L', 'XXX')),
-                    '{Inner W}': str(data_dict.get('Inner W', 'XXX')),
-                    '{Inner H}': str(data_dict.get('Inner H', 'XXX')),
-                    '{Inner Qty/Pack}': str(data_dict.get('Inner Qty/Pack', 'XXX')),
-                    '{Qty/Pack}': str(data_dict.get('Inner Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
-                    '{Qty/Veh}': str(data_dict.get('Qty/Veh', 'XXX')),
-                    '{Layer}': str(data_dict.get('Layer', 'XXX')),
-                    '{Level}': str(data_dict.get('Level', 'XXX')),
+                    '{Inner L}': self.clean_data_value(data_dict.get('Inner L', 'XXX')),
+                    '{Inner W}': self.clean_data_value(data_dict.get('Inner W', 'XXX')),
+                    '{Inner H}': self.clean_data_value(data_dict.get('Inner H', 'XXX')),
+                    '{Inner Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', 'XXX')),
+                    '{Qty/Pack}': self.clean_data_value(data_dict.get('Inner Qty/Pack', data_dict.get('Qty/Pack', 'XXX'))),
+                    '{Qty/Veh}': self.clean_data_value(data_dict.get('Qty/Veh', 'XXX')),
+                    '{Layer}': self.clean_data_value(data_dict.get('Layer', 'XXX')),
+                    '{Level}': self.clean_data_value(data_dict.get('Level', 'XXX')),
                 }
                 for placeholder, value in replacements.items():
-                    filled_procedure = filled_procedure.replace(placeholder, value)
+                    # If value is empty after cleaning, keep XXX as placeholder
+                    if not value or value == '':
+                        value = 'XXX'
+                    filled_procedure = filled_procedure.replace(placeholder, str(value))
                 filled_procedures.append(filled_procedure)
             return filled_procedures
         else:
