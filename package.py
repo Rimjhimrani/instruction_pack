@@ -27,38 +27,33 @@ def navigate_to_step(step_number):
         st.session_state.current_step = step_number
         st.rerun()
 
-# Configure Streamlit page
-st.set_page_config(
-    page_title="AI Packaging Template Mapper",
-    page_icon="📦",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-if 'current_step' not in st.session_state:
-    st.session_state.current_step = 1
-if 'selected_packaging_type' not in st.session_state:
-    st.session_state.selected_packaging_type = None
-if 'template_file' not in st.session_state:
-    st.session_state.template_file = None
-if 'data_file' not in st.session_state:
-    st.session_state.data_file = None
-if 'mapped_data' not in st.session_state:
-    st.session_state.mapped_data = None
-if 'mapping_completed' not in st.session_state:
-    st.session_state.mapping_completed = False
-if 'image_option' not in st.session_state:
-    st.session_state.image_option = None
-if 'uploaded_images' not in st.session_state:
-    st.session_state.uploaded_images = {}
-if 'extracted_excel_images' not in st.session_state:
-    st.session_state.extracted_excel_images = {}
-if 'custom_procedure_steps' not in st.session_state:
-    st.session_state.custom_procedure_steps = [""] * 11
-if 'show_custom_steps' not in st.session_state:
-    st.session_state.show_custom_steps = False
-if 'auto_fill_started' not in st.session_state:
-    st.session_state.auto_fill_started = False
+# Initialize session state
+def initialize_session_state():
+    """Initialize all session state variables"""
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 1
+    if 'selected_packaging_type' not in st.session_state:
+        st.session_state.selected_packaging_type = None
+    if 'template_file' not in st.session_state:
+        st.session_state.template_file = None
+    if 'data_file' not in st.session_state:
+        st.session_state.data_file = None
+    if 'mapped_data' not in st.session_state:
+        st.session_state.mapped_data = None
+    if 'mapping_completed' not in st.session_state:
+        st.session_state.mapping_completed = False
+    if 'image_option' not in st.session_state:
+        st.session_state.image_option = None
+    if 'uploaded_images' not in st.session_state:
+        st.session_state.uploaded_images = {}
+    if 'extracted_excel_images' not in st.session_state:
+        st.session_state.extracted_excel_images = {}
+    if 'custom_procedure_steps' not in st.session_state:
+        st.session_state.custom_procedure_steps = [""] * 11
+    if 'show_custom_steps' not in st.session_state:
+        st.session_state.show_custom_steps = False
+    if 'auto_fill_started' not in st.session_state:
+        st.session_state.auto_fill_started = False
 
 PACKAGING_TYPES = [
     "BOX IN BOX SENSITIVE",
@@ -1278,53 +1273,103 @@ class EnhancedTemplateMapperWithImages:
         return 0
 
 def main():
-    # Header
-    st.title("📦 AI Packaging Instruction Template")
-    st.markdown("---")
+    st.set_page_config(
+        page_title="Packaging Instruction Generator",
+        page_icon="📦",
+        layout="wide"
+    )
     
-    # Progress indicator
-    steps = [
-        "Select Packaging Type",
-        "Upload Template File", 
-        "Upload Data File",
-        "Auto-Fill Template",
-        "Choose Image Option",
-        "Generate Final Document"
-    ]
+    initialize_session_state()
     
-    # Create progress bar
-    progress_cols = st.columns(len(steps))
-    for i, (col, step) in enumerate(zip(progress_cols, steps)):
-        with col:
-            if i + 1 < st.session_state.current_step:
-                st.success(f"✅ {i+1}. {step}")
-            elif i + 1 == st.session_state.current_step:
-                st.info(f"🔄 {i+1}. {step}")
-            else:
-                st.write(f"⏳ {i+1}. {step}")
+    st.title("📦 Packaging Instruction Generator")
     
-    st.markdown("---")
+    # Progress bar
+    progress_steps = ["Select Packaging", "Upload Template", "Upload Data", "Configure Images", "Generate Output"]
+    progress = (st.session_state.current_step - 1) / (len(progress_steps) - 1)
+    st.progress(progress)
+    
+    # Show current step
+    st.write(f"**Current Step:** {progress_steps[st.session_state.current_step - 1]}")
     
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
         st.header("📦 Step 1: Select Packaging Type")
-        
+
         # Create columns for packaging types
         cols = st.columns(3)
         for i, packaging_type in enumerate(PACKAGING_TYPES):
             with cols[i % 3]:
-                if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
+                # Fixed: Use unique key with packaging type name to avoid duplicates
+                button_key = f"pkg_btn_{packaging_type.replace(' ', '_').replace('/', '_')}"
+                if st.button(packaging_type, key=button_key, use_container_width=True):
                     st.session_state.selected_packaging_type = packaging_type
-                    navigate_to_step(2)
+                
+                    # If ADD NEW TEMPLATE is selected, show step input form
+                    if packaging_type == "ADD NEW TEMPLATE":
+                        st.session_state.show_custom_steps = True
+                    else:
+                        st.session_state.show_custom_steps = False
+                        # Clear any previous custom steps
+                        if hasattr(st.session_state, 'custom_procedure_steps'):
+                            del st.session_state.custom_procedure_steps
+                        st.session_state.current_step = 2
+                        st.rerun()
+
+        # Show custom step input form if ADD NEW TEMPLATE is selected
+        if getattr(st.session_state, 'show_custom_steps', False):
+            st.header("✏️ Define Custom Procedure Steps")
+            st.info("Please enter 11 custom procedure steps for your packaging template")
         
-        # Show selected packaging details
-        if st.session_state.selected_packaging_type:
+            # Initialize custom steps if not exists
+            if not hasattr(st.session_state, 'custom_procedure_steps'):
+                st.session_state.custom_procedure_steps = [""] * 11
+        
+            # Create input fields for 11 steps
+            for i in range(11):
+                step_value = st.text_area(
+                    f"Step {i+1}:",
+                    value=st.session_state.custom_procedure_steps[i],
+                    key=f"custom_step_{i}",
+                    height=80,
+                    help="You can use placeholders like {x No. of Parts}, {Inner L}, {Primary Qty/Pack}, etc."
+                )
+                st.session_state.custom_procedure_steps[i] = step_value
+        
+            # Validation and continue button
+            filled_steps = [step for step in st.session_state.custom_procedure_steps if step.strip()]
+        
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.write(f"Steps filled: {len(filled_steps)}/11")
+                if len(filled_steps) < 11:
+                    st.warning(f"Please fill all 11 steps to continue. {11 - len(filled_steps)} steps remaining.")
+        
+            with col2:
+                if len(filled_steps) == 11:
+                    if st.button("Continue ➡️", type="primary", key="continue_custom_template"):
+                        st.session_state.current_step = 2
+                        st.rerun()
+        
+            # Preview of entered steps
+            if filled_steps:
+                with st.expander("Preview Custom Steps"):
+                    for i, step in enumerate(st.session_state.custom_procedure_steps):
+                        if step.strip():
+                            st.write(f"{i+1}. {step}")
+
+        # Show selected packaging details for predefined types
+        elif st.session_state.selected_packaging_type and st.session_state.selected_packaging_type != "ADD NEW TEMPLATE":
             st.success(f"Selected: {st.session_state.selected_packaging_type}")
-            
+        
             with st.expander("View Packaging Procedure"):
                 procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
                 for i, step in enumerate(procedures, 1):
                     st.write(f"{i}. {step}")
+
+            # Add continue button for predefined templates
+            if st.button("Continue to Template Upload", key="continue_predefined_template"):
+                st.session_state.current_step = 2
+                st.rerun()
     
     # Step 2: Upload Template File
     elif st.session_state.current_step == 2:
