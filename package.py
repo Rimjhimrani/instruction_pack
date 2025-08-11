@@ -233,7 +233,7 @@ class ImageExtractor:
             part_specific_images = {
                 key: data
                 for key, data in all_images['all_sheets'].items()
-                if any(term in key.lower() for term in search_terms)
+                if any(term in img_data['sheet'].lower() for term in search_terms)
             }
 
             # If no match, return all (fallback)
