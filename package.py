@@ -27,157 +27,34 @@ def navigate_to_step(step_number):
         st.session_state.current_step = step_number
         st.rerun()
 
+# Configure Streamlit page
+st.set_page_config(
+    page_title="AI Packaging Template Mapper",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+if 'mapping_completed' not in st.session_state:
+    st.session_state.mapping_completed = False
+if 'auto_fill_started' not in st.session_state:
+    st.session_state.auto_fill_started = False
 # Initialize session state
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 1
 if 'selected_packaging_type' not in st.session_state:
-    st.session_state.selected_packaging_type = None
+    st.session_state.selected_packaging_type = ''
 if 'template_file' not in st.session_state:
     st.session_state.template_file = None
 if 'data_file' not in st.session_state:
     st.session_state.data_file = None
 if 'mapped_data' not in st.session_state:
     st.session_state.mapped_data = None
-if 'mapping_completed' not in st.session_state:
-    st.session_state.mapping_completed = False
 if 'image_option' not in st.session_state:
-    st.session_state.image_option = None
+    st.session_state.image_option = ''
 if 'uploaded_images' not in st.session_state:
     st.session_state.uploaded_images = {}
 if 'extracted_excel_images' not in st.session_state:
     st.session_state.extracted_excel_images = {}
-if 'custom_procedure_steps' not in st.session_state:
-    st.session_state.custom_procedure_steps = [""] * 11
-if 'show_custom_steps' not in st.session_state:
-    st.session_state.show_custom_steps = False
-if 'auto_fill_started' not in st.session_state:
-    st.session_state.auto_fill_started = False
-
-PACKAGING_TYPES = [
-    "BOX IN BOX SENSITIVE",
-    "BOX IN BOX", 
-    "CARTON BOX WITH SEPARATOR FOR ONE PART",
-    "INDIVIDUAL NOT SENSITIVE",
-    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE",
-    "INDIVIDUAL PROTECTION FOR EACH PART",
-    "INDIVIDUAL SENSITIVE",
-    "MANY IN ONE TYPE",
-    "SINGLE BOX",
-    "ADD NEW TEMPLATE"  # New option added
-]
-
-PACKAGING_PROCEDURES = {
-    "BOX IN BOX SENSITIVE": [
-        "Pick up {x No. of Parts} quantity of part and apply bubble wrapping over it",
-        "Apply tape and Put 1 such bubble wrapped part into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "BOX IN BOX": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "CARTON BOX WITH SEPARATOR FOR ONE PART": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL NOT SENSITIVE": [
-        "Pick up {x No. of Parts} part and put it into a polybag",
-        "Seal polybag and Put polybag into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- Maximum {Layer} boxes per layer & Maximum {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of primary pack quantity -- {Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL PROTECTION FOR EACH PART": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL SENSITIVE": [
-        "Pick up {x No. of Parts} part and apply bubble wrapping over it",
-        "Apply tape and Put bubble wrapped part into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "MANY IN ONE TYPE": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Seal polybag and Put it into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "SINGLE BOX": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Put into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way) and stretch wrap it",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ]
-}
 
 class ImageExtractor:
     """Handles image extraction from Excel files with improved duplicate handling"""
@@ -996,18 +873,7 @@ class EnhancedTemplateMapperWithImages:
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
         """Get procedure steps with data substitution"""
-        # Check if it's a custom template
-        if packaging_type == "ADD NEW TEMPLATE":
-            # Return custom steps from session state if available
-            if hasattr(st.session_state, 'custom_procedure_steps') and st.session_state.custom_procedure_steps:
-                procedures = st.session_state.custom_procedure_steps
-            else:
-                # Return empty list if no custom steps defined yet
-                return []
-        else:
-            # Use predefined procedures
-            procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
-    
+        procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
         if not data_dict:
             return procedures
 
@@ -1025,7 +891,7 @@ class EnhancedTemplateMapperWithImages:
                 '{Outer L}': data_dict.get('Outer L'),
                 '{Outer W}': data_dict.get('Outer W'),
                 '{Outer H}': data_dict.get('Outer H'),
-                '{Primary Qty/Pack}': data_dict.get('Primary Qty/Pack'),
+                '{Primary Qty/Pack}': data_dict.get('Primary Qty/Pack'),  # ✅ Only this comes from primary
                 '{Layer}': data_dict.get('Layer'),
                 '{Level}': data_dict.get('Level'),
                 '{Qty/Pack}': data_dict.get('Qty/Pack'),
@@ -1042,118 +908,6 @@ class EnhancedTemplateMapperWithImages:
             filled_procedures.append(filled_procedure)
 
         return filled_procedures
-
-    # Updated Step 1 section in main() function - replace the existing Step 1 section
-    # Step 1: Select Packaging Type
-    if st.session_state.current_step == 1:
-        st.header("📦 Step 1: Select Packaging Type")
-    
-        # Create columns for packaging types
-        cols = st.columns(3)
-        for i, packaging_type in enumerate(PACKAGING_TYPES):
-            with cols[i % 3]:
-                if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
-                    st.session_state.selected_packaging_type = packaging_type
-                
-                    # If ADD NEW TEMPLATE is selected, show step input form
-                    if packaging_type == "ADD NEW TEMPLATE":
-                        st.session_state.show_custom_steps = True
-                    else:
-                        st.session_state.show_custom_steps = False
-                        # Clear any previous custom steps
-                        if hasattr(st.session_state, 'custom_procedure_steps'):
-                            del st.session_state.custom_procedure_steps
-                        navigate_to_step(2)
-    
-        # Show custom step input form if ADD NEW TEMPLATE is selected
-        if getattr(st.session_state, 'show_custom_steps', False):
-            st.header("✏️ Define Custom Procedure Steps")
-            st.info("Please enter 11 custom procedure steps for your packaging template")
-        
-            # Initialize custom steps if not exists
-            if not hasattr(st.session_state, 'custom_procedure_steps'):
-                st.session_state.custom_procedure_steps = [""] * 11
-        
-            # Create input fields for 11 steps
-            for i in range(11):
-                step_value = st.text_area(
-                    f"Step {i+1}:",
-                    value=st.session_state.custom_procedure_steps[i],
-                    key=f"custom_step_{i}",
-                    height=80,
-                    help="You can use placeholders like {x No. of Parts}, {Inner L}, {Primary Qty/Pack}, etc."
-                )
-                st.session_state.custom_procedure_steps[i] = step_value
-        
-            # Validation and continue button
-            filled_steps = [step for step in st.session_state.custom_procedure_steps if step.strip()]
-        
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"Steps filled: {len(filled_steps)}/11")
-                if len(filled_steps) < 11:
-                    st.warning(f"Please fill all 11 steps to continue. {11 - len(filled_steps)} steps remaining.")
-        
-            with col2:
-                if len(filled_steps) == 11:
-                    if st.button("Continue ➡️", type="primary"):
-                        navigate_to_step(2)
-        
-            # Preview of entered steps
-            if filled_steps:
-                with st.expander("Preview Custom Steps"):
-                    for i, step in enumerate(st.session_state.custom_procedure_steps):
-                        if step.strip():
-                            st.write(f"{i+1}. {step}")
-    
-        # Show selected packaging details for predefined types
-        elif st.session_state.selected_packaging_type and st.session_state.selected_packaging_type != "ADD NEW TEMPLATE":
-            st.success(f"Selected: {st.session_state.selected_packaging_type}")
-        
-            with st.expander("View Packaging Procedure"):
-                procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
-                for i, step in enumerate(procedures, 1):
-                    st.write(f"{i}. {step}")
-
-    # Updated Step 2 section - add this check at the beginning of Step 2
-    elif st.session_state.current_step == 2:
-        st.header("📄 Step 2: Upload Template File")
-    
-        # Show selected packaging type info
-        if st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
-            st.info("Selected: Custom Template with Manual Steps")
-            with st.expander("View Your Custom Steps"):
-                if hasattr(st.session_state, 'custom_procedure_steps'):
-                    for i, step in enumerate(st.session_state.custom_procedure_steps, 1):
-                        if step.strip():
-                            st.write(f"{i}. {step}")
-        else:
-            st.info(f"Selected Packaging Type: {st.session_state.selected_packaging_type}")
-    
-        # Rest of Step 2 code remains the same...
-        uploaded_template = st.file_uploader(
-            "Choose template file (Excel or Word)",
-            type=['xlsx', 'xls', 'docx'],
-            key="template_upload"
-        )
-    
-        if uploaded_template is not None:
-            # Save uploaded file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_template.name.split('.')[-1]}") as tmp_file:
-                tmp_file.write(uploaded_template.getvalue())
-                st.session_state.template_file = tmp_file.name
-        
-            st.success("✅ Template file uploaded successfully!")
-        
-            if st.button("Continue to Data Upload", key="continue_to_step3"):
-                navigate_to_step(3)
-    
-        # Back navigation with special handling for custom template
-        if st.button("← Go Back", key="back_from_2"):
-            # If going back from ADD NEW TEMPLATE, show the custom steps form again
-            if st.session_state.selected_packaging_type == "ADD NEW TEMPLATE":
-                st.session_state.show_custom_steps = True
-            navigate_to_step(1)
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write packaging procedure steps in merged cells B to P starting from Row 28"""
@@ -1270,102 +1024,180 @@ class EnhancedTemplateMapperWithImages:
             traceback.print_exc()
         return 0
 
+# Packaging types and procedures from reference code
+PACKAGING_TYPES = [
+    "BOX IN BOX SENSITIVE",
+    "BOX IN BOX", 
+    "CARTON BOX WITH SEPARATOR FOR ONE PART",
+    "INDIVIDUAL NOT SENSITIVE",
+    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE",
+    "INDIVIDUAL PROTECTION FOR EACH PART",
+    "INDIVIDUAL SENSITIVE",
+    "MANY IN ONE TYPE",
+    "SINGLE BOX"
+]
+
+PACKAGING_PROCEDURES = {
+    "BOX IN BOX SENSITIVE": [
+        "Pick up {x No. of Parts} quantity of part and apply bubble wrapping over it",
+        "Apply tape and Put 1 such bubble wrapped part into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
+        "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "BOX IN BOX": [
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
+        "Seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
+        "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "CARTON BOX WITH SEPARATOR FOR ONE PART": [
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
+        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "INDIVIDUAL NOT SENSITIVE": [
+        "Pick up {x No. of Parts} part and put it into a polybag",
+        "Seal polybag and Put polybag into a carton box",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- Maximum {Layer} boxes per layer & Maximum {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": [
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
+        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of primary pack quantity -- {Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "INDIVIDUAL PROTECTION FOR EACH PART": [
+        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
+        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "INDIVIDUAL SENSITIVE": [
+        "Pick up {x No. of Parts} part and apply bubble wrapping over it",
+        "Apply tape and Put bubble wrapped part into a carton box",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "MANY IN ONE TYPE": [
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
+        "Seal polybag and Put it into a carton box",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ],
+    "SINGLE BOX": [
+        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
+        "Put into a carton box",
+        "Seal carton box and put Traceability label as per PMSPL standard guideline",
+        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
+        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
+        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
+        "Put corner / edge protector and apply pet strap (2 times -- cross way) and stretch wrap it",
+        "Apply traceability label on complete pack",
+        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
+        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
+    ]
+}
+
 def main():
-    st.set_page_config(
-        page_title="Packaging Instruction Generator",
-        page_icon="📦",
-        layout="wide"
-    )
+    # Header
+    st.title("📦 AI Packaging Template Mapper")
+    st.markdown("---")
     
-    st.title("📦 Packaging Instruction Generator")
+    # Progress indicator
+    steps = [
+        "Select Packaging Type",
+        "Upload Template File", 
+        "Upload Data File",
+        "Auto-Fill Template",
+        "Choose Image Option",
+        "Generate Final Document"
+    ]
     
-    # Progress bar
-    progress_steps = ["Select Packaging", "Upload Template", "Upload Data", "Configure Images", "Generate Output"]
-    progress = (st.session_state.current_step - 1) / (len(progress_steps) - 1)
-    st.progress(progress)
+    # Create progress bar
+    progress_cols = st.columns(len(steps))
+    for i, (col, step) in enumerate(zip(progress_cols, steps)):
+        with col:
+            if i + 1 < st.session_state.current_step:
+                st.success(f"✅ {i+1}. {step}")
+            elif i + 1 == st.session_state.current_step:
+                st.info(f"🔄 {i+1}. {step}")
+            else:
+                st.write(f"⏳ {i+1}. {step}")
     
-    # Show current step
-    st.write(f"**Current Step:** {progress_steps[st.session_state.current_step - 1]}")
+    st.markdown("---")
     
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
         st.header("📦 Step 1: Select Packaging Type")
-
+        
         # Create columns for packaging types
         cols = st.columns(3)
         for i, packaging_type in enumerate(PACKAGING_TYPES):
             with cols[i % 3]:
-                # Fixed: Use unique key with packaging type name to avoid duplicates
-                button_key = f"pkg_btn_{packaging_type.replace(' ', '_').replace('/', '_')}"
-                if st.button(packaging_type, key=button_key, use_container_width=True):
+                if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
                     st.session_state.selected_packaging_type = packaging_type
-                
-                    # If ADD NEW TEMPLATE is selected, show step input form
-                    if packaging_type == "ADD NEW TEMPLATE":
-                        st.session_state.show_custom_steps = True
-                    else:
-                        st.session_state.show_custom_steps = False
-                        # Clear any previous custom steps
-                        if hasattr(st.session_state, 'custom_procedure_steps'):
-                            del st.session_state.custom_procedure_steps
-                        st.session_state.current_step = 2
-                        st.rerun()
-
-        # Show custom step input form if ADD NEW TEMPLATE is selected
-        if getattr(st.session_state, 'show_custom_steps', False):
-            st.header("✏️ Define Custom Procedure Steps")
-            st.info("Please enter 11 custom procedure steps for your packaging template")
+                    navigate_to_step(2)
         
-            # Initialize custom steps if not exists
-            if not hasattr(st.session_state, 'custom_procedure_steps'):
-                st.session_state.custom_procedure_steps = [""] * 11
-        
-            # Create input fields for 11 steps
-            for i in range(11):
-                step_value = st.text_area(
-                    f"Step {i+1}:",
-                    value=st.session_state.custom_procedure_steps[i],
-                    key=f"custom_step_{i}",
-                    height=80,
-                    help="You can use placeholders like {x No. of Parts}, {Inner L}, {Primary Qty/Pack}, etc."
-                )
-                st.session_state.custom_procedure_steps[i] = step_value
-        
-            # Validation and continue button
-            filled_steps = [step for step in st.session_state.custom_procedure_steps if step.strip()]
-        
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"Steps filled: {len(filled_steps)}/11")
-                if len(filled_steps) < 11:
-                    st.warning(f"Please fill all 11 steps to continue. {11 - len(filled_steps)} steps remaining.")
-        
-            with col2:
-                if len(filled_steps) == 11:
-                    if st.button("Continue ➡️", type="primary", key="continue_custom_template"):
-                        st.session_state.current_step = 2
-                        st.rerun()
-        
-            # Preview of entered steps
-            if filled_steps:
-                with st.expander("Preview Custom Steps"):
-                    for i, step in enumerate(st.session_state.custom_procedure_steps):
-                        if step.strip():
-                            st.write(f"{i+1}. {step}")
-
-        # Show selected packaging details for predefined types
-        elif st.session_state.selected_packaging_type and st.session_state.selected_packaging_type != "ADD NEW TEMPLATE":
+        # Show selected packaging details
+        if st.session_state.selected_packaging_type:
             st.success(f"Selected: {st.session_state.selected_packaging_type}")
-        
+            
             with st.expander("View Packaging Procedure"):
                 procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
                 for i, step in enumerate(procedures, 1):
                     st.write(f"{i}. {step}")
-
-            # Add continue button for predefined templates
-            if st.button("Continue to Template Upload", key="continue_predefined_template"):
-                st.session_state.current_step = 2
-                st.rerun()
     
     # Step 2: Upload Template File
     elif st.session_state.current_step == 2:
@@ -1657,7 +1489,6 @@ def main():
                     del st.session_state[key]
             st.session_state.current_step = 1
             st.rerun()
-        pass
 
 if __name__ == "__main__":
     main()
