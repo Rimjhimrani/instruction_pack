@@ -219,28 +219,25 @@ class ImageExtractor:
         return images
     
     def extract_images_for_part(self, excel_file_path, part_no, description):
-        """Extract images specific to a part number and description"""
+        """Extract images specific to a part number, description, or vendor code"""
         try:
             all_images = self.extract_images_from_excel(excel_file_path)
             if not all_images or 'all_sheets' not in all_images:
                 return {}
-        
-            part_specific_images = {}
-            search_terms = [str(part_no).lower(), str(description).lower()]
-        
-            for img_key, img_data in all_images['all_sheets'].items():
-                img_key_lower = img_key.lower()
-                # Check if image key contains part number or description
-                for search_term in search_terms:
-                    if search_term and search_term in img_key_lower:
-                        part_specific_images[img_key] = img_data
-                        break
-        
-            # If no specific images found, return all images (fallback)
-            if not part_specific_images:
-                return all_images['all_sheets']
-            
-            return part_specific_images
+
+            search_terms = [
+                str(term).lower().strip()
+                for term in [vendor_code, part_no, description]
+                if term and str(term).strip()
+            ]
+
+            part_specific_images = {
+                key: data
+                for key, data in all_images['all_sheets'].items()
+                if any(term in key.lower() for term in search_terms)
+            }
+
+            return part_specific_images if part_specific_images else {}
         
         except Exception as e:
             st.error(f"Error extracting images for part {part_no}: {e}")
@@ -837,7 +834,7 @@ class EnhancedTemplateMapperWithImages:
                         
                             # Store filename components
                             field_name_lower = mapping['template_field'].lower()
-                            if 'vendor' in field_name_lower and 'code' in field_name_lower:
+                            if any(term in field_name_lower for term in ['vendor code', 'supplier code', 'code']):
                                 filename_parts['vendor_code'] = data_value
                             elif 'part' in field_name_lower and ('no' in field_name_lower or 'number' in field_name_lower):
                                 filename_parts['part_no'] = data_value
@@ -1498,7 +1495,8 @@ def main():
                             images_to_add = extractor.extract_images_for_part(
                                 st.session_state.data_file,
                                 row_data['part_no'],
-                                row_data['description']
+                                row_data['description'],
+                                row_data['vendor_code']
                             )
                         elif st.session_state.image_option == 'upload':
                             # Use same uploaded images for all templates
