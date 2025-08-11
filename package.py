@@ -1620,6 +1620,7 @@ def main():
                     del st.session_state[key]
             st.session_state.current_step = 1
             st.rerun()
+        pass
 
 if __name__ == "__main__":
     main()
