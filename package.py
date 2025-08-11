@@ -224,28 +224,27 @@ class ImageExtractor:
             all_images = self.extract_images_from_excel(excel_file_path)
             if not all_images or 'all_sheets' not in all_images:
                 return {}
-
             search_terms = [
                 str(term).lower().strip()
                 for term in [vendor_code, part_no, description]
                 if term and str(term).strip()
             ]
+
+            # ✅ Match by sheet name instead of key
             part_specific_images = {
-                key: data
-                for key, data in all_images['all_sheets'].items()
+                key: img_data
+                for key, img_data in all_images['all_sheets'].items()
                 if any(term in img_data['sheet'].lower() for term in search_terms)
             }
 
-            # If no match, return all (fallback)
             if not part_specific_images:
                 return {}
-            # ✅ Reassign types in correct order so add_images_to_template works
+            # ✅ Assign correct types so add_images_to_template works
             image_types_order = ['current', 'primary', 'secondary', 'label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
                 img_data['type'] = image_types_order[idx % len(image_types_order)]
-
             return part_specific_images
-            
+
         except Exception as e:
             st.error(f"Error extracting images for part {part_no}: {e}")
             return {}
