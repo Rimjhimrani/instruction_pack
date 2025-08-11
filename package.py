@@ -218,7 +218,7 @@ class ImageExtractor:
         
         return images
     
-    def extract_images_for_part(self, excel_file_path, part_no, description):
+    def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
         """Extract images specific to a part number, description, or vendor code"""
         try:
             all_images = self.extract_images_from_excel(excel_file_path)
