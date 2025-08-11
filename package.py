@@ -230,21 +230,24 @@ class ImageExtractor:
                 if term and str(term).strip()
             ]
 
-            # ✅ Match by sheet name instead of key
+            # Try matching by sheet name OR key
             part_specific_images = {
                 key: img_data
                 for key, img_data in all_images['all_sheets'].items()
-                if any(term in img_data['sheet'].lower() for term in search_terms)
+                if any(term in img_data['sheet'].lower() or term in key.lower() for term in search_terms)
             }
 
-            if not part_specific_images:
-                return {}
-            # ✅ Assign correct types so add_images_to_template works
+            # If no matches, fallback to just the first image (instead of all 16)
+            if not part_specific_images and all_images['all_sheets']:
+                first_key = list(all_images['all_sheets'].keys())[0]
+                part_specific_images = {first_key: all_images['all_sheets'][first_key]}
+
+            # Assign types in correct order for add_images_to_template
             image_types_order = ['current', 'primary', 'secondary', 'label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
                 img_data['type'] = image_types_order[idx % len(image_types_order)]
-            return part_specific_images
 
+            return part_specific_images
         except Exception as e:
             st.error(f"Error extracting images for part {part_no}: {e}")
             return {}
