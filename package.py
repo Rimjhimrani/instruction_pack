@@ -217,6 +217,34 @@ class ImageExtractor:
             raise
         
         return images
+    
+    def extract_images_for_part(self, excel_file_path, part_no, description):
+        """Extract images specific to a part number and description"""
+        try:
+            all_images = self.extract_images_from_excel(excel_file_path)
+            if not all_images or 'all_sheets' not in all_images:
+                return {}
+        
+            part_specific_images = {}
+            search_terms = [str(part_no).lower(), str(description).lower()]
+        
+            for img_key, img_data in all_images['all_sheets'].items():
+                img_key_lower = img_key.lower()
+                # Check if image key contains part number or description
+                for search_term in search_terms:
+                    if search_term and search_term in img_key_lower:
+                        part_specific_images[img_key] = img_data
+                        break
+        
+            # If no specific images found, return all images (fallback)
+            if not part_specific_images:
+                return all_images['all_sheets']
+            
+            return part_specific_images
+        
+        except Exception as e:
+            st.error(f"Error extracting images for part {part_no}: {e}")
+            return {}
 
     def _classify_image_type(self, index):
         """Classify image type based on index"""
@@ -767,108 +795,184 @@ class EnhancedTemplateMapperWithImages:
         return str_value
 
     def map_template_with_data(self, template_path, data_path):
-        """Enhanced mapping with section-based approach and procedure steps integration"""
+        """Enhanced mapping with section-based approach and multiple row processing"""
         try:
             # Read data from Excel with proper NaN handling
             data_df = pd.read_excel(data_path)
-        
-            # Replace NaN values with empty strings in the entire dataframe
             data_df = data_df.fillna("")
         
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
         
-            # Load template
-            workbook = openpyxl.load_workbook(template_path)
-            worksheet = workbook.active
+            # Store all row data for multi-template generation
+            st.session_state.all_row_data = []
         
-            st.write(f"📋 Template has {worksheet.max_row} rows and {worksheet.max_column} columns")
-        
-            # Find template fields with section context
-            template_fields, _ = self.find_template_fields_with_context_and_images(template_path)
-            st.write(f"🗺️ Found {len(template_fields)} template fields")
-        
-            # Map data with section context
-            mapping_results = self.map_data_with_section_context(template_fields, data_df)
-        
-            # Apply mappings to template
-            mapping_count = 0
-            successful_mappings = []
-            failed_mappings = []
-            data_dict = {}  # Store mapped data for procedure generation
-        
-            for coord, mapping in mapping_results.items():
-                if mapping['is_mappable'] and mapping['data_column']:
-                    try:
-                        # Get data value with proper NaN handling
-                        data_col = mapping['data_column']
-                    
-                        if not data_df[data_col].empty and len(data_df[data_col]) > 0:
-                            raw_value = data_df[data_col].iloc[0]
+            # Process each row
+            for row_idx in range(len(data_df)):
+                st.write(f"🔄 Processing row {row_idx + 1}/{len(data_df)}")
+            
+                # Load fresh template for each row
+                workbook = openpyxl.load_workbook(template_path)
+                worksheet = workbook.active
+            
+                # Find template fields with section context
+                template_fields, _ = self.find_template_fields_with_context_and_images(template_path)
+            
+                # Map data with section context for current row
+                mapping_results = self.map_data_with_section_context_for_row(template_fields, data_df, row_idx)
+            
+                # Apply mappings to template
+                mapping_count = 0
+                data_dict = {}  # Store mapped data for procedure generation
+                filename_parts = {}  # Store parts for filename
+            
+                for coord, mapping in mapping_results.items():
+                    if mapping['is_mappable'] and mapping['data_column']:
+                        try:
+                            data_col = mapping['data_column']
+                            raw_value = data_df[data_col].iloc[row_idx]  # Use current row
                             data_value = self.clean_data_value(raw_value)
-                        else:
-                            data_value = ""
-                    
-                        # Store in data_dict for procedure generation
-                        data_dict[mapping['template_field']] = data_value
-                    
-                        # Find target cell for writing
-                        target_cell_coord = self.find_data_cell_for_label(worksheet, mapping['field_info'])
-                    
-                        if target_cell_coord:
-                            target_cell = worksheet[target_cell_coord]
                         
-                            # Only write non-empty values to avoid cluttering template with empty strings
-                            if data_value:  # Only write if there's actual data
+                            # Store in data_dict for procedure generation
+                            data_dict[mapping['template_field']] = data_value
+                        
+                            # Store filename components
+                            field_name_lower = mapping['template_field'].lower()
+                            if 'vendor' in field_name_lower and 'code' in field_name_lower:
+                                filename_parts['vendor_code'] = data_value
+                            elif 'part' in field_name_lower and ('no' in field_name_lower or 'number' in field_name_lower):
+                                filename_parts['part_no'] = data_value
+                            elif 'description' in field_name_lower or 'desc' in field_name_lower:
+                                filename_parts['description'] = data_value
+                        
+                            # Find target cell and write data
+                            target_cell_coord = self.find_data_cell_for_label(worksheet, mapping['field_info'])
+                        
+                            if target_cell_coord and data_value:
+                                target_cell = worksheet[target_cell_coord]
                                 target_cell.value = data_value
                                 mapping_count += 1
-                                successful_mappings.append(f"{mapping['template_field']} -> {data_col} -> {target_cell_coord}")
-                                st.write(f"✅ Mapped '{mapping['template_field']}' = '{data_value}' to cell {target_cell_coord}")
-                            else:
-                                # Log empty values but don't write them
-                                st.write(f"ℹ️ Skipped empty value for '{mapping['template_field']}' from column '{data_col}'")
-                        else:
-                            failed_mappings.append(mapping['template_field'])
-                            st.write(f"❌ Could not find target cell for '{mapping['template_field']}'")
-                        
-                    except Exception as e:
-                        failed_mappings.append(mapping['template_field'])
-                        st.write(f"⚠️ Error writing '{mapping['template_field']}': {e}")
-                else:
-                    failed_mappings.append(mapping['template_field'])
-        
-            # ===== ADD PROCEDURE STEPS INTEGRATION HERE =====
-            st.write(f"\n🔄 Adding procedure steps for packaging type...")
-        
-            # Get packaging type from session state (assuming it's stored there)
-            if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
-                packaging_type = st.session_state.selected_packaging_type
-                st.write(f"📦 Packaging type: {packaging_type}")
+                            
+                        except Exception as e:
+                            st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
             
-                # Write procedure steps to template
-                steps_written = self.write_procedure_steps_to_template(worksheet, packaging_type, data_dict)
-                st.write(f"✅ Added {steps_written} procedure steps to template")
-            else:
-                st.warning("⚠️ No packaging type selected - skipping procedure steps")
-        
-            # Summary
-            st.success(f"🎉 Successfully mapped {mapping_count}/{len(mapping_results)} fields!")
-        
-            if successful_mappings:
-                st.write("✅ Successful mappings:")
-                for mapping in successful_mappings[:10]:
-                    st.write(f"  - {mapping}")
+                # Add procedure steps
+                if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
+                    steps_written = self.write_procedure_steps_to_template(worksheet, st.session_state.selected_packaging_type, data_dict)
+            
+                # Generate filename
+                vendor_code = filename_parts.get('vendor_code', 'Unknown')
+                part_no = filename_parts.get('part_no', 'Unknown') 
+                description = filename_parts.get('description', 'Unknown')
+            
+                # Clean filename parts
+                vendor_code = re.sub(r'[^\w\-_]', '', str(vendor_code))[:10]
+                part_no = re.sub(r'[^\w\-_]', '', str(part_no))[:15]
+                description = re.sub(r'[^\w\-_]', '', str(description))[:20]
+            
+                filename = f"{vendor_code}_{part_no}_{description}.xlsx"
+            
+                # Save workbook to temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                    workbook.save(tmp_file.name)
                 
-            if failed_mappings:
-                st.write("❌ Failed mappings:")
-                for field in failed_mappings[:5]:
-                    st.write(f"  - {field}")
+                    # Store row data
+                    row_data = {
+                        'row_index': row_idx,
+                        'filename': filename,
+                        'file_path': tmp_file.name,
+                        'data_dict': data_dict,
+                        'mapping_count': mapping_count,
+                        'vendor_code': vendor_code,
+                        'part_no': part_no,
+                        'description': description
+                    }
+                    st.session_state.all_row_data.append(row_data)
+            
+                workbook.close()
+                st.write(f"✅ Row {row_idx + 1} processed: {mapping_count} fields mapped -> {filename}")
         
-            return workbook, mapping_results
+            st.success(f"🎉 Successfully processed {len(data_df)} rows!")
+            return True, st.session_state.all_row_data
         
         except Exception as e:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
-            return None, {}
+            return False, []
+    def map_data_with_section_context_for_row(self, template_fields, data_df, row_idx):
+        """Map data for specific row"""
+        mapping_results = {}
+        used_columns = set()
+
+        try:
+            data_columns = data_df.columns.tolist()
+
+            for coord, field in template_fields.items():
+                try:
+                    best_match = None
+                    best_score = 0.0
+                    field_value = field['value']
+                    section_context = field.get('section_context')
+
+                    # Use existing mapping logic but for specific row
+                    if section_context and section_context in self.section_mappings:
+                        section_mappings = self.section_mappings[section_context]['field_mappings']
+
+                        for template_field_key, data_column_pattern in section_mappings.items():
+                            normalized_field_value = self.preprocess_text(field_value)
+                            normalized_template_key = self.preprocess_text(template_field_key)
+
+                            if normalized_field_value == normalized_template_key:
+                                section_prefix = section_context.split('_')[0].capitalize()
+                                expected_column = f"{section_prefix} {data_column_pattern}".strip()
+
+                                for data_col in data_columns:
+                                    if data_col in used_columns:
+                                        continue
+                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
+                                        best_match = data_col
+                                        best_score = 1.0
+                                        break
+
+                                if not best_match:
+                                    for data_col in data_columns:
+                                        if data_col in used_columns:
+                                            continue
+                                        similarity = self.calculate_similarity(expected_column, data_col)
+                                        if similarity > best_score and similarity >= self.similarity_threshold:
+                                            best_score = similarity
+                                            best_match = data_col
+                                break
+
+                    # Fallback logic (same as original)
+                    if not best_match:
+                        for data_col in data_columns:
+                            if data_col in used_columns:
+                                continue
+                            similarity = self.calculate_similarity(field_value, data_col)
+                            if similarity > best_score and similarity >= self.similarity_threshold:
+                                best_score = similarity
+                                best_match = data_col
+
+                    mapping_results[coord] = {
+                        'template_field': field_value,
+                        'data_column': best_match,
+                        'similarity': best_score,
+                        'field_info': field,
+                        'section_context': section_context,
+                        'is_mappable': best_match is not None
+                    }
+
+                    if best_match:
+                        used_columns.add(best_match)
+
+                except Exception as e:
+                    st.error(f"Error mapping field {coord}: {e}")
+                    continue
+
+        except Exception as e:
+            st.error(f"Error in map_data_with_section_context_for_row: {e}")
+
+        return mapping_results
     
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
@@ -1261,56 +1365,40 @@ def main():
     # Step 4: Auto-Fill Template
     elif st.session_state.current_step == 4:
         st.header("🔄 Step 4: Auto-Fill Template")
+    
+        if st.session_state.mapping_completed and hasattr(st.session_state, 'all_row_data'):
+            st.success(f"✅ Template auto-filling completed for {len(st.session_state.all_row_data)} rows!")
         
-        # Check if mapping is already completed
-        if st.session_state.mapping_completed and st.session_state.mapped_data:
-            st.success("✅ Template auto-filling completed!")
-            
-            # Show mapped fields if available
-            if hasattr(st.session_state, 'last_mapped_fields') and st.session_state.last_mapped_fields:
-                with st.expander("View Mapped Fields"):
-                    for field, value in st.session_state.last_mapped_fields.items():
-                        st.write(f"**{field}**: {value}")
-            
-            # Always show the continue button if mapping is completed
+            # Show summary of processed rows
+            with st.expander("View Processed Rows Summary"):
+                for i, row_data in enumerate(st.session_state.all_row_data):
+                    st.write(f"**Row {i+1}**: {row_data['filename']} ({row_data['mapping_count']} fields mapped)")
+        
             if st.button("Continue to Image Options", key="continue_to_images"):
                 navigate_to_step(5)
-        
+    
         else:
-            # Show the start button if mapping hasn't been completed
             if st.button("Start Auto-Fill Process", key="start_autofill"):
-                st.session_state.auto_fill_started = True
-                
-                with st.spinner("Processing template and data mapping..."):
+                with st.spinner("Processing template and data mapping for all rows..."):
                     try:
                         mapper = EnhancedTemplateMapperWithImages()
-                        
-                        # Map template with data
-                        workbook, mapped_fields = mapper.map_template_with_data(
+                    
+                        success, all_row_data = mapper.map_template_with_data(
                             st.session_state.template_file,
                             st.session_state.data_file
                         )
-                        
-                        if workbook:
-                            # Save the mapped workbook
-                            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                                workbook.save(tmp_file.name)
-                                st.session_state.mapped_data = tmp_file.name
-                            
-                            # Mark as completed and store mapped fields
+                    
+                        if success and all_row_data:
                             st.session_state.mapping_completed = True
-                            st.session_state.last_mapped_fields = mapped_fields
-                            
-                            st.success(f"✅ Template auto-filled with {len(mapped_fields)} data fields!")
-                            st.rerun()  # Refresh to show the continue button
+                            st.session_state.all_row_data = all_row_data
+                            st.rerun()
                         else:
                             st.error("Failed to process template mapping")
-                            
+                        
                     except Exception as e:
                         st.error(f"Error during auto-fill: {e}")
                         st.write("Traceback:", traceback.format_exc())
-        
-        # Back navigation
+    
         if st.button("← Go Back", key="back_from_4"):
             navigate_to_step(3)
     
@@ -1389,72 +1477,98 @@ def main():
     
     # Step 6: Generate Final Document
     elif st.session_state.current_step == 6:
-        st.header("📋 Step 6: Generate Final Document")
-        
-        if st.button("Generate Final Template with Images"):
-            with st.spinner("Generating final document..."):
+        st.header("📋 Step 6: Generate Final Documents")
+    
+        if st.button("Generate All Templates with Images"):
+            with st.spinner("Generating all documents..."):
                 try:
-                    # Load the mapped template
-                    workbook = openpyxl.load_workbook(st.session_state.mapped_data)
-                    worksheet = workbook.active
-                    
-                    # Add images based on selected option
                     extractor = ImageExtractor()
-                    images_to_add = {}
+                    generated_files = []
+                
+                    for row_data in st.session_state.all_row_data:
+                        # Load the mapped template for this row
+                        workbook = openpyxl.load_workbook(row_data['file_path'])
+                        worksheet = workbook.active
                     
-                    if st.session_state.image_option == 'extract':
-                        images_to_add = st.session_state.extracted_excel_images
-                    elif st.session_state.image_option == 'upload':
-                        images_to_add = st.session_state.uploaded_images
+                        # Determine images to add
+                        images_to_add = {}
                     
-                    if images_to_add:
-                        added_count, temp_paths = extractor.add_images_to_template(
-                            worksheet, images_to_add
-                        )
-                        st.success(f"✅ Added {added_count} images to template!")
+                        if st.session_state.image_option == 'extract':
+                            # Extract images specific to this part
+                            images_to_add = extractor.extract_images_for_part(
+                                st.session_state.data_file,
+                                row_data['part_no'],
+                                row_data['description']
+                            )
+                        elif st.session_state.image_option == 'upload':
+                            # Use same uploaded images for all templates
+                            images_to_add = st.session_state.uploaded_images
                     
-                    # Save final document
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    final_filename = f"Packaging_Template_{st.session_state.selected_packaging_type.replace(' ', '_')}_{timestamp}.xlsx"
+                        # Add images to template
+                        if images_to_add:
+                            added_count, temp_paths = extractor.add_images_to_template(
+                                worksheet, images_to_add
+                            )
+                            st.write(f"✅ Added {added_count} images to {row_data['filename']}")
                     
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-                        workbook.save(tmp_file.name)
+                        # Save final document
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        final_filename = f"{row_data['filename'].replace('.xlsx', '')}_{timestamp}.xlsx"
+                    
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+                            workbook.save(tmp_file.name)
                         
-                        # Read file for download
-                        with open(tmp_file.name, 'rb') as f:
-                            file_bytes = f.read()
-                    
-                    # Provide download button
-                    st.download_button(
-                        label="📥 Download Final Template",
-                        data=file_bytes,
-                        file_name=final_filename,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                    
-                    st.success("🎉 Final template generated successfully!")
-                    
-                    # Show summary
-                    with st.expander("Generation Summary"):
-                        st.write(f"**Packaging Type**: {st.session_state.selected_packaging_type}")
-                        st.write(f"**Images Added**: {added_count if 'added_count' in locals() else 0}")
-                        st.write(f"**Template File**: {final_filename}")
-                        st.write(f"**Generated On**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                    
-                    # Option to start over
-                    if st.button("🔄 Start New Template"):
-                        # Clear session state
-                        for key in list(st.session_state.keys()):
-                            if key.startswith(('current_step', 'selected_', 'template_', 'data_', 'mapped_', 'image_', 'uploaded_', 'extracted_')):
-                                del st.session_state[key]
-                        st.session_state.current_step = 1
-                        st.rerun()
+                            with open(tmp_file.name, 'rb') as f:
+                                file_bytes = f.read()
                         
+                            generated_files.append({
+                                'filename': final_filename,
+                                'data': file_bytes,
+                                'row_info': row_data
+                            })
+                    
+                        workbook.close()
+                
+                    st.success(f"🎉 Generated {len(generated_files)} final templates!")
+                
+                    # Create download buttons for each file
+                    st.subheader("📥 Download Generated Templates")
+                    for file_info in generated_files:
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"**{file_info['filename']}**")
+                            st.caption(f"Vendor: {file_info['row_info']['vendor_code']} | Part: {file_info['row_info']['part_no']}")
+                        with col2:
+                            st.download_button(
+                                label="📥 Download",
+                                data=file_info['data'],
+                                file_name=file_info['filename'],
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"download_{file_info['filename']}"
+                            )
+                
+                    # Option to download all as ZIP
+                    if len(generated_files) > 1:
+                        if st.button("📦 Download All as ZIP"):
+                            import zipfile
+                            zip_buffer = io.BytesIO()
+                        
+                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                for file_info in generated_files:
+                                    zip_file.writestr(file_info['filename'], file_info['data'])
+                        
+                            zip_buffer.seek(0)
+                            st.download_button(
+                                label="📥 Download ZIP File",
+                                data=zip_buffer.getvalue(),
+                                file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                mime="application/zip"
+                            )
+                
                 except Exception as e:
-                    st.error(f"Error generating final document: {e}")
+                    st.error(f"Error generating final documents: {e}")
                     st.write("Traceback:", traceback.format_exc())
-        
-        # Back navigation
+    
         if st.button("← Go Back", key="back_from_6"):
             navigate_to_step(5)
     
