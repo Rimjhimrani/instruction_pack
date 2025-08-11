@@ -230,19 +230,26 @@ class ImageExtractor:
                 for term in [vendor_code, part_no, description]
                 if term and str(term).strip()
             ]
-
             part_specific_images = {
                 key: data
                 for key, data in all_images['all_sheets'].items()
                 if any(term in key.lower() for term in search_terms)
             }
 
-            return part_specific_images if part_specific_images else {}
-        
+            # If no match, return all (fallback)
+            if not part_specific_images:
+                part_specific_images = all_images['all_sheets']
+            # ✅ Reassign types in correct order so add_images_to_template works
+            image_types_order = ['current', 'primary', 'secondary', 'label']
+            for idx, (key, img_data) in enumerate(part_specific_images.items()):
+                img_data['type'] = image_types_order[idx % len(image_types_order)]
+
+            return part_specific_images
+            
         except Exception as e:
             st.error(f"Error extracting images for part {part_no}: {e}")
             return {}
-
+            
     def _classify_image_type(self, index):
         """Classify image type based on index"""
         types = ['current', 'primary', 'secondary', 'label']
