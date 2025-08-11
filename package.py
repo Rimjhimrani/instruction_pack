@@ -238,7 +238,7 @@ class ImageExtractor:
 
             # If no match, return all (fallback)
             if not part_specific_images:
-                part_specific_images = all_images['all_sheets']
+                return {}
             # ✅ Reassign types in correct order so add_images_to_template works
             image_types_order = ['current', 'primary', 'secondary', 'label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
