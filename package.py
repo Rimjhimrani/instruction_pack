@@ -35,28 +35,32 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-if 'current_step' not in st.session_state:
-    st.session_state.current_step = 1
-if 'selected_packaging_type' not in st.session_state:
-    st.session_state.selected_packaging_type = None
-if 'template_file' not in st.session_state:
-    st.session_state.template_file = None
-if 'data_file' not in st.session_state:
-    st.session_state.data_file = None
-if 'mapped_data' not in st.session_state:
-    st.session_state.mapped_data = None
-if 'mapping_completed' not in st.session_state:
-    st.session_state.mapping_completed = False
-if 'image_option' not in st.session_state:
-    st.session_state.image_option = None
-if 'uploaded_images' not in st.session_state:
-    st.session_state.uploaded_images = {}
-if 'extracted_excel_images' not in st.session_state:
-    st.session_state.extracted_excel_images = {}
-if 'custom_procedure_steps' not in st.session_state:
-    st.session_state.custom_procedure_steps = [""] * 11
-if 'show_custom_steps' not in st.session_state:
-    st.session_state.show_custom_steps = False
+def initialize_session_state():
+    """Initialize session state variables"""
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 1
+    if 'selected_packaging_type' not in st.session_state:
+        st.session_state.selected_packaging_type = None
+    if 'template_file' not in st.session_state:
+        st.session_state.template_file = None
+    if 'data_file' not in st.session_state:
+        st.session_state.data_file = None
+    if 'mapped_data' not in st.session_state:
+        st.session_state.mapped_data = None
+    if 'mapping_completed' not in st.session_state:
+        st.session_state.mapping_completed = False
+    if 'image_option' not in st.session_state:
+        st.session_state.image_option = None
+    if 'uploaded_images' not in st.session_state:
+        st.session_state.uploaded_images = {}
+    if 'extracted_excel_images' not in st.session_state:
+        st.session_state.extracted_excel_images = {}
+    if 'custom_procedure_steps' not in st.session_state:
+        st.session_state.custom_procedure_steps = [""] * 11
+    if 'show_custom_steps' not in st.session_state:
+        st.session_state.show_custom_steps = False
+    if 'auto_fill_started' not in st.session_state:
+        st.session_state.auto_fill_started = False
 
 PACKAGING_TYPES = [
     "BOX IN BOX SENSITIVE",
@@ -1276,6 +1280,8 @@ class EnhancedTemplateMapperWithImages:
         return 0
 
 def main():
+    initialize_session_state()
+    
     # Header
     st.title("📦 AI Packaging Instruction Template")
     st.markdown("---")
