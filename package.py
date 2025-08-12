@@ -1262,7 +1262,7 @@ PACKAGING_PROCEDURES = {
 
 def main():
     # Header
-    st.title("📦 AI Packaging Template Mapper")
+    st.title("📦 AgiloPACK")
     st.markdown("---")
     
     # Progress indicator
