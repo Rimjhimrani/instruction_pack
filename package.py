@@ -1570,6 +1570,7 @@ def main():
                                 data=zip_buffer.getvalue(),
                                 file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
                                 mime="application/zip"
+                                key="download_images_zip"
                             )
                 
                 except Exception as e:
