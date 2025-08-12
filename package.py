@@ -219,30 +219,45 @@ class ImageExtractor:
         return images
     
     def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
-        """Extract images specific to a part number, description, or vendor code"""
+        """Extract up to 4 images for a specific part number/vendor/description, in correct order."""
         try:
             all_images = self.extract_images_from_excel(excel_file_path)
             if not all_images or 'all_sheets' not in all_images:
                 return {}
+
             search_terms = [
                 str(term).lower().strip()
                 for term in [vendor_code, part_no, description]
                 if term and str(term).strip()
             ]
 
-            # Try matching by sheet name OR key
+            def matches_search(img_data, key):
+                sheet_name = img_data['sheet'].lower()
+                key_parts = key.lower().split('_')
+                for term in search_terms:
+                    # exact match in sheet name or in key parts
+                    if term == sheet_name or term in key_parts:
+                        return True
+                return False
+            # Step 1: try to find matching images
             part_specific_images = {
                 key: img_data
                 for key, img_data in all_images['all_sheets'].items()
-                if any(term in img_data['sheet'].lower() or term in key.lower() for term in search_terms)
+                if matches_search(img_data, key)
             }
 
-            # If no matches, fallback to just the first image (instead of all 16)
-            if not part_specific_images and all_images['all_sheets']:
-                first_key = list(all_images['all_sheets'].keys())[0]
-                part_specific_images = {first_key: all_images['all_sheets'][first_key]}
+            # Step 2: if not enough matches, fill from remaining images
+            if len(part_specific_images) < 4:
+                remaining_needed = 4 - len(part_specific_images)
+                for key, img_data in all_images['all_sheets'].items():
+                    if key not in part_specific_images:
+                        part_specific_images[key] = img_data
+                        if len(part_specific_images) >= 4:
+                            break
+            # Step 3: trim to exactly 4 images max
+            part_specific_images = dict(list(part_specific_images.items())[:4])
 
-            # Assign types in correct order for add_images_to_template
+            # Step 4: assign types in order
             image_types_order = ['current', 'primary', 'secondary', 'label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
                 img_data['type'] = image_types_order[idx % len(image_types_order)]
@@ -251,7 +266,7 @@ class ImageExtractor:
         except Exception as e:
             st.error(f"Error extracting images for part {part_no}: {e}")
             return {}
-            
+
     def _classify_image_type(self, index):
         """Classify image type based on index"""
         types = ['current', 'primary', 'secondary', 'label']
