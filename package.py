@@ -66,10 +66,10 @@ class ImageExtractor:
         
         # Header keywords to identify columns (NEW)
         self.header_keywords = {
-            'current': ['current packaging', 'current', 'curr pack'],
-            'primary': ['primary packaging', 'primary', 'prim pack'],
-            'secondary': ['secondary packaging', 'secondary', 'sec pack'],
-            'label': ['label', 'labels', 'product label']
+            'current': ['current packaging', 'Current Packaging', 'current', 'curr pack'],
+            'primary': ['primary packaging', 'Primary Packaging', 'primary', 'prim pack'],
+            'secondary': ['secondary packaging', 'Secondary Packaging', 'secondary', 'sec pack'],
+            'label': ['label', 'Label', 'labels', 'product label']
         }
     
     def find_header_columns(self, excel_file_path):
