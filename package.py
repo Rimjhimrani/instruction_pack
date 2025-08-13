@@ -57,30 +57,71 @@ if 'extracted_excel_images' not in st.session_state:
     st.session_state.extracted_excel_images = {}
 
 class ImageExtractor:
-    """Handles image extraction from Excel files with improved duplicate handling"""
+    """Handles image extraction from Excel files with header-based detection"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
         self._placement_counters = defaultdict(int)
         self.current_excel_path = None
+        
+        # Header keywords to identify columns (NEW)
+        self.header_keywords = {
+            'current': ['current packaging', 'current', 'curr pack'],
+            'primary': ['primary packaging', 'primary', 'prim pack'],
+            'secondary': ['secondary packaging', 'secondary', 'sec pack'],
+            'label': ['label', 'labels', 'product label']
+        }
     
+    def find_header_columns(self, excel_file_path):
+        """Find column positions based on header text"""
+        try:
+            workbook = openpyxl.load_workbook(excel_file_path, data_only=True)
+            worksheet = workbook.active
+            
+            header_columns = {}
+            
+            # Check first few rows for headers
+            for row_num in range(1, 5):  # Check rows 1-4 for headers
+                for col_num in range(1, worksheet.max_column + 1):
+                    cell_value = worksheet.cell(row=row_num, column=col_num).value
+                    if cell_value and isinstance(cell_value, str):
+                        cell_text = cell_value.lower().strip()
+                        
+                        # Match against header keywords
+                        for img_type, keywords in self.header_keywords.items():
+                            if any(keyword in cell_text for keyword in keywords):
+                                col_letter = get_column_letter(col_num)
+                                header_columns[img_type] = col_letter
+                                st.write(f"✅ Found '{img_type}' column: {col_letter} ('{cell_value}')")
+                                break
+            
+            workbook.close()
+            return header_columns
+            
+        except Exception as e:
+            st.error(f"❌ Error finding headers: {e}")
+            return {}
+
     def extract_images_from_excel(self, excel_file_path):
-        """Extract images from Excel file using multiple methods"""
+        """Extract images from Excel file using header-based detection"""
         try:
             self.current_excel_path = excel_file_path
             images = {}
             
             st.write("🔍 Extracting images from Excel file...")
             
-            # METHOD 1: Standard openpyxl extraction
-            try:
-                result1 = self._extract_with_openpyxl(excel_file_path)
-                images.update(result1)
-                st.write(f"✅ Standard extraction found {len(result1)} images")
-            except Exception as e:
-                st.write(f"⚠️ Standard extraction failed: {e}")
+            # Find header columns first
+            header_columns = self.find_header_columns(excel_file_path)
             
-            # METHOD 2: ZIP-based extraction (Excel files are ZIP archives)
+            # METHOD 1: Standard openpyxl extraction with header mapping
+            try:
+                result1 = self._extract_with_openpyxl_header_based(excel_file_path, header_columns)
+                images.update(result1)
+                st.write(f"✅ Header-based extraction found {len(result1)} images")
+            except Exception as e:
+                st.write(f"⚠️ Header-based extraction failed: {e}")
+            
+            # METHOD 2: ZIP-based extraction (fallback)
             if not images:
                 try:
                     result2 = self._extract_with_zipfile(excel_file_path)
@@ -100,8 +141,8 @@ class ImageExtractor:
             st.error(f"❌ Error extracting images: {e}")
             return {}
 
-    def _extract_with_openpyxl(self, excel_file_path):
-        """Standard openpyxl image extraction"""
+    def _extract_with_openpyxl_header_based(self, excel_file_path, header_columns):
+        """Extract images using header column mapping"""
         images = {}
         
         try:
@@ -127,17 +168,19 @@ class ImageExtractor:
                             if hasattr(anchor, '_from') and anchor._from:
                                 col = anchor._from.col
                                 row = anchor._from.row
-                                position = f"{get_column_letter(col + 1)}{row + 1}"
+                                col_letter = get_column_letter(col + 1)
+                                position = f"{col_letter}{row + 1}"
                             else:
                                 position = f"Image_{idx + 1}"
+                                col_letter = 'A'
                             
                             # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
                             
-                            # Classify image type based on position
-                            image_type = self._classify_image_type(idx)
+                            # Determine image type based on header columns
+                            image_type = self._classify_image_type_by_header(col_letter, header_columns, idx)
                             
                             image_key = f"{image_type}_{sheet_name}_{position}_{idx}"
                             images[image_key] = {
@@ -163,7 +206,7 @@ class ImageExtractor:
         return images
 
     def _extract_with_zipfile(self, excel_file_path):
-        """Extract images by treating Excel file as ZIP archive"""
+        """Extract images by treating Excel file as ZIP archive (unchanged)"""
         images = {}
         
         try:
@@ -218,6 +261,16 @@ class ImageExtractor:
         
         return images
     
+    def _classify_image_type_by_header(self, col_letter, header_columns, index):
+        """Classify image type based on header column mapping"""
+        # First, try to match by header column
+        for img_type, header_col in header_columns.items():
+            if header_col == col_letter:
+                return img_type
+        
+        # Fallback to original method if no header match
+        return self._classify_image_type(index)
+    
     def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
         """Extract up to 4 images for a specific part number/vendor/description, in correct order."""
         try:
@@ -239,6 +292,7 @@ class ImageExtractor:
                     if term == sheet_name or term in key_parts:
                         return True
                 return False
+            
             # Step 1: try to find matching images
             part_specific_images = {
                 key: img_data
@@ -254,6 +308,7 @@ class ImageExtractor:
                         part_specific_images[key] = img_data
                         if len(part_specific_images) >= 4:
                             break
+            
             # Step 3: trim to exactly 4 images max
             part_specific_images = dict(list(part_specific_images.items())[:4])
 
@@ -268,17 +323,17 @@ class ImageExtractor:
             return {}
 
     def _classify_image_type(self, index):
-        """Classify image type based on index"""
+        """Classify image type based on index (unchanged)"""
         types = ['current', 'primary', 'secondary', 'label']
         return types[index % len(types)]
 
     def add_images_to_template(self, worksheet, uploaded_images):
-        """Add uploaded images to template at specific positions"""
+        """Add uploaded images to template at specific positions (UNCHANGED)"""
         try:
             added_images = 0
             temp_image_paths = []
             
-            # Fixed positions for different image types
+            # Fixed positions for different image types (SAME AS BEFORE)
             positions = {
                 'current': 'T3',  # Current packaging at T3
                 'primary': 'A42',  # Primary packaging at A42
@@ -306,7 +361,7 @@ class ImageExtractor:
             return 0, []
 
     def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
-        """Place a single image at the specified cell position"""
+        """Place a single image at the specified cell position (UNCHANGED)"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
