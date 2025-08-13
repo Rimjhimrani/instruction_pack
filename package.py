@@ -1608,21 +1608,21 @@ def main():
 
                         # Option to download all as ZIP
                         if len(generated_files) > 1:
-                            if st.button("📦 Download All as ZIP")
-                            import zipfile
-                            zip_buffer = io.BytesIO()
+                            if st.button("📦 Download All as ZIP"):
+                                import zipfile
+                                zip_buffer = io.BytesIO()
                             
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                for file_info in generated_files:
-                                zip_file.writestr(file_info['filename'], file_info['data'])
-                            zip_buffer.seek(0)
-                            st.download_button(
-                                label="📥 Download ZIP File",
-                                data=zip_buffer.getvalue(),
-                                file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                                mime="application/zip",
-                                key="download_images_zip"
-                            )
+                                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                    for file_info in generated_files:
+                                    zip_file.writestr(file_info['filename'], file_info['data'])
+                                zip_buffer.seek(0)
+                                st.download_button(
+                                    label="📥 Download ZIP File",
+                                    data=zip_buffer.getvalue(),
+                                    file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                    mime="application/zip",
+                                    key="download_images_zip"
+                                )
 
                 except Exception as e:
                     st.error(f"Error generating final documents: {e}")
