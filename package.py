@@ -218,53 +218,80 @@ class ImageExtractor:
         
         return images
     
-    def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
-        """Extract up to 4 images for a specific part number/vendor/description, in correct order."""
+    def extract_images_for_part(self, excel_file_path, search_info):
+        """
+        Extract up to 4 images for a specific part based on part number,
+        vendor code, description, and column headers.
+        search_info = {
+            "part_no": "12345",
+            "description": "Widget",
+            "vendor_code": "V123",
+            "column_headers": {
+                "Part No": "12345",
+                "Description": "Widget",
+                "Vendor Code": "V123"
+            }
+        }
+        """
         try:
             all_images = self.extract_images_from_excel(excel_file_path)
             if not all_images or 'all_sheets' not in all_images:
                 return {}
 
-            search_terms = [
-                str(term).lower().strip()
-                for term in [vendor_code, part_no, description]
-                if term and str(term).strip()
-            ]
+            # Build search terms from values + headers
+            search_terms = set()
+            for header, value in search_info.get("column_headers", {}).items():
+                if value:
+                    search_terms.add(str(value).lower().strip())
+                search_terms.add(header.lower().strip())
+
+            # Also add direct values if not already included
+            for field in ["vendor_code", "part_no", "description"]:
+                val = search_info.get(field)
+                if val:
+                    search_terms.add(str(val).lower().strip())
 
             def matches_search(img_data, key):
                 sheet_name = img_data['sheet'].lower()
                 key_parts = key.lower().split('_')
+                img_filename = os.path.basename(img_data.get('source_path', '')).lower() if 'source_path' in img_data else ""
+
                 for term in search_terms:
-                    # exact match in sheet name or in key parts
+                    # exact matches in sheet name or key parts
                     if term == sheet_name or term in key_parts:
                         return True
+                    # match in the original embedded filename
+                    if term and term in img_filename:
+                        return True
                 return False
-            # Step 1: try to find matching images
+
+            # Step 1: find matches
             part_specific_images = {
                 key: img_data
                 for key, img_data in all_images['all_sheets'].items()
                 if matches_search(img_data, key)
             }
 
-            # Step 2: if not enough matches, fill from remaining images
+            # Step 2: fill missing slots if less than 4
             if len(part_specific_images) < 4:
-                remaining_needed = 4 - len(part_specific_images)
                 for key, img_data in all_images['all_sheets'].items():
                     if key not in part_specific_images:
                         part_specific_images[key] = img_data
                         if len(part_specific_images) >= 4:
                             break
-            # Step 3: trim to exactly 4 images max
+
+            # Step 3: limit to 4 images max
             part_specific_images = dict(list(part_specific_images.items())[:4])
 
-            # Step 4: assign types in order
+            # Step 4: assign types
             image_types_order = ['current', 'primary', 'secondary', 'label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
                 img_data['type'] = image_types_order[idx % len(image_types_order)]
 
             return part_specific_images
+
         except Exception as e:
-            st.error(f"Error extracting images for part {part_no}: {e}")
+            st.error(f"Error extracting images for part: {e}")
             return {}
 
     def _classify_image_type(self, index):
@@ -1499,60 +1526,70 @@ def main():
     # Step 6: Generate Final Document
     elif st.session_state.current_step == 6:
         st.header("📋 Step 6: Generate Final Documents")
-    
+
         if st.button("Generate All Templates with Images"):
             with st.spinner("Generating all documents..."):
                 try:
                     extractor = ImageExtractor()
                     generated_files = []
-                
+
                     for row_data in st.session_state.all_row_data:
                         # Load the mapped template for this row
                         workbook = openpyxl.load_workbook(row_data['file_path'])
                         worksheet = workbook.active
-                    
+
                         # Determine images to add
                         images_to_add = {}
-                    
+
                         if st.session_state.image_option == 'extract':
+                            # Build search info including column headers
+                            search_info = {
+                                "part_no": row_data['part_no'],
+                                "description": row_data['description'],
+                                "vendor_code": row_data['vendor_code'],
+                                "column_headers": {
+                                    "Part No": row_data['part_no'],
+                                    "Description": row_data['description'],
+                                    "Vendor Code": row_data['vendor_code']
+                                }
+                            }
                             # Extract images specific to this part
                             images_to_add = extractor.extract_images_for_part(
                                 st.session_state.data_file,
-                                row_data['part_no'],
-                                row_data['description'],
-                                row_data['vendor_code']
+                                search_info
                             )
+
                         elif st.session_state.image_option == 'upload':
                             # Use same uploaded images for all templates
                             images_to_add = st.session_state.uploaded_images
-                    
+
                         # Add images to template
                         if images_to_add:
                             added_count, temp_paths = extractor.add_images_to_template(
                                 worksheet, images_to_add
                             )
                             st.write(f"✅ Added {added_count} images to {row_data['filename']}")
-                    
+
                         # Save final document
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         final_filename = f"{row_data['filename'].replace('.xlsx', '')}_{timestamp}.xlsx"
-                    
+
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                             workbook.save(tmp_file.name)
-                        
+
                             with open(tmp_file.name, 'rb') as f:
                                 file_bytes = f.read()
-                        
+
                             generated_files.append({
                                 'filename': final_filename,
                                 'data': file_bytes,
                                 'row_info': row_data
                             })
-                    
+
                         workbook.close()
-                
+
                     st.success(f"🎉 Generated {len(generated_files)} final templates!")
-                
+
                     # Create download buttons for each file
                     st.subheader("📥 Download Generated Templates")
                     for file_info in generated_files:
@@ -1568,17 +1605,17 @@ def main():
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 key=f"download_{file_info['filename']}"
                             )
-                
-                    # Option to download all as ZIP
-                    if len(generated_files) > 1:
-                        if st.button("📦 Download All as ZIP"):
-                            import zipfile
-                            zip_buffer = io.BytesIO()
-                        
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                for file_info in generated_files:
-                                    zip_file.writestr(file_info['filename'], file_info['data'])
-                        
+
+                        # Option to download all as ZIP
+                        if len(generated_files) > 1:
+                            if st.button("📦 Download All as ZIP"):
+                                import zipfile
+                                zip_buffer = io.BytesIO()
+
+                                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                    for file_info in generated_files:
+                                        zip_file.writestr(file_info['filename'], file_info['data'])
+
                             zip_buffer.seek(0)
                             st.download_button(
                                 label="📥 Download ZIP File",
@@ -1587,11 +1624,11 @@ def main():
                                 mime="application/zip",
                                 key="download_images_zip"
                             )
-                
+
                 except Exception as e:
                     st.error(f"Error generating final documents: {e}")
                     st.write("Traceback:", traceback.format_exc())
-    
+
         if st.button("← Go Back", key="back_from_6"):
             navigate_to_step(5)
     
