@@ -63,6 +63,7 @@ class EnhancedImageExtractor:
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
         self._placement_counters = defaultdict(int)
         self.current_excel_path = None
+        self.row_image_mapping = {}  # Store mapping of rows to images
         
     def analyze_template_structure(self, template_path):
         """Analyze template to find image placement areas"""
@@ -165,7 +166,7 @@ class EnhancedImageExtractor:
             return False
     
     def extract_images_from_excel(self, excel_file_path):
-        """Enhanced image extraction with better organization"""
+        """Enhanced image extraction with better organization and row mapping"""
         try:
             self.current_excel_path = excel_file_path
             images = {}
@@ -193,6 +194,8 @@ class EnhancedImageExtractor:
                 st.warning("⚠️ No images found in Excel file.")
             else:
                 st.success(f"🎯 Total images extracted: {len(images)}")
+                # Build row-to-image mapping
+                self._build_row_image_mapping(images)
                 # Group images by suspected content
                 grouped_images = self._group_images_by_content(images)
                 self._display_image_groups(grouped_images)
@@ -203,55 +206,108 @@ class EnhancedImageExtractor:
             st.error(f"❌ Error extracting images: {e}")
             return {}
 
-    # ADD THE MISSING METHOD HERE
-    def extract_images_for_part(self, data_file, part_number, all_extracted_images, vendor_code):
-        """Extract images relevant to a specific part number from specific row"""
+    def _build_row_image_mapping(self, images):
+        """Build a mapping of Excel rows to their associated images"""
+        self.row_image_mapping = {}
+        
+        # Group images by row
+        for img_key, img_data in images.items():
+            row_num = img_data.get('row', 0)
+            if row_num > 0:  # Valid row
+                if row_num not in self.row_image_mapping:
+                    self.row_image_mapping[row_num] = {}
+                
+                img_type = img_data.get('type', 'current')
+                self.row_image_mapping[row_num][img_type] = img_key
+        
+        st.write(f"📊 Built mapping for {len(self.row_image_mapping)} rows with images")
+
+    def extract_images_for_part(self, data_file, part_number, all_extracted_images, vendor_code, current_row=None):
+        """Extract images relevant to a specific part number - FIXED VERSION"""
         try:
             if not all_extracted_images or 'all_sheets' not in all_extracted_images:
-                st.warning(f"No images found for part {part_number}")
-                return {}
+                st.warning(f"No images available for part {part_number}")
+                return self._get_fallback_images()
             
             all_images = all_extracted_images['all_sheets']
             
-            # Try to filter images by row position to get only the current part's images
-            part_specific_images = self._filter_images_by_row_context(
+            # Strategy 1: Try to use row-specific mapping if available
+            if current_row and current_row in self.row_image_mapping:
+                row_images = {}
+                for img_type, img_key in self.row_image_mapping[current_row].items():
+                    if img_key in all_images:
+                        row_images[img_key] = all_images[img_key]
+                
+                if row_images:
+                    st.write(f"✅ Found {len(row_images)} row-specific images for part {part_number}")
+                    return row_images
+            
+            # Strategy 2: Use intelligent distribution - give each part a different set
+            part_specific_images = self._distribute_images_intelligently(
                 all_images, part_number, vendor_code
             )
             
             if not part_specific_images:
-                st.warning(f"No row-specific images found for part {part_number}, using fallback logic")
-                # Fallback: take the first image of each type if no row-specific filtering works
-                part_specific_images = self._get_first_of_each_type(all_images)
+                st.warning(f"No specific images found for part {part_number}, using fallback")
+                part_specific_images = self._get_fallback_images()
             
-            st.write(f"🎯 Found {len(part_specific_images)} images for part {part_number} (vendor: {vendor_code})")
+            st.write(f"🎯 Assigned {len(part_specific_images)} images to part {part_number}")
             return part_specific_images
             
         except Exception as e:
             st.error(f"Error extracting images for part {part_number}: {e}")
-            return {}
+            return self._get_fallback_images()
     
-    def _filter_images_by_row_context(self, all_images, part_number, vendor_code):
-        """Filter images to get only those from the current row being processed"""
-        # This is a challenging problem since we need to determine which row each image belongs to
-        # For now, we'll use a simple approach: take one image per type
-        filtered_images = {}
-        type_counts = {'current': 0, 'primary': 0, 'secondary': 0, 'label': 0}
-        
-        # Group images by type and position
-        for img_key, img_data in all_images.items():
-            img_type = img_data.get('type', 'current')
+    def _distribute_images_intelligently(self, all_images, part_number, vendor_code):
+        """Intelligently distribute images to different parts"""
+        try:
+            # Group images by type
+            images_by_type = {}
+            for img_key, img_data in all_images.items():
+                img_type = img_data.get('type', 'current')
+                if img_type not in images_by_type:
+                    images_by_type[img_type] = []
+                images_by_type[img_type].append((img_key, img_data))
             
-            # Try to get row information from image position
-            position = img_data.get('position', '')
-            row_num = self._extract_row_number(position)
+            # Create a hash from part number to ensure consistent but different distribution
+            part_hash = hash(part_number) % 1000
             
-            # For now, take the first available image of each type
-            # You can enhance this logic to match specific rows
-            if type_counts[img_type] == 0:  # Take only the first image of each type
-                filtered_images[img_key] = img_data
-                type_counts[img_type] += 1
-        
-        return filtered_images
+            selected_images = {}
+            
+            # For each type, select an image based on the part number
+            for img_type, images_list in images_by_type.items():
+                if images_list:
+                    # Use modulo to cycle through available images
+                    index = part_hash % len(images_list)
+                    selected_key, selected_data = images_list[index]
+                    selected_images[selected_key] = selected_data
+                    
+                    # Move to next image for next part (simple rotation)
+                    part_hash += 1
+            
+            return selected_images
+            
+        except Exception as e:
+            st.write(f"⚠️ Error in intelligent distribution: {e}")
+            return self._get_first_of_each_type(all_images)
+    
+    def _get_fallback_images(self):
+        """Provide fallback when no images are available"""
+        st.write("📝 Using placeholder images (no actual images available)")
+        return {
+            'placeholder_current': {
+                'data': None,
+                'type': 'current',
+                'size': (400, 300),
+                'placeholder': True
+            },
+            'placeholder_primary': {
+                'data': None,
+                'type': 'primary',
+                'size': (400, 300),
+                'placeholder': True
+            }
+        }
     
     def _get_first_of_each_type(self, all_images):
         """Get the first image of each type as fallback"""
@@ -263,6 +319,8 @@ class EnhancedImageExtractor:
             if img_type not in seen_types:
                 first_images[img_key] = img_data
                 seen_types.add(img_type)
+                if len(first_images) >= 4:  # Max 4 types
+                    break
         
         return first_images
     
@@ -276,7 +334,7 @@ class EnhancedImageExtractor:
             return 0
     
     def _extract_with_openpyxl_enhanced(self, excel_file_path):
-        """Enhanced openpyxl extraction with better positioning"""
+        """Enhanced openpyxl extraction with better positioning and row tracking"""
         images = {}
         
         try:
@@ -298,9 +356,9 @@ class EnhancedImageExtractor:
                             # Enhanced position detection
                             position_info = self._get_enhanced_position_info(img, worksheet, idx)
                             
-                            # Smart image type classification
-                            image_type = self._smart_classify_image_type(
-                                pil_image, position_info, sheet_name, idx
+                            # Smart image type classification based on COLUMN, not row
+                            image_type = self._smart_classify_image_type_by_column(
+                                position_info, worksheet, idx
                             )
                             
                             # Convert to base64
@@ -314,6 +372,8 @@ class EnhancedImageExtractor:
                                 'format': 'PNG',
                                 'size': pil_image.size,
                                 'position': position_info['position'],
+                                'row': position_info['row'],  # Important for row tracking
+                                'col': position_info['col'],
                                 'sheet': sheet_name,
                                 'index': idx,
                                 'type': image_type,
@@ -332,6 +392,47 @@ class EnhancedImageExtractor:
         
         return images
     
+    def _smart_classify_image_type_by_column(self, position_info, worksheet, idx):
+        """Classify image type based on which COLUMN it's in, not row context"""
+        try:
+            col = position_info['col']
+            
+            # Check the column header (first few rows of this column)
+            for row_num in range(1, 6):  # Check first 5 rows
+                try:
+                    cell = worksheet.cell(row_num, col + 1)  # +1 because openpyxl is 0-indexed
+                    if cell.value and isinstance(cell.value, str):
+                        header_text = cell.value.lower().strip()
+                        
+                        # Match based on column headers from your Excel
+                        if 'current packaging' in header_text:
+                            return 'current'
+                        elif 'primary packaging' in header_text:
+                            return 'primary'
+                        elif 'secondary packaging' in header_text:
+                            return 'secondary'
+                        elif 'label' in header_text or 'barcode' in header_text:
+                            return 'label'
+                except:
+                    continue
+            
+            # Fallback: use column position to guess type
+            # Based on typical Excel layout: Current, Primary, Secondary, Label
+            if col <= 5:  # Assuming first few columns
+                return 'current'
+            elif col <= 10:
+                return 'primary' 
+            elif col <= 15:
+                return 'secondary'
+            else:
+                return 'label'
+                
+        except Exception as e:
+            st.write(f"⚠️ Column classification failed: {e}")
+            # Final fallback
+            types = ['current', 'primary', 'secondary', 'label']
+            return types[idx % len(types)]
+    
     def _get_enhanced_position_info(self, img, worksheet, idx):
         """Get enhanced position information including context"""
         try:
@@ -341,7 +442,7 @@ class EnhancedImageExtractor:
                 row = anchor._from.row
                 position = f"{get_column_letter(col + 1)}{row + 1}"
                 
-                # Analyze surrounding context
+                # Analyze surrounding context (but don't rely on it for type classification)
                 context = self._analyze_surrounding_context(worksheet, row, col)
                 confidence = 0.8 if context else 0.5
                 
@@ -405,7 +506,7 @@ class EnhancedImageExtractor:
         try:
             # Check the first few rows for headers
             for row_num in range(1, 5):
-                cell = worksheet.cell(row_num, img_col)
+                cell = worksheet.cell(row_num, img_col + 1)  # +1 for 1-based indexing
                 if cell.value and isinstance(cell.value, str):
                     header_text = cell.value.lower()
                     
@@ -421,31 +522,6 @@ class EnhancedImageExtractor:
             return ''
         except:
             return ''
-    
-    def _smart_classify_image_type(self, pil_image, position_info, sheet_name, idx):
-        """Smart classification based on image properties and context"""
-        
-        # Priority 1: Use context from surrounding text
-        if position_info.get('context'):
-            context_types = position_info['context'].split(', ')
-            if context_types:
-                return context_types[0]  # Return the first/most relevant type
-        
-        # Priority 2: Use image analysis
-        width, height = pil_image.size
-        aspect_ratio = width / height if height > 0 else 1
-        
-        # Analyze image content (basic heuristics)
-        if aspect_ratio > 2:  # Wide images might be labels
-            return 'label'
-        elif width * height > 100000:  # Large images might be primary
-            return 'primary'
-        elif idx == 0:  # First image defaults to current
-            return 'current'
-        
-        # Priority 3: Default rotation
-        types = ['current', 'primary', 'secondary', 'label']
-        return types[idx % len(types)]
     
     def _extract_with_zipfile_enhanced(self, excel_file_path):
         """Enhanced ZIP extraction with smart organization"""
@@ -490,6 +566,8 @@ class EnhancedImageExtractor:
                                 'format': 'PNG',
                                 'size': pil_image.size,
                                 'position': f"ZIP_{idx}",
+                                'row': idx + 2,  # Assign sequential rows
+                                'col': 0,
                                 'sheet': 'ZIP_EXTRACTED',
                                 'index': idx,
                                 'type': image_type,
@@ -519,7 +597,7 @@ class EnhancedImageExtractor:
             if any(keyword in filename for keyword in keywords):
                 return img_type
         
-        # Default fallback
+        # Default fallback - cycle through types
         types = ['current', 'primary', 'secondary', 'label']
         return types[idx % len(types)]
     
@@ -602,6 +680,87 @@ class EnhancedImageExtractor:
     def _place_image_smart(self, worksheet, img_key, img_data, zone_info, temp_image_paths):
         """Place image using smart zone information"""
         try:
+            # Handle placeholder images
+            if img_data.get('placeholder'):
+                st.write(f"⏭️ Skipping placeholder image {img_key}")
+                return True
+            
+            # Create temporary image file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                image_bytes = base64.b64decode(img_data['data'])
+                tmp_img.write(image_bytes)
+                tmp_img_path = tmp_img.name
+            
+            # Create openpyxl image object
+            img = OpenpyxlImage(tmp_img_path)
+            
+            # Calculate size based on zone dimensions
+            cell_width_px = 80  # Approximate Excel cell width in pixels
+            cell_height_px = 20  # Approximate Excel cell height in pixels
+            
+            img.width = zone_info['width_cells'] * cell_width_px
+            img.height = zone_info['height_cells'] * cell_height_px
+            
+            # Set position
+            img.anchor = zone_info['cell']
+            
+            # Add image to worksheet
+            worksheet.add_image(img)
+            
+            # Track temporary file for cleanup
+            temp_image_paths.append(tmp_img_path)
+            
+            return True
+            
+        except Exception as e:
+            st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
+            return False
+
+    def add_images_to_template(self, worksheet, uploaded_images):
+        """Add uploaded images to template at specific positions"""
+        try:
+            added_images = 0
+            temp_image_paths = []
+            
+            # Fixed positions for different image types
+            positions = {
+                'current': 'T3',  # Current packaging at T3
+                'primary': 'A42',  # Primary packaging at A42
+                'secondary': 'F42',  # Secondary packaging at F42 (next column set)
+                'label': 'K42'  # Label at K42 (next column set)
+            }
+            
+            for img_key, img_data in uploaded_images.items():
+                # Skip placeholder images
+                if img_data.get('placeholder'):
+                    st.write(f"⏭️ Skipping placeholder for {img_key}")
+                    continue
+                    
+                img_type = img_data.get('type', 'current')
+                if img_type in positions:
+                    position = positions[img_type]
+                    success = self._place_image_at_position(
+                        worksheet, img_key, img_data, position,
+                        width_cm=4.3 if img_type != 'current' else 8.3,
+                        height_cm=4.3 if img_type != 'current' else 8.3,
+                        temp_image_paths=temp_image_paths
+                    )
+                    if success:
+                        added_images += 1
+            
+            return added_images, temp_image_paths
+            
+        except Exception as e:
+            st.error(f"Error adding images to template: {e}")
+            return 0, []
+
+    def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
+        """Place a single image at the specified cell position"""
+        try:
+            # Skip placeholder images
+            if img_data.get('placeholder'):
+                return True
+                
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
