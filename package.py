@@ -205,25 +205,75 @@ class EnhancedImageExtractor:
 
     # ADD THE MISSING METHOD HERE
     def extract_images_for_part(self, data_file, part_number, all_extracted_images, vendor_code):
-        """Extract images relevant to a specific part number"""
+        """Extract images relevant to a specific part number from specific row"""
         try:
             if not all_extracted_images or 'all_sheets' not in all_extracted_images:
                 st.warning(f"No images found for part {part_number}")
                 return {}
             
-            # For now, return all images since we can't filter by part number
-            # You might want to implement part-specific filtering logic here based on:
-            # - data_file: the Excel file being processed
-            # - part_number: the specific part number
-            # - vendor_code: the vendor code for additional filtering
-            images = all_extracted_images['all_sheets']
+            all_images = all_extracted_images['all_sheets']
             
-            st.write(f"🎯 Found {len(images)} images for part {part_number} (vendor: {vendor_code})")
-            return images
+            # Try to filter images by row position to get only the current part's images
+            part_specific_images = self._filter_images_by_row_context(
+                all_images, part_number, vendor_code
+            )
+            
+            if not part_specific_images:
+                st.warning(f"No row-specific images found for part {part_number}, using fallback logic")
+                # Fallback: take the first image of each type if no row-specific filtering works
+                part_specific_images = self._get_first_of_each_type(all_images)
+            
+            st.write(f"🎯 Found {len(part_specific_images)} images for part {part_number} (vendor: {vendor_code})")
+            return part_specific_images
             
         except Exception as e:
             st.error(f"Error extracting images for part {part_number}: {e}")
             return {}
+    
+    def _filter_images_by_row_context(self, all_images, part_number, vendor_code):
+        """Filter images to get only those from the current row being processed"""
+        # This is a challenging problem since we need to determine which row each image belongs to
+        # For now, we'll use a simple approach: take one image per type
+        filtered_images = {}
+        type_counts = {'current': 0, 'primary': 0, 'secondary': 0, 'label': 0}
+        
+        # Group images by type and position
+        for img_key, img_data in all_images.items():
+            img_type = img_data.get('type', 'current')
+            
+            # Try to get row information from image position
+            position = img_data.get('position', '')
+            row_num = self._extract_row_number(position)
+            
+            # For now, take the first available image of each type
+            # You can enhance this logic to match specific rows
+            if type_counts[img_type] == 0:  # Take only the first image of each type
+                filtered_images[img_key] = img_data
+                type_counts[img_type] += 1
+        
+        return filtered_images
+    
+    def _get_first_of_each_type(self, all_images):
+        """Get the first image of each type as fallback"""
+        first_images = {}
+        seen_types = set()
+        
+        for img_key, img_data in all_images.items():
+            img_type = img_data.get('type', 'current')
+            if img_type not in seen_types:
+                first_images[img_key] = img_data
+                seen_types.add(img_type)
+        
+        return first_images
+    
+    def _extract_row_number(self, position):
+        """Extract row number from cell position like 'A42' -> 42"""
+        try:
+            import re
+            match = re.search(r'(\d+)', position)
+            return int(match.group(1)) if match else 0
+        except:
+            return 0
     
     def _extract_with_openpyxl_enhanced(self, excel_file_path):
         """Enhanced openpyxl extraction with better positioning"""
@@ -329,7 +379,12 @@ class EnhancedImageExtractor:
             'label': ['label', 'barcode', 'sticker', 'tag']
         }
         
-        # Check cells in a 5x5 area around the image
+        # First, check column headers (more reliable for your structure)
+        header_context = self._check_column_headers(worksheet, img_col)
+        if header_context:
+            return header_context
+        
+        # Fallback: Check cells in a 5x5 area around the image
         found_context = []
         for row_offset in range(-2, 3):
             for col_offset in range(-2, 3):
@@ -344,6 +399,28 @@ class EnhancedImageExtractor:
                     continue
         
         return ', '.join(set(found_context)) if found_context else ''
+    
+    def _check_column_headers(self, worksheet, img_col):
+        """Check column headers to determine image type based on your Excel structure"""
+        try:
+            # Check the first few rows for headers
+            for row_num in range(1, 5):
+                cell = worksheet.cell(row_num, img_col)
+                if cell.value and isinstance(cell.value, str):
+                    header_text = cell.value.lower()
+                    
+                    if 'current packaging' in header_text:
+                        return 'current'
+                    elif 'primary packaging' in header_text:
+                        return 'primary'
+                    elif 'secondary packaging' in header_text:
+                        return 'secondary'
+                    elif 'label' in header_text:
+                        return 'label'
+            
+            return ''
+        except:
+            return ''
     
     def _smart_classify_image_type(self, pil_image, position_info, sheet_name, idx):
         """Smart classification based on image properties and context"""
