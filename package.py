@@ -57,51 +57,154 @@ if 'extracted_excel_images' not in st.session_state:
     st.session_state.extracted_excel_images = {}
 
 class ImageExtractor:
-    """Handles image extraction from Excel files with improved duplicate handling"""
+    """Advanced image extraction and placement with smart positioning"""
     
     def __init__(self):
         self.supported_formats = ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
         self._placement_counters = defaultdict(int)
         self.current_excel_path = None
+        
+    def analyze_template_structure(self, template_path):
+        """Analyze template to find image placement areas"""
+        try:
+            workbook = openpyxl.load_workbook(template_path, data_only=False)
+            worksheet = workbook.active
+            
+            image_zones = {
+                'current_packaging': None,
+                'primary_packaging': None,
+                'secondary_packaging': None,
+                'label': None
+            }
+            
+            # Search for specific headers/keywords in the template
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str):
+                        cell_value_lower = cell.value.lower()
+                        
+                        # Look for packaging-related headers
+                        if 'current packaging' in cell_value_lower:
+                            image_zones['current_packaging'] = self._find_image_area_near_cell(worksheet, cell)
+                        elif 'primary packaging' in cell_value_lower:
+                            image_zones['primary_packaging'] = self._find_image_area_near_cell(worksheet, cell)
+                        elif 'secondary packaging' in cell_value_lower:
+                            image_zones['secondary_packaging'] = self._find_image_area_near_cell(worksheet, cell)
+                        elif 'label' in cell_value_lower or 'barcode' in cell_value_lower:
+                            image_zones['label'] = self._find_image_area_near_cell(worksheet, cell)
+            
+            workbook.close()
+            return image_zones
+            
+        except Exception as e:
+            st.error(f"Error analyzing template structure: {e}")
+            return {}
+    
+    def _find_image_area_near_cell(self, worksheet, header_cell):
+        """Find the best area for image placement near a header cell"""
+        try:
+            header_row = header_cell.row
+            header_col = header_cell.column
+            
+            # Look for merged cells or empty areas below/adjacent to header
+            # Strategy 1: Look directly below the header
+            for row_offset in range(1, 10):  # Check up to 10 rows below
+                target_row = header_row + row_offset
+                target_cell = worksheet.cell(target_row, header_col)
+                
+                # If we find an empty area or a large merged cell, use it
+                if not target_cell.value or target_cell.value == "":
+                    # Check if this area has enough space (at least 3x3 cells)
+                    if self._check_area_availability(worksheet, target_row, header_col, 3, 3):
+                        return {
+                            'cell': f"{get_column_letter(header_col)}{target_row}",
+                            'row': target_row,
+                            'col': header_col,
+                            'width_cells': 3,
+                            'height_cells': 3
+                        }
+            
+            # Strategy 2: Look to the right of header
+            for col_offset in range(1, 5):
+                target_col = header_col + col_offset
+                target_cell = worksheet.cell(header_row, target_col)
+                
+                if not target_cell.value or target_cell.value == "":
+                    if self._check_area_availability(worksheet, header_row, target_col, 3, 3):
+                        return {
+                            'cell': f"{get_column_letter(target_col)}{header_row}",
+                            'row': header_row,
+                            'col': target_col,
+                            'width_cells': 3,
+                            'height_cells': 3
+                        }
+            
+            # Fallback: Use a position relative to header
+            return {
+                'cell': f"{get_column_letter(header_col)}{header_row + 2}",
+                'row': header_row + 2,
+                'col': header_col,
+                'width_cells': 3,
+                'height_cells': 3
+            }
+            
+        except Exception as e:
+            st.warning(f"Error finding image area near cell: {e}")
+            return None
+    
+    def _check_area_availability(self, worksheet, start_row, start_col, width, height):
+        """Check if an area is available for image placement"""
+        try:
+            for row in range(start_row, start_row + height):
+                for col in range(start_col, start_col + width):
+                    cell = worksheet.cell(row, col)
+                    if cell.value and str(cell.value).strip():
+                        return False
+            return True
+        except:
+            return False
     
     def extract_images_from_excel(self, excel_file_path):
-        """Extract images from Excel file using multiple methods"""
+        """Enhanced image extraction with better organization"""
         try:
             self.current_excel_path = excel_file_path
             images = {}
             
             st.write("🔍 Extracting images from Excel file...")
             
-            # METHOD 1: Standard openpyxl extraction
+            # METHOD 1: Standard openpyxl extraction with position detection
             try:
-                result1 = self._extract_with_openpyxl(excel_file_path)
+                result1 = self._extract_with_openpyxl_enhanced(excel_file_path)
                 images.update(result1)
-                st.write(f"✅ Standard extraction found {len(result1)} images")
+                st.write(f"✅ Enhanced extraction found {len(result1)} images")
             except Exception as e:
-                st.write(f"⚠️ Standard extraction failed: {e}")
+                st.write(f"⚠️ Enhanced extraction failed: {e}")
             
-            # METHOD 2: ZIP-based extraction (Excel files are ZIP archives)
+            # METHOD 2: ZIP-based extraction as fallback
             if not images:
                 try:
-                    result2 = self._extract_with_zipfile(excel_file_path)
+                    result2 = self._extract_with_zipfile_enhanced(excel_file_path)
                     images.update(result2)
                     st.write(f"✅ ZIP extraction found {len(result2)} images")
                 except Exception as e:
                     st.write(f"⚠️ ZIP extraction failed: {e}")
             
             if not images:
-                st.warning("⚠️ No images found in Excel file. Please ensure images are embedded in the Excel file.")
+                st.warning("⚠️ No images found in Excel file.")
             else:
                 st.success(f"🎯 Total images extracted: {len(images)}")
+                # Group images by suspected content
+                grouped_images = self._group_images_by_content(images)
+                self._display_image_groups(grouped_images)
             
             return {'all_sheets': images}
             
         except Exception as e:
             st.error(f"❌ Error extracting images: {e}")
             return {}
-
-    def _extract_with_openpyxl(self, excel_file_path):
-        """Standard openpyxl image extraction"""
+    
+    def _extract_with_openpyxl_enhanced(self, excel_file_path):
+        """Enhanced openpyxl extraction with better positioning"""
         images = {}
         
         try:
@@ -115,73 +218,158 @@ class ImageExtractor:
                         try:
                             # Get image data
                             image_data = img._data()
-                            
-                            # Create hash to avoid duplicates
                             image_hash = hashlib.md5(image_data).hexdigest()
                             
-                            # Create PIL Image
+                            # Create PIL Image for analysis
                             pil_image = Image.open(io.BytesIO(image_data))
                             
-                            # Get position info
-                            anchor = img.anchor
-                            if hasattr(anchor, '_from') and anchor._from:
-                                col = anchor._from.col
-                                row = anchor._from.row
-                                position = f"{get_column_letter(col + 1)}{row + 1}"
-                            else:
-                                position = f"Image_{idx + 1}"
+                            # Enhanced position detection
+                            position_info = self._get_enhanced_position_info(img, worksheet, idx)
+                            
+                            # Smart image type classification
+                            image_type = self._smart_classify_image_type(
+                                pil_image, position_info, sheet_name, idx
+                            )
                             
                             # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_str = base64.b64encode(buffered.getvalue()).decode()
                             
-                            # Classify image type based on position
-                            image_type = self._classify_image_type(idx)
-                            
-                            image_key = f"{image_type}_{sheet_name}_{position}_{idx}"
+                            image_key = f"{image_type}_{sheet_name}_{position_info['position']}_{idx}"
                             images[image_key] = {
                                 'data': img_str,
                                 'format': 'PNG',
                                 'size': pil_image.size,
-                                'position': position,
+                                'position': position_info['position'],
                                 'sheet': sheet_name,
                                 'index': idx,
                                 'type': image_type,
-                                'hash': image_hash
+                                'hash': image_hash,
+                                'confidence': position_info.get('confidence', 0.5),
+                                'area_context': position_info.get('context', '')
                             }
                             
                         except Exception as e:
-                            st.write(f"❌ Failed to extract image {idx} from sheet {sheet_name}: {e}")
+                            st.write(f"❌ Failed to extract image {idx} from {sheet_name}: {e}")
             
             workbook.close()
             
         except Exception as e:
-            st.error(f"❌ Error in openpyxl extraction: {e}")
-            raise
+            raise Exception(f"Error in enhanced openpyxl extraction: {e}")
         
         return images
-
-    def _extract_with_zipfile(self, excel_file_path):
-        """Extract images by treating Excel file as ZIP archive"""
+    
+    def _get_enhanced_position_info(self, img, worksheet, idx):
+        """Get enhanced position information including context"""
+        try:
+            anchor = img.anchor
+            if hasattr(anchor, '_from') and anchor._from:
+                col = anchor._from.col
+                row = anchor._from.row
+                position = f"{get_column_letter(col + 1)}{row + 1}"
+                
+                # Analyze surrounding context
+                context = self._analyze_surrounding_context(worksheet, row, col)
+                confidence = 0.8 if context else 0.5
+                
+                return {
+                    'position': position,
+                    'row': row,
+                    'col': col,
+                    'context': context,
+                    'confidence': confidence
+                }
+            else:
+                return {
+                    'position': f"Image_{idx + 1}",
+                    'row': 0,
+                    'col': 0,
+                    'context': '',
+                    'confidence': 0.3
+                }
+                
+        except Exception as e:
+            return {
+                'position': f"Unknown_{idx}",
+                'row': 0,
+                'col': 0,
+                'context': '',
+                'confidence': 0.1
+            }
+    
+    def _analyze_surrounding_context(self, worksheet, img_row, img_col):
+        """Analyze text around image position to determine its purpose"""
+        context_keywords = {
+            'current': ['current', 'present', 'existing', 'actual'],
+            'primary': ['primary', 'main', 'first', 'initial'],
+            'secondary': ['secondary', 'outer', 'external', 'second'],
+            'label': ['label', 'barcode', 'sticker', 'tag']
+        }
+        
+        # Check cells in a 5x5 area around the image
+        found_context = []
+        for row_offset in range(-2, 3):
+            for col_offset in range(-2, 3):
+                try:
+                    cell = worksheet.cell(img_row + row_offset, img_col + col_offset)
+                    if cell.value and isinstance(cell.value, str):
+                        cell_text = cell.value.lower()
+                        for context_type, keywords in context_keywords.items():
+                            if any(keyword in cell_text for keyword in keywords):
+                                found_context.append(context_type)
+                except:
+                    continue
+        
+        return ', '.join(set(found_context)) if found_context else ''
+    
+    def _smart_classify_image_type(self, pil_image, position_info, sheet_name, idx):
+        """Smart classification based on image properties and context"""
+        
+        # Priority 1: Use context from surrounding text
+        if position_info.get('context'):
+            context_types = position_info['context'].split(', ')
+            if context_types:
+                return context_types[0]  # Return the first/most relevant type
+        
+        # Priority 2: Use image analysis
+        width, height = pil_image.size
+        aspect_ratio = width / height if height > 0 else 1
+        
+        # Analyze image content (basic heuristics)
+        if aspect_ratio > 2:  # Wide images might be labels
+            return 'label'
+        elif width * height > 100000:  # Large images might be primary
+            return 'primary'
+        elif idx == 0:  # First image defaults to current
+            return 'current'
+        
+        # Priority 3: Default rotation
+        types = ['current', 'primary', 'secondary', 'label']
+        return types[idx % len(types)]
+    
+    def _extract_with_zipfile_enhanced(self, excel_file_path):
+        """Enhanced ZIP extraction with smart organization"""
         images = {}
         
         try:
             with zipfile.ZipFile(excel_file_path, 'r') as zip_ref:
-                # List all files in the archive
                 file_list = zip_ref.namelist()
                 
-                # Look for media files
-                media_files = [f for f in file_list if '/media/' in f.lower()]
-                image_files = [f for f in file_list if any(f.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp'])]
+                # Find all image files
+                image_files = []
+                for f in file_list:
+                    if any(f.lower().endswith(ext) for ext in self.supported_formats):
+                        image_files.append(f)
                 
-                # Extract images from media folder
-                for idx, media_file in enumerate(media_files):
+                # Sort images to maintain consistent order
+                image_files.sort()
+                
+                for idx, image_file in enumerate(image_files):
                     try:
-                        with zip_ref.open(media_file) as img_file:
+                        with zip_ref.open(image_file) as img_file:
                             image_data = img_file.read()
                             
-                            # Create PIL Image
                             pil_image = Image.open(io.BytesIO(image_data))
                             
                             # Convert to base64
@@ -192,10 +380,11 @@ class ImageExtractor:
                             # Create hash
                             image_hash = hashlib.md5(image_data).hexdigest()
                             
-                            # Generate key
-                            filename = os.path.basename(media_file)
-                            image_type = self._classify_image_type(idx)
-                            image_key = f"{image_type}_{filename}_{idx}"
+                            # Smart type classification for ZIP-extracted images
+                            filename = os.path.basename(image_file).lower()
+                            image_type = self._classify_from_filename(filename, idx)
+                            
+                            image_key = f"{image_type}_ZIP_{filename}_{idx}"
                             
                             images[image_key] = {
                                 'data': img_str,
@@ -206,107 +395,113 @@ class ImageExtractor:
                                 'index': idx,
                                 'type': image_type,
                                 'hash': image_hash,
-                                'source_path': media_file
+                                'source_path': image_file,
+                                'confidence': 0.6
                             }
                             
                     except Exception as e:
-                        st.write(f"❌ Failed to extract {media_file}: {e}")
+                        st.write(f"❌ Failed to extract {image_file}: {e}")
         
         except Exception as e:
-            st.error(f"❌ Error in ZIP extraction: {e}")
-            raise
+            raise Exception(f"Error in enhanced ZIP extraction: {e}")
         
         return images
     
-    def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
-        """Extract up to 4 images for a specific part number/vendor/description, in correct order."""
-        try:
-            all_images = self.extract_images_from_excel(excel_file_path)
-            if not all_images or 'all_sheets' not in all_images:
-                return {}
-
-            search_terms = [
-                str(term).lower().strip()
-                for term in [vendor_code, part_no, description]
-                if term and str(term).strip()
-            ]
-
-            def matches_search(img_data, key):
-                sheet_name = img_data['sheet'].lower()
-                key_parts = key.lower().split('_')
-                for term in search_terms:
-                    # exact match in sheet name or in key parts
-                    if term == sheet_name or term in key_parts:
-                        return True
-                return False
-            # Step 1: try to find matching images
-            part_specific_images = {
-                key: img_data
-                for key, img_data in all_images['all_sheets'].items()
-                if matches_search(img_data, key)
-            }
-
-            # Step 2: if not enough matches, fill from remaining images
-            if len(part_specific_images) < 4:
-                remaining_needed = 4 - len(part_specific_images)
-                for key, img_data in all_images['all_sheets'].items():
-                    if key not in part_specific_images:
-                        part_specific_images[key] = img_data
-                        if len(part_specific_images) >= 4:
-                            break
-            # Step 3: trim to exactly 4 images max
-            part_specific_images = dict(list(part_specific_images.items())[:4])
-
-            # Step 4: assign types in order
-            image_types_order = ['current', 'primary', 'secondary', 'label']
-            for idx, (key, img_data) in enumerate(part_specific_images.items()):
-                img_data['type'] = image_types_order[idx % len(image_types_order)]
-
-            return part_specific_images
-        except Exception as e:
-            st.error(f"Error extracting images for part {part_no}: {e}")
-            return {}
-
-    def _classify_image_type(self, index):
-        """Classify image type based on index"""
+    def _classify_from_filename(self, filename, idx):
+        """Classify image type based on filename patterns"""
+        filename_keywords = {
+            'current': ['current', 'present', 'actual', 'now'],
+            'primary': ['primary', 'main', 'inner', 'first', '1st'],
+            'secondary': ['secondary', 'outer', 'external', 'second', '2nd'],
+            'label': ['label', 'barcode', 'tag', 'sticker', 'code']
+        }
+        
+        for img_type, keywords in filename_keywords.items():
+            if any(keyword in filename for keyword in keywords):
+                return img_type
+        
+        # Default fallback
         types = ['current', 'primary', 'secondary', 'label']
-        return types[index % len(types)]
-
-    def add_images_to_template(self, worksheet, uploaded_images):
-        """Add uploaded images to template at specific positions"""
+        return types[idx % len(types)]
+    
+    def _group_images_by_content(self, images):
+        """Group images by their classified types for better organization"""
+        grouped = defaultdict(list)
+        for key, img_data in images.items():
+            img_type = img_data['type']
+            grouped[img_type].append((key, img_data))
+        return dict(grouped)
+    
+    def _display_image_groups(self, grouped_images):
+        """Display images organized by type"""
+        st.subheader("📋 Extracted Images by Type")
+        
+        for img_type, images_list in grouped_images.items():
+            with st.expander(f"{img_type.capitalize()} Images ({len(images_list)} found)"):
+                cols = st.columns(min(3, len(images_list)))
+                for idx, (key, img_data) in enumerate(images_list):
+                    with cols[idx % 3]:
+                        st.image(
+                            f"data:image/png;base64,{img_data['data']}", 
+                            caption=f"{key}\nSize: {img_data['size']}\nConfidence: {img_data.get('confidence', 0.5):.1f}",
+                            width=150
+                        )
+    
+    def smart_add_images_to_template(self, template_path, worksheet, uploaded_images):
+        """Smart image placement based on template analysis"""
         try:
             added_images = 0
             temp_image_paths = []
             
-            # Fixed positions for different image types
-            positions = {
-                'current': 'T3',  # Current packaging at T3
-                'primary': 'A42',  # Primary packaging at A42
-                'secondary': 'F42',  # Secondary packaging at F42 (next column set)
-                'label': 'K42'  # Label at K42 (next column set)
+            # Analyze template structure
+            image_zones = self.analyze_template_structure(template_path)
+            st.write(f"🎯 Detected {len([z for z in image_zones.values() if z])} placement zones")
+            
+            # Map image types to detected zones
+            type_zone_mapping = {
+                'current': image_zones.get('current_packaging'),
+                'primary': image_zones.get('primary_packaging'),
+                'secondary': image_zones.get('secondary_packaging'),
+                'label': image_zones.get('label')
             }
             
             for img_key, img_data in uploaded_images.items():
                 img_type = img_data.get('type', 'current')
-                if img_type in positions:
-                    position = positions[img_type]
+                target_zone = type_zone_mapping.get(img_type)
+                
+                if target_zone:
+                    # Use detected zone
+                    success = self._place_image_smart(
+                        worksheet, img_key, img_data, target_zone, temp_image_paths
+                    )
+                else:
+                    # Fallback to default positions
+                    fallback_positions = {
+                        'current': 'T3',
+                        'primary': 'A42',
+                        'secondary': 'F42',
+                        'label': 'K42'
+                    }
+                    position = fallback_positions.get(img_type, 'A1')
                     success = self._place_image_at_position(
                         worksheet, img_key, img_data, position,
-                        width_cm=4.3 if img_type != 'current' else 8.3,
-                        height_cm=4.3 if img_type != 'current' else 8.3,
-                        temp_image_paths=temp_image_paths
+                        width_cm=4.3, height_cm=4.3, temp_image_paths=temp_image_paths
                     )
-                    if success:
-                        added_images += 1
+                
+                if success:
+                    added_images += 1
+                    st.write(f"✅ Placed {img_type} image at detected zone")
+                else:
+                    st.write(f"⚠️ Failed to place {img_type} image")
             
             return added_images, temp_image_paths
             
         except Exception as e:
-            st.error(f"Error adding images to template: {e}")
+            st.error(f"Error in smart image placement: {e}")
             return 0, []
-
-    def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
-        """Place a single image at the specified cell position"""
+    
+    def _place_image_smart(self, worksheet, img_key, img_data, zone_info, temp_image_paths):
+        """Place image using smart zone information"""
         try:
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
@@ -317,17 +512,42 @@ class ImageExtractor:
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
             
-            # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
-            img.width = int(width_cm * 37.8)
-            img.height = int(height_cm * 37.8)
+            # Calculate size based on zone dimensions
+            cell_width_px = 80  # Approximate Excel cell width in pixels
+            cell_height_px = 20  # Approximate Excel cell height in pixels
             
-            # Set position using simple anchor
-            img.anchor = cell_position
+            img.width = zone_info['width_cells'] * cell_width_px
+            img.height = zone_info['height_cells'] * cell_height_px
+            
+            # Set position
+            img.anchor = zone_info['cell']
             
             # Add image to worksheet
             worksheet.add_image(img)
             
             # Track temporary file for cleanup
+            temp_image_paths.append(tmp_img_path)
+            
+            return True
+            
+        except Exception as e:
+            st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
+            return False
+    
+    def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
+        """Fallback method for placing images at fixed positions"""
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
+                image_bytes = base64.b64decode(img_data['data'])
+                tmp_img.write(image_bytes)
+                tmp_img_path = tmp_img.name
+            
+            img = OpenpyxlImage(tmp_img_path)
+            img.width = int(width_cm * 37.8)  # Convert cm to pixels
+            img.height = int(height_cm * 37.8)
+            img.anchor = cell_position
+            
+            worksheet.add_image(img)
             temp_image_paths.append(tmp_img_path)
             
             return True
@@ -1426,87 +1646,199 @@ def main():
     # Step 5: Choose Image Option
     elif st.session_state.current_step == 5:
         st.header("🖼️ Step 5: Choose Image Option")
-        
+    
         col1, col2 = st.columns(2)
-        
+    
         with col1:
-            if st.button("Extract Images from Data File", use_container_width=True):
+            if st.button("🔍 Smart Extract from Data File", use_container_width=True):
                 st.session_state.image_option = 'extract'
-                
-                # Extract images from data file
-                with st.spinner("Extracting images from Excel file..."):
-                    extractor = ImageExtractor()
+            
+                # Enhanced image extraction
+                with st.spinner("🧠 Analyzing and extracting images..."):
+                    extractor = EnhancedImageExtractor()  # Use the new enhanced extractor
                     extracted_images = extractor.extract_images_from_excel(st.session_state.data_file)
-                    
+                
                     if extracted_images and 'all_sheets' in extracted_images:
                         st.session_state.extracted_excel_images = extracted_images['all_sheets']
-                        st.success(f"✅ Extracted {len(st.session_state.extracted_excel_images)} images!")
-                        
-                        # Preview extracted images
-                        st.write("**Extracted Images Preview:**")
+                        st.success(f"✅ Intelligently extracted {len(st.session_state.extracted_excel_images)} images!")
+                    
+                        # Enhanced preview with grouping
+                        st.write("**📊 Extracted Images Analysis:**")
+                        image_types = {}
                         for img_key, img_data in st.session_state.extracted_excel_images.items():
-                            with st.expander(f"Image: {img_key}"):
-                                st.image(f"data:image/png;base64,{img_data['data']}", 
-                                       caption=f"Size: {img_data['size']}, Type: {img_data['type']}")
+                            img_type = img_data['type']
+                            if img_type not in image_types:
+                                image_types[img_type] = 0
+                            image_types[img_type] += 1
+                    
+                        # Show type distribution
+                        cols = st.columns(len(image_types))
+                        for i, (img_type, count) in enumerate(image_types.items()):
+                            with cols[i]:
+                                st.metric(f"{img_type.capitalize()}", count)
+                    
+                        # Show confidence levels
+                        high_confidence = sum(1 for img in st.session_state.extracted_excel_images.values() 
+                                              if img.get('confidence', 0) > 0.7)
+                        st.info(f"🎯 {high_confidence} images classified with high confidence")
+                    
                     else:
                         st.warning("No images found in the Excel file")
-        
+    
         with col2:
-            if st.button("Upload New Images", use_container_width=True):
+            if st.button("📁 Upload New Images", use_container_width=True):
                 st.session_state.image_option = 'upload'
-        
-        # Handle upload new images option
+    
+        # Handle upload new images option (Enhanced)
         if st.session_state.image_option == 'upload':
-            st.subheader("Upload Images")
-            
-            # Image upload for different types
+            st.subheader("📤 Upload Images by Type")
+        
             image_types = ['current', 'primary', 'secondary', 'label']
-            
+            type_descriptions = {
+                'current': 'Current/Present packaging state',
+                'primary': 'Inner/Primary packaging',
+                'secondary': 'Outer/Secondary packaging', 
+                'label': 'Labels, barcodes, or identification'
+            }
+        
+            uploaded_count = 0
             for img_type in image_types:
-                uploaded_img = st.file_uploader(
-                    f"Upload {img_type.capitalize()} Packaging Image",
-                    type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
-                    key=f"img_upload_{img_type}"
-                )
+                with st.expander(f"📋 {img_type.capitalize()} Packaging Image", expanded=False):
+                    st.write(f"*{type_descriptions[img_type]}*")
                 
-                if uploaded_img is not None:
-                    # Convert to base64
-                    img_bytes = uploaded_img.read()
-                    img_b64 = base64.b64encode(img_bytes).decode()
+                    uploaded_img = st.file_uploader(
+                        f"Choose {img_type} image",
+                        type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
+                        key=f"img_upload_{img_type}"
+                    )
+                
+                    if uploaded_img is not None:
+                        # Convert to base64
+                        img_bytes = uploaded_img.read()
+                        img_b64 = base64.b64encode(img_bytes).decode()
                     
-                    # Store in session state
-                    st.session_state.uploaded_images[f"{img_type}_uploaded"] = {
-                        'data': img_b64,
-                        'format': uploaded_img.type.split('/')[-1].upper(),
-                        'size': len(img_bytes),
-                        'type': img_type
-                    }
+                        # Store in session state with enhanced metadata
+                        st.session_state.uploaded_images[f"{img_type}_uploaded"] = {
+                            'data': img_b64,
+                            'format': uploaded_img.type.split('/')[-1].upper(),
+                            'size': (0, 0),  # Will be determined when processing
+                            'type': img_type,
+                            'confidence': 1.0,  # User uploaded = high confidence
+                            'source': 'user_upload'
+                        }
                     
-                    # Preview
-                    st.image(f"data:image/{uploaded_img.type.split('/')[-1]};base64,{img_b64}", 
-                           caption=f"{img_type.capitalize()} Image", width=200)
+                        uploaded_count += 1
+                    
+                        # Preview with analysis
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            st.image(f"data:image/{uploaded_img.type.split('/')[-1]};base64,{img_b64}", width=150)
+                        with col2:
+                            st.success(f"✅ {img_type.capitalize()} image uploaded")
+                            st.write(f"**Size**: {len(img_bytes):,} bytes")
+                            st.write(f"**Format**: {uploaded_img.type}")
         
-        # Continue button
-        if (st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images) or \
-           (st.session_state.image_option == 'upload' and st.session_state.uploaded_images):
-            if st.button("Continue to Final Generation", key="continue_to_step6"):
+            if uploaded_count > 0:
+                st.success(f"📁 {uploaded_count} images uploaded successfully!")
+    
+        # Auto-match option for extracted images
+        if (st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images and hasattr(st.session_state, 'all_row_data')):
+            st.subheader("🎯 Auto-Match Images to Parts")
+        
+            if st.button("🤖 Auto-Match Images to Current Part Data"):
+                with st.spinner("Matching images to part numbers..."):
+                    matched_results = {}
+                    extractor = EnhancedImageExtractor()
+                
+                    for row_data in st.session_state.all_row_data:
+                        part_images = extractor.extract_images_for_part(
+                            st.session_state.data_file,
+                            row_data.get('part_no', ''),
+                            row_data.get('description', ''),
+                            row_data.get('vendor_code', '')
+                        )
+                        matched_results[row_data.get('filename', '')] = {
+                            'images': part_images,
+                            'count': len(part_images)
+                        }
+                
+                    st.session_state.matched_part_images = matched_results
+                
+                    # Show matching summary
+                    total_matched = sum(result['count'] for result in matched_results.values())
+                    st.success(f"🎯 Matched {total_matched} images across {len(matched_results)} parts")
+                
+                    # Detailed breakdown
+                    with st.expander("📊 Matching Details"):
+                        for filename, result in matched_results.items():
+                            st.write(f"**{filename}**: {result['count']} images matched")
+    
+        # Continue button with enhanced validation
+        can_continue = False
+        if st.session_state.image_option == 'extract':
+            can_continue = (st.session_state.extracted_excel_images or hasattr(st.session_state, 'matched_part_images'))
+        elif st.session_state.image_option == 'upload':
+            can_continue = len(st.session_state.uploaded_images) > 0
+    
+        if can_continue:
+            if st.button("🚀 Continue to Final Generation", key="continue_to_step6", type="primary"):
                 navigate_to_step(6)
-        
+        else:
+            st.info("📋 Please extract or upload images before continuing")
+    
         # Back navigation
         if st.button("← Go Back", key="back_from_5"):
             navigate_to_step(4)
-    
-    # Step 6: Generate Final Document
+
+    # Step 6: Generate Final Document (Enhanced)
     elif st.session_state.current_step == 6:
-        st.header("📋 Step 6: Generate Final Documents")
+        st.header("🎨 Step 6: Generate Final Documents with Smart Placement")
     
-        if st.button("Generate All Templates with Images"):
-            with st.spinner("Generating all documents..."):
+        # Configuration options
+        with st.expander("⚙️ Generation Settings", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                use_smart_placement = st.checkbox("🧠 Use Smart Image Placement", value=True)
+                preserve_aspect_ratio = st.checkbox("📐 Preserve Image Aspect Ratios", value=True)
+            with col2:
+                image_quality = st.selectbox("🖼️ Image Quality", ["High", "Medium", "Low"], index=0)
+                max_image_size = st.slider("📏 Max Image Size (cm)", 2, 10, 5)
+    
+        # Generation summary
+        total_templates = len(st.session_state.all_row_data) if hasattr(st.session_state, 'all_row_data') else 0
+        total_images = 0
+    
+        if st.session_state.image_option == 'extract':
+            if hasattr(st.session_state, 'matched_part_images'):
+                total_images = sum(result['count'] for result in st.session_state.matched_part_images.values())
+            else:
+                total_images = len(st.session_state.extracted_excel_images)
+        elif st.session_state.image_option == 'upload':
+            total_images = len(st.session_state.uploaded_images)
+    
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📄 Templates to Generate", total_templates)
+        with col2:
+            st.metric("🖼️ Total Images Available", total_images)
+        with col3:
+            st.metric("🎯 Placement Mode", "Smart" if use_smart_placement else "Fixed")
+    
+        if st.button("🚀 Generate All Templates with Enhanced Placement", type="primary", use_container_width=True):
+            with st.spinner("🎨 Generating templates with smart image placement..."):
                 try:
-                    extractor = ImageExtractor()
+                    extractor = EnhancedImageExtractor()
                     generated_files = []
+                    generation_log = []
                 
-                    for row_data in st.session_state.all_row_data:
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                
+                    for i, row_data in enumerate(st.session_state.all_row_data):
+                        status_text.text(f"Processing template {i+1}/{total_templates}: {row_data['filename']}")
+                        progress_bar.progress((i + 1) / total_templates)
+                    
                         # Load the mapped template for this row
                         workbook = openpyxl.load_workbook(row_data['file_path'])
                         worksheet = workbook.active
@@ -1515,27 +1847,57 @@ def main():
                         images_to_add = {}
                     
                         if st.session_state.image_option == 'extract':
-                            # Extract images specific to this part
-                            images_to_add = extractor.extract_images_for_part(
-                                st.session_state.data_file,
-                                row_data['part_no'],
-                                row_data['description'],
-                                row_data['vendor_code']
-                            )
+                            if hasattr(st.session_state, 'matched_part_images'):
+                                # Use pre-matched part-specific images
+                                matched_data = st.session_state.matched_part_images.get(row_data['filename'], {})
+                                images_to_add = matched_data.get('images', {})
+                            else:
+                                # Extract images specific to this part on-the-fly
+                                images_to_add = extractor.extract_images_for_part(
+                                    st.session_state.data_file,
+                                    row_data.get('part_no', ''),
+                                    row_data.get('description', ''),
+                                    row_data.get('vendor_code', '')
+                                )
                         elif st.session_state.image_option == 'upload':
                             # Use same uploaded images for all templates
                             images_to_add = st.session_state.uploaded_images
                     
-                        # Add images to template
+                        # Add images to template using enhanced placement
                         if images_to_add:
-                            added_count, temp_paths = extractor.add_images_to_template(
-                                worksheet, images_to_add
-                            )
-                            st.write(f"✅ Added {added_count} images to {row_data['filename']}")
+                            if use_smart_placement:
+                                added_count, temp_paths = extractor.smart_add_images_to_template(
+                                    st.session_state.template_file, worksheet, images_to_add
+                                )
+                                placement_method = "Smart Analysis"
+                            else:
+                                added_count, temp_paths = extractor.add_images_to_template(
+                                    worksheet, images_to_add
+                                )
+                                placement_method = "Fixed Positions"
+                        
+                            generation_log.append({
+                                'template': row_data['filename'],
+                                'images_added': added_count,
+                                'placement_method': placement_method,
+                                'part_no': row_data.get('part_no', 'N/A'),
+                                'vendor': row_data.get('vendor_code', 'N/A')
+                            })
+                        else:
+                            generation_log.append({
+                                'template': row_data['filename'],
+                                'images_added': 0,
+                                'placement_method': 'No Images',
+                                'part_no': row_data.get('part_no', 'N/A'),
+                                'vendor': row_data.get('vendor_code', 'N/A')
+                            })
                     
-                        # Save final document
+                        # Save final document with enhanced naming
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        final_filename = f"{row_data['filename'].replace('.xlsx', '')}_{timestamp}.xlsx"
+                        part_no_safe = re.sub(r'[^\w\-_.]', '_', str(row_data.get('part_no', 'Unknown')))
+                        vendor_safe = re.sub(r'[^\w\-_.]', '_', str(row_data.get('vendor_code', 'Unknown')))
+                    
+                        final_filename = f"{vendor_safe}_{part_no_safe}_{timestamp}.xlsx"
                     
                         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                             workbook.save(tmp_file.name)
@@ -1546,52 +1908,211 @@ def main():
                             generated_files.append({
                                 'filename': final_filename,
                                 'data': file_bytes,
-                                'row_info': row_data
+                                'row_info': row_data,
+                                'images_count': len(images_to_add),
+                                'generation_info': generation_log[-1]
                             })
                     
                         workbook.close()
+                    
+                        # Cleanup temporary image files
+                        if 'temp_paths' in locals():
+                            for temp_path in temp_paths:
+                                try:
+                                    os.unlink(temp_path)
+                                except:
+                                    pass
                 
-                    st.success(f"🎉 Generated {len(generated_files)} final templates!")
+                    progress_bar.progress(1.0)
+                    status_text.text("✅ Generation complete!")
                 
-                    # Create download buttons for each file
+                    st.success(f"🎉 Successfully generated {len(generated_files)} enhanced templates!")
+                
+                    # Show generation summary
+                    st.subheader("📊 Generation Summary")
+                
+                    summary_df = pd.DataFrame(generation_log)
+                    col1, col2 = st.columns([2, 1])
+                
+                    with col1:
+                        st.dataframe(summary_df, use_container_width=True)
+                
+                    with col2:
+                        total_images_placed = summary_df['images_added'].sum()
+                        templates_with_images = len(summary_df[summary_df['images_added'] > 0])
+                    
+                        st.metric("🖼️ Total Images Placed", total_images_placed)
+                        st.metric("📄 Templates with Images", templates_with_images)
+                        st.metric("📈 Success Rate", f"{templates_with_images/len(summary_df)*100:.1f}%")
+                
+                    # Enhanced download section
                     st.subheader("📥 Download Generated Templates")
-                    for file_info in generated_files:
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            st.write(f"**{file_info['filename']}**")
-                            st.caption(f"Vendor: {file_info['row_info']['vendor_code']} | Part: {file_info['row_info']['part_no']}")
-                        with col2:
-                            st.download_button(
-                                label="📥 Download",
-                                data=file_info['data'],
-                                file_name=file_info['filename'],
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"download_{file_info['filename']}"
-                            )
                 
-                    # Option to download all as ZIP
-                    if len(generated_files) > 1:
-                        if st.button("📦 Download All as ZIP"):
-                            import zipfile
+                    # Tabs for different download options
+                    tab1, tab2, tab3 = st.tabs(["📋 Individual Downloads", "📦 Bulk Download", "📊 Generation Report"])
+                
+                    with tab1:
+                        for file_info in generated_files:
+                            with st.container():
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                            
+                                with col1:
+                                    st.write(f"**{file_info['filename']}**")
+                                    st.caption(f"Vendor: {file_info['row_info'].get('vendor_code', 'N/A')} | "
+                                               f"Part: {file_info['row_info'].get('part_no', 'N/A')} | "
+                                               f"Images: {file_info['images_count']}")
+                            
+                                with col2:
+                                    st.write(f"📊 {file_info['generation_info']['placement_method']}")
+                                    if file_info['images_count'] > 0:
+                                        st.success(f"✅ {file_info['images_count']} images")
+                                    else:
+                                        st.warning("⚠️ No images")
+                            
+                                with col3:
+                                    st.download_button(
+                                        label="📥 Download",
+                                        data=file_info['data'],
+                                        file_name=file_info['filename'],
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        key=f"download_{file_info['filename']}"
+                                    )
+                            
+                                st.divider()
+                
+                    with tab2:
+                        if len(generated_files) > 1:
+                            # Create ZIP with organized structure
                             zip_buffer = io.BytesIO()
                         
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                # Organize by vendor
+                                vendor_folders = {}
                                 for file_info in generated_files:
-                                    zip_file.writestr(file_info['filename'], file_info['data'])
+                                    vendor = file_info['row_info'].get('vendor_code', 'Unknown_Vendor')
+                                    vendor_safe = re.sub(r'[^\w\-_.]', '_', vendor)
+                                
+                                    if vendor_safe not in vendor_folders:
+                                        vendor_folders[vendor_safe] = []
+                                    vendor_folders[vendor_safe].append(file_info)
+                            
+                                # Add files organized by vendor
+                                for vendor_folder, files in vendor_folders.items():
+                                    for file_info in files:
+                                        zip_path = f"{vendor_folder}/{file_info['filename']}"
+                                        zip_file.writestr(zip_path, file_info['data'])
+                            
+                                # Add generation report
+                                report_content = "Template Generation Report\n"
+                                report_content += "=" * 40 + "\n\n"
+                                report_content += f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                                report_content += f"Total templates: {len(generated_files)}\n"
+                                report_content += f"Total images placed: {total_images_placed}\n"
+                                report_content += f"Placement method: {'Smart Analysis' if use_smart_placement else 'Fixed Positions'}\n\n"
+                            
+                                report_content += "Individual Template Details:\n"
+                                report_content += "-" * 30 + "\n"
+                                for log_entry in generation_log:
+                                    report_content += f"Template: {log_entry['template']}\n"
+                                    report_content += f"  Part No: {log_entry['part_no']}\n"
+                                    report_content += f"  Vendor: {log_entry['vendor']}\n"
+                                    report_content += f"  Images Added: {log_entry['images_added']}\n"
+                                    report_content += f"  Method: {log_entry['placement_method']}\n\n"
+                            
+                                zip_file.writestr("Generation_Report.txt", report_content)
                         
                             zip_buffer.seek(0)
-                            st.download_button(
-                                label="📥 Download ZIP File",
-                                data=zip_buffer.getvalue(),
-                                file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                                mime="application/zip",
-                                key="download_images_zip"
-                            )
+                        
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.info("📁 Organized by vendor folders with generation report included")
+                        
+                            with col2:
+                                st.download_button(
+                                    label="📦 Download All Templates (ZIP)",
+                                    data=zip_buffer.getvalue(),
+                                    file_name=f"Enhanced_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                    mime="application/zip",
+                                    key="download_enhanced_zip",
+                                    use_container_width=True
+                                )
                 
+                    with tab3:
+                        # Detailed generation report
+                        st.write("**📈 Performance Metrics**")
+                    
+                        metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
+                        with metrics_col1:
+                            avg_images_per_template = total_images_placed / len(generated_files) if generated_files else 0
+                            st.metric("📊 Avg Images per Template", f"{avg_images_per_template:.1f}")
+                    
+                        with metrics_col2:
+                            placement_methods = summary_df['placement_method'].value_counts()
+                            most_common_method = placement_methods.index[0] if not placement_methods.empty else "None"
+                            st.metric("🎯 Primary Placement Method", most_common_method)
+                    
+                        with metrics_col3:
+                            templates_without_images = len(summary_df[summary_df['images_added'] == 0])
+                            st.metric("⚠️ Templates Without Images", templates_without_images)
+                    
+                        # Detailed breakdown by vendor
+                        if len(summary_df) > 0:
+                            st.write("**📊 Breakdown by Vendor**")
+                            vendor_summary = summary_df.groupby('vendor').agg({
+                                'images_added': ['count', 'sum', 'mean'],
+                                'template': 'count'
+                            }).round(1)
+                        
+                            vendor_summary.columns = ['Templates', 'Total Images', 'Avg Images', 'Template Count']
+                            st.dataframe(vendor_summary, use_container_width=True)
+            
                 except Exception as e:
-                    st.error(f"Error generating final documents: {e}")
-                    st.write("Traceback:", traceback.format_exc())
+                    st.error(f"❌ Error generating enhanced templates: {e}")
+                    st.write("**Error Details:**")
+                    st.code(traceback.format_exc())
+                
+                    # Provide diagnostic information
+                    st.write("**Diagnostic Information:**")
+                    st.write(f"- Template file exists: {os.path.exists(st.session_state.template_file) if hasattr(st.session_state, 'template_file') else 'No template file'}")
+                    st.write(f"- Data file exists: {os.path.exists(st.session_state.data_file) if hasattr(st.session_state, 'data_file') else 'No data file'}")
+                    st.write(f"- Row data available: {len(st.session_state.all_row_data) if hasattr(st.session_state, 'all_row_data') else 0} rows")
+                    st.write(f"- Image option: {st.session_state.image_option}")
     
+        # Advanced options
+        with st.expander("🛠️ Advanced Options"):
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                if st.button("🔍 Analyze Template Structure"):
+                    if hasattr(st.session_state, 'template_file'):
+                        with st.spinner("Analyzing template..."):
+                            extractor = EnhancedImageExtractor()
+                            zones = extractor.analyze_template_structure(st.session_state.template_file)
+                        
+                            st.write("**Detected Image Placement Zones:**")
+                            for zone_type, zone_info in zones.items():
+                                if zone_info:
+                                    st.success(f"✅ {zone_type}: {zone_info['cell']} "
+                                               f"({zone_info['width_cells']}x{zone_info['height_cells']} cells)")
+                                else:
+                                    st.warning(f"⚠️ {zone_type}: No suitable zone found")
+        
+            with col2:
+                if st.button("📊 Preview Image Assignments") and st.session_state.image_option == 'extract':
+                    if hasattr(st.session_state, 'matched_part_images'):
+                        st.write("**Image-to-Part Assignments:**")
+                        for filename, result in st.session_state.matched_part_images.items():
+                            with st.expander(f"{filename} ({result['count']} images)"):
+                                for img_key, img_data in result['images'].items():
+                                    col1, col2 = st.columns([1, 2])
+                                    with col1:
+                                        st.image(f"data:image/png;base64,{img_data['data']}", width=100)
+                                    with col2:
+                                        st.write(f"**Type**: {img_data['type']}")
+                                        st.write(f"**Confidence**: {img_data.get('confidence', 0.5):.1f}")
+                                        st.write(f"**Size**: {img_data['size']}")
+    
+        # Back navigation
         if st.button("← Go Back", key="back_from_6"):
             navigate_to_step(5)
     
