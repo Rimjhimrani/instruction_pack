@@ -204,7 +204,7 @@ class EnhancedImageExtractor:
             return {}
 
     # ADD THE MISSING METHOD HERE
-    def extract_images_for_part(self, part_number, all_extracted_images):
+    def extract_images_for_part(self, data_file, part_number, all_extracted_images, vendor_code):
         """Extract images relevant to a specific part number"""
         try:
             if not all_extracted_images or 'all_sheets' not in all_extracted_images:
@@ -212,10 +212,13 @@ class EnhancedImageExtractor:
                 return {}
             
             # For now, return all images since we can't filter by part number
-            # You might want to implement part-specific filtering logic here
+            # You might want to implement part-specific filtering logic here based on:
+            # - data_file: the Excel file being processed
+            # - part_number: the specific part number
+            # - vendor_code: the vendor code for additional filtering
             images = all_extracted_images['all_sheets']
             
-            st.write(f"🎯 Found {len(images)} images for part {part_number}")
+            st.write(f"🎯 Found {len(images)} images for part {part_number} (vendor: {vendor_code})")
             return images
             
         except Exception as e:
