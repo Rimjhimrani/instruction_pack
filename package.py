@@ -56,7 +56,7 @@ if 'uploaded_images' not in st.session_state:
 if 'extracted_excel_images' not in st.session_state:
     st.session_state.extracted_excel_images = {}
 
-class ImageExtractor:
+class EnhancedImageExtractor:
     """Advanced image extraction and placement with smart positioning"""
     
     def __init__(self):
