@@ -313,7 +313,7 @@ class ImageExtractor:
             part_specific_images = dict(list(part_specific_images.items())[:4])
 
             # Step 4: assign types in order
-            image_types_order = ['current', 'primary', 'secondary', 'label']
+            image_types_order = ['Current Packaging', 'Primary Packaging', 'Secondary Packaging', 'Label']
             for idx, (key, img_data) in enumerate(part_specific_images.items()):
                 img_data['type'] = image_types_order[idx % len(image_types_order)]
 
