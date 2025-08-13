@@ -272,56 +272,42 @@ class ImageExtractor:
         return self._classify_image_type(index)
     
     def extract_images_for_part(self, excel_file_path, part_no, description, vendor_code=None):
-        """Extract up to 4 images for a specific part number/vendor/description, in correct order."""
-        try:
-            all_images = self.extract_images_from_excel(excel_file_path)
-            if not all_images or 'all_sheets' not in all_images:
-                return {}
-
-            search_terms = [
-                str(term).lower().strip()
-                for term in [vendor_code, part_no, description]
-                if term and str(term).strip()
-            ]
-
-            def matches_search(img_data, key):
-                sheet_name = img_data['sheet'].lower()
-                key_parts = key.lower().split('_')
-                for term in search_terms:
-                    # exact match in sheet name or in key parts
-                    if term == sheet_name or term in key_parts:
-                        return True
-                return False
-            
-            # Step 1: try to find matching images
-            part_specific_images = {
-                key: img_data
-                for key, img_data in all_images['all_sheets'].items()
-                if matches_search(img_data, key)
-            }
-
-            # Step 2: if not enough matches, fill from remaining images
-            if len(part_specific_images) < 4:
-                remaining_needed = 4 - len(part_specific_images)
-                for key, img_data in all_images['all_sheets'].items():
-                    if key not in part_specific_images:
-                        part_specific_images[key] = img_data
-                        if len(part_specific_images) >= 4:
-                            break
-            
-            # Step 3: trim to exactly 4 images max
-            part_specific_images = dict(list(part_specific_images.items())[:4])
-
-            # Step 4: assign types in order
-            image_types_order = ['Current Packaging', 'Primary Packaging', 'Secondary Packaging', 'Label']
-            for idx, (key, img_data) in enumerate(part_specific_images.items()):
-                img_data['type'] = image_types_order[idx % len(image_types_order)]
-
-            return part_specific_images
-        except Exception as e:
-            st.error(f"Error extracting images for part {part_no}: {e}")
+        all_images = self.extract_images_from_excel(excel_file_path)
+        if not all_images or 'all_sheets' not in all_images:
             return {}
 
+        slots = {
+            "current": None,
+            "primary": None,
+            "secondary": None,
+            "label": None
+        }
+
+        header_to_slot = {
+            "Current Packaging": "current",
+            "Primary Packaging": "primary",
+            "Secondary Packaging": "secondary",
+            "Label": "label"
+        }
+
+        for header_name, slot_name in header_to_slot.items():
+            col_value = search_info["column_headers"].get(header_name)
+            if not col_value:
+                continue
+            col_value_lower = str(col_value).lower().strip()
+
+            for key, img_data in all_images['all_sheets'].items():
+                img_filename = os.path.basename(img_data.get('source_path', '')).lower()
+                if col_value_lower in img_filename or col_value_lower in key.lower():
+                    img_data['type'] = slot_name
+                    slots[slot_name] = img_data
+                    break
+        final_images = {}
+        for slot, img_data in slots.items():
+            if img_data:
+                final_images[f"{slot}_{img_data.get('source_path', slot)}"] = img_data
+        return final_images
+        
     def _classify_image_type(self, index):
         """Classify image type based on index (unchanged)"""
         types = ['current', 'primary', 'secondary', 'label']
@@ -1571,12 +1557,24 @@ def main():
                     
                         if st.session_state.image_option == 'extract':
                             # Extract images specific to this part
+                            search_info = {
+                                "part_no": row_data['part_no'],
+                                "description": row_data['description'],
+                                "vendor_code": row_data['vendor_code'],
+                                "column_headers": {
+                                    "Current Packaging": row_data['current_packaging'],
+                                    "Primary Packaging": row_data['primary_packaging'],
+                                    "Secondary Packaging": row_data['secondary_packaging'],
+                                    "Label": row_data['label']
+                                }
+                            }
+                            
+                            # Extract images for this part based on column headers
                             images_to_add = extractor.extract_images_for_part(
                                 st.session_state.data_file,
-                                row_data['part_no'],
-                                row_data['description'],
-                                row_data['vendor_code']
+                                search_info
                             )
+        
                         elif st.session_state.image_option == 'upload':
                             # Use same uploaded images for all templates
                             images_to_add = st.session_state.uploaded_images
