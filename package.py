@@ -1610,7 +1610,6 @@ def main():
                         if len(generated_files) > 1:
                             unique_btn_key = f"download_zip_all_btn_{datetime.now().timestamp()}"
                             if st.button("📦 Download All as ZIP", key=unique_btn_key):
-                                import zipfile
                                 zip_buffer = io.BytesIO()
                                 
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
