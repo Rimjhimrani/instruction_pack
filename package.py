@@ -1608,22 +1608,21 @@ def main():
 
                         # Option to download all as ZIP
                         if len(generated_files) > 1:
-                            unique_btn_key = f"download_zip_all_btn_{datetime.now().timestamp()}"
-                            if st.button("📦 Download All as ZIP", key=unique_btn_key):
+                            if st.button("📦 Download All as ZIP", key=f"zip_btn_{datetime.now().timestamp()}"):
                                 zip_buffer = io.BytesIO()
                                 
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                                for file_info in generated_files:
-                                    zip_file.writestr(file_info['filename'], file_info['data'])
-                                    
-                            zip_buffer.seek(0)
-                            st.download_button(
-                                label="📥 Download ZIP File",
-                                data=zip_buffer.getvalue(),
-                                file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                                mime="application/zip",
-                                key=f"download_images_zip_{datetime.now().timestamp()}"
-                            )
+                                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                                    for file_info in generated_files:
+                                        zip_file.writestr(file_info['filename'], file_info['data'])
+                                        
+                                zip_buffer.seek(0)
+                                st.download_button(
+                                    label="📥 Download ZIP File",
+                                    data=zip_buffer.getvalue(),
+                                    file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                    mime="application/zip"
+                                    key=f"zip_download_{datetime.now().timestamp()}"
+                                )
 
                 except Exception as e:
                     st.error(f"Error generating final documents: {e}")
