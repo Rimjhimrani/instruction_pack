@@ -1562,10 +1562,10 @@ def main():
                                 "description": row_data['description'],
                                 "vendor_code": row_data['vendor_code'],
                                 "column_headers": {
-                                    "Current Packaging": row_data['current_packaging'],
-                                    "Primary Packaging": row_data['primary_packaging'],
-                                    "Secondary Packaging": row_data['secondary_packaging'],
-                                    "Label": row_data['label']
+                                    "Current Packaging": row_data['Current Packaging'],
+                                    "Primary Packaging": row_data['Primary Packaging'],
+                                    "Secondary Packaging": row_data['Secondary Packaging'],
+                                    "Label": row_data['Label']
                                 }
                             }
                             
