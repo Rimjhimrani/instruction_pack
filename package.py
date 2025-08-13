@@ -1620,7 +1620,7 @@ def main():
                                     label="📥 Download ZIP File",
                                     data=zip_buffer.getvalue(),
                                     file_name=f"All_Templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                                    mime="application/zip"
+                                    mime="application/zip",
                                     key=f"zip_download_{datetime.now().timestamp()}"
                                 )
 
