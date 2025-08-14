@@ -812,69 +812,6 @@ class EnhancedImageExtractor:
                     pass
             return False
 
-    def add_images_to_template(self, worksheet, uploaded_images):
-        """Add uploaded images to template at specific positions"""
-        try:
-            added_images = 0
-            temp_image_paths = []
-            
-            # Fixed positions for different image types
-            positions = {
-                'current': 'T3',  # Current packaging at T3
-                'primary': 'A42',  # Primary packaging at A42
-                'secondary': 'F42',  # Secondary packaging at F42 (next column set)
-                'label': 'K42'  # Label at K42 (next column set)
-            }
-            
-            for img_key, img_data in uploaded_images.items():
-                img_type = img_data.get('type', 'current')
-                if img_type in positions:
-                    position = positions[img_type]
-                    success = self._place_image_at_position(
-                        worksheet, img_key, img_data, position,
-                        width_cm=4.3 if img_type != 'current' else 8.3,
-                        height_cm=4.3 if img_type != 'current' else 8.3,
-                        temp_image_paths=temp_image_paths
-                    )
-                    if success:
-                        added_images += 1
-            
-            return added_images, temp_image_paths
-            
-        except Exception as e:
-            st.error(f"Error adding images to template: {e}")
-            return 0, []
-
-    def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
-        """Place a single image at the specified cell position"""
-        try:
-            # Create temporary image file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
-                image_bytes = base64.b64decode(img_data['data'])
-                tmp_img.write(image_bytes)
-                tmp_img_path = tmp_img.name
-            
-            # Create openpyxl image object
-            img = OpenpyxlImage(tmp_img_path)
-            
-            # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
-            img.width = int(width_cm * 37.8)
-            img.height = int(height_cm * 37.8)
-            
-            # Set position using simple anchor
-            img.anchor = cell_position
-            
-            # Add image to worksheet
-            worksheet.add_image(img)
-            
-            # Track temporary file for cleanup
-            temp_image_paths.append(tmp_img_path)
-            
-            return True
-            
-        except Exception as e:
-            st.write(f"❌ Failed to place {img_key} at {cell_position}: {e}")
-            return False
             
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
