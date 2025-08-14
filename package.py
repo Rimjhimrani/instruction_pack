@@ -1513,41 +1513,106 @@ class EnhancedTemplateMapperWithImages:
     
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
-        """Get procedure steps with data substitution"""
+        """Get procedure steps with enhanced data substitution"""
         procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
         if not data_dict:
             return procedures
-
         filled_procedures = []
+    
+        # Debug: Print available data
+        print(f"\n=== DEBUG: Available data in data_dict ===")
+        for key, value in data_dict.items():
+            print(f"  '{key}': '{value}'")
+        print("=" * 50)
+    
         for procedure in procedures:
             filled_procedure = procedure
-
-            # Direct mapping: most placeholders match exactly to data_dict keys
+            # Enhanced mapping with multiple fallback options
             replacements = {
-                '{x No. of Parts}': data_dict.get('x No. of Parts') or data_dict.get('Qty/Veh') or data_dict.get('Quantity'),
-                '{Inner L}': data_dict.get('Inner L'),
-                '{Inner W}': data_dict.get('Inner W'),
-                '{Inner H}': data_dict.get('Inner H'),
-                '{Inner Qty/Pack}': data_dict.get('Inner Qty/Pack'),
-                '{Outer L}': data_dict.get('Outer L'),
-                '{Outer W}': data_dict.get('Outer W'),
-                '{Outer H}': data_dict.get('Outer H'),
-                '{Primary Qty/Pack}': data_dict.get('Primary Qty/Pack'),  # ✅ Only this comes from primary
-                '{Layer}': data_dict.get('Layer'),
-                '{Level}': data_dict.get('Level'),
-                '{Qty/Pack}': data_dict.get('Qty/Pack'),
-                '{Qty/Veh}': data_dict.get('Qty/Veh'),
+                # Quantity mappings - multiple fallbacks
+                '{x No. of Parts}': (
+                    data_dict.get('x No. of Parts') or 
+                    data_dict.get('Qty/Veh') or 
+                    data_dict.get('Quantity') or
+                    data_dict.get('Primary Qty/Pack') or
+                    data_dict.get('Qty/Pack') or
+                    data_dict.get('qty/pack') or
+                    data_dict.get('qty') or
+                    '1'  # Default fallback
+                ),
+            
+                # ALL dimensions - Extract from Excel WITHOUT prefixes
+                '{Inner L}': (
+                    data_dict.get('Inner L') or 
+                    'XXX'
+                ),
+                '{Inner W}': (
+                    data_dict.get('Inner W') or 
+                    'XXX'
+                ),
+                '{Inner H}': (
+                    data_dict.get('Inner H') or 
+                    'XXX'
+                ),
+                # Inner Qty/Pack - Extract WITHOUT prefi
+                '{Inner Qty/Pack}': (
+                    data_dict.get('Inner Qty/Pack') or
+                    data_dict.get('Quantity') or
+                    '1'
+                ),
+            
+                # Secondary/Outer dimensions - Extract WITHOUT prefixes
+                '{Outer L}': (
+                    data_dict.get('Outer L') or 
+                    'XXX'
+                ),
+                '{Outer W}': (
+                    data_dict.get('Outer W') or 
+                    'XXX'
+                ),
+                '{Outer H}': (
+                    data_dict.get('Outer H') or 
+                    'XXX'
+                ),
+            
+                # Primary Qty/Pack (specific for procedures)
+                '{Primary Qty/Pack}': (
+                    data_dict.get('Primary Qty/Pack') or
+                    data_dict.get('Qty/Pack') or
+                    '1'
+                ),
+            
+                # Pallet information - Extract from Excel
+                '{Layer}': (
+                    data_dict.get('Layer') or
+                    data_dict.get('Layers') or
+                    '4'  # Default fallbac
+                ),
+                '{Level}': (
+                    data_dict.get('Level') or
+                    data_dict.get('Levels') or
+                    '3'  # Default fallback
+                ),
+                # Generic Qty/Pack - Extract WITHOUT prefix
+                '{Qty/Pack}': (
+                    data_dict.get('Qty/Pack') or
+                    data_dict.get('Quantity') or
+                    '1'
+                ),
+                '{Qty/Veh}': (
+                    data_dict.get('Qty/Veh') or
+                    '1'
+                )
             }
-
-            # Clean and replace
+            # Debug: Show what replacements are being made
             for placeholder, raw_value in replacements.items():
-                value = self.clean_data_value(raw_value)
-                if not value:
-                    value = 'XXX'
-                filled_procedure = filled_procedure.replace(placeholder, str(value))
-
+                if placeholder in filled_procedure:
+                    clean_value = self.clean_data_value(raw_value)
+                    if not clean_value or clean_value == "":
+                        clean_value = 'XXX'
+                    print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
+                    filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
             filled_procedures.append(filled_procedure)
-
         return filled_procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
