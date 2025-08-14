@@ -1532,12 +1532,6 @@ class EnhancedTemplateMapperWithImages:
                 # Quantity mappings - multiple fallbacks
                 '{x No. of Parts}': (
                     data_dict.get('x No. of Parts') or 
-                    data_dict.get('Qty/Veh') or 
-                    data_dict.get('Quantity') or
-                    data_dict.get('Primary Qty/Pack') or
-                    data_dict.get('Qty/Pack') or
-                    data_dict.get('qty/pack') or
-                    data_dict.get('qty') or
                     '1'  # Default fallback
                 ),
             
