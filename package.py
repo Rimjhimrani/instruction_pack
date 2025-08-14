@@ -878,7 +878,7 @@ class EnhancedImageExtractor:
             
 class EnhancedTemplateMapperWithImages:
     def __init__(self):
-        self.image_extractor = ImageExtractor()
+        self.image_extractor = EnhancedImageExtractor()
         self.similarity_threshold = 0.3
         
         # Enhanced section-based mapping rules (from your working code)
