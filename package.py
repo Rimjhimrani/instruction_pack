@@ -755,41 +755,38 @@ class EnhancedImageExtractor:
             return 0, []
 
     def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
-        """Place a single image at the specified cell position"""
+        """Place a single image at the specified cell position - FIXED VERSION"""
         try:
             # Skip placeholder images
             if img_data.get('placeholder'):
+                st.write(f"⏭️ Skipping placeholder image {img_key}")
                 return True
-                
             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
-            
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
-            
-            # Calculate size based on zone dimensions
-            cell_width_px = 80  # Approximate Excel cell width in pixels
-            cell_height_px = 20  # Approximate Excel cell height in pixels
-            
-            img.width = zone_info['width_cells'] * cell_width_px
-            img.height = zone_info['height_cells'] * cell_height_px
-            
-            # Set position
-            img.anchor = zone_info['cell']
-            
+            # Set image size (converting cm to pixels: 1cm ≈ 37.8 pixels)
+            img.width = int(width_cm * 37.8)
+            img.height = int(height_cm * 37.8)
+            # Set position using simple anchor
+            img.anchor = cell_position
             # Add image to worksheet
             worksheet.add_image(img)
-            
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            
+            st.write(f"✅ Successfully placed {img_key} at {cell_position} (size: {width_cm}x{height_cm}cm)")
             return True
-            
         except Exception as e:
-            st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
+            st.write(f"❌ Failed to place {img_key} at {cell_position}: {e}")
+            # Clean up temp file if it was created
+            if 'tmp_img_path' in locals():
+                try:
+                    os.unlink(tmp_img_path)
+                except:
+                    pass
             return False
 
     def add_images_to_template(self, worksheet, uploaded_images):
