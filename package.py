@@ -936,24 +936,60 @@ class EnhancedTemplateMapperWithImages:
                     'address': 'Vendor Location'
                 }
             },
+            # ENHANCED PROCEDURE INFORMATION SECTION
             'procedure_information': {
                 'section_keywords': [
-                    'procedure information', 'procedure', 'packaging procedure', 'loading details'
+                    'procedure information', 'procedure', 'packaging procedure', 'loading details',
+                    'pallet information', 'pallet details', 'packaging details'
                 ],
                 'field_mappings': {
+                    # X No. of Parts variations
                     'x no. of parts': 'x No. of Parts',
+                    'x no of parts': 'x No. of Parts',
+                    'x number of parts': 'x No. of Parts',
+                    'no. of parts': 'x No. of Parts',
+                    'number of parts': 'x No. of Parts',
+                    # Layer and Level
                     'layer': 'Layer',
+                    'layers': 'Layer',
                     'level': 'Level',
+                    'levels': 'Level',
+                    # Inner dimensions (these should map directly without prefixes)
                     'inner l': 'Inner L',
-                    'inner w': 'Inner W',
+                    'inner w': 'Inner W', 
                     'inner h': 'Inner H',
+                    'inner length': 'Inner L',
+                    'inner width': 'Inner W',
+                    'inner height': 'Inner H',
+                    # Outer dimensions (these should map directly without prefixes)
                     'outer l': 'Outer L',
                     'outer w': 'Outer W',
                     'outer h': 'Outer H',
-                    'inner qty/pack': 'Inner Qty/Pack'
+                    'outer length': 'Outer L',
+                    'outer width': 'Outer W',
+                    'outer height': 'Outer H',
+                    # Inner Qty/Pack
+                    'inner qty/pack': 'Inner Qty/Pack',
+                    'inner quantity': 'Inner Qty/Pack',
+                    'inner qty': 'Inner Qty/Pack'
                 }
             },
+            # ADD NEW SECTION FOR DIRECT DIMENSION MAPPIN
+            'dimensions': {
+                'section_keywords': [
+                    'dimensions', 'measurements', 'size', 'inner', 'outer'
+                ],
+                'field_mappings': {
+                    # Direct mapping for procedure fields (NO PREFIXES)
+                    'inner l': 'Inner L',
+                    'inner w': 'Inner W',
+                    'inner h': 'Inner H', 
 
+                    'outer l': 'Outer L',
+                    'outer w': 'Outer W',
+                    'outer h': 'Outer H'
+                }
+            }
         }
 
     def preprocess_text(self, text):
@@ -977,24 +1013,20 @@ class EnhancedTemplateMapperWithImages:
         try:
             if not text or pd.isna(text):
                 return False
-            
             text = str(text).lower().strip()
             if not text:
                 return False
-        
             print(f"DEBUG is_mappable_field: Checking '{text}'")
-        
+    
             # Skip header-like patterns that should not be treated as fields
             header_exclusions = [
                 'vendor information', 'part information', 'primary packaging', 'secondary packaging',
                 'packaging instruction', 'procedure', 'steps', 'process'
             ]
-        
             for exclusion in header_exclusions:
                 if exclusion in text and 'type' not in text:
                     print(f"DEBUG: Excluding '{text}' as header")
                     return False
-        
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
                 r'packaging\s+type', r'\btype\b',
@@ -1005,31 +1037,34 @@ class EnhancedTemplateMapperWithImages:
                 r'qty[/\s]*pack', r'quantity\b', r'weight\b', r'empty\s+weight',
                 r'\bcode\b', r'\bname\b', r'\bdescription\b', r'\blocation\b',
                 r'part\s+no\b', r'part\s+number\b',
-                # --- New additions for your missing fields ---
+                # Basic fields
                 r'\bdate\b',
                 r'\brev(ision)?\s*no\.?\b',
+                # PROCEDURE-SPECIFIC PATTERNS
                 r'\bx\s*no\.?\s*of\s*parts\b',
-                r'\blayer\b',
-                r'\blevel\b',
-                # Inner dimensions
-                r'\binner\s*l\b',
-                r'\binner\s*w\b',
-                r'\binner\s*h\b',
-                # Outer dimensions
-                r'\bouter\s*l\b',
-                r'\bouter\s*w\b',
-                r'\bouter\s*h\b',
+                r'\bno\.?\s*of\s*parts\b',
+                r'\bnumber\s*of\s*parts\b',
+                r'\blayer\b', r'\blayers\b',
+                r'\blevel\b', r'\blevels\b',
+                # Inner dimensions (CRITICAL FOR PROCEDURES)
+                r'\binner\s*l\b', r'\binner\s*length\b',
+                r'\binner\s*w\b', r'\binner\s*width\b', 
+                r'\binner\s*h\b', r'\binner\s*height\b',
+                r'\binner\s*qty[/\s]*pack\b',
+                # Outer dimensions (CRITICAL FOR PROCEDURES)
+                r'\bouter\s*l\b', r'\bouter\s*length\b',
+                r'\bouter\s*w\b', r'\bouter\s*width\b',
+                r'\bouter\s*h\b', r'\bouter\s*height\b',
+                # Pallet information
+                r'\bpallet\b', r'\bpalletiz\w*\b'
             ]
-        
             for pattern in mappable_patterns:
                 if re.search(pattern, text):
                     print(f"DEBUG: '{text}' matches pattern '{pattern}'")
                     return True
-        
             if text.endswith(':'):
                 print(f"DEBUG: '{text}' ends with colon")
                 return True
-                
             print(f"DEBUG: '{text}' is NOT mappable")
             return False
         except Exception as e:
@@ -1550,81 +1585,115 @@ class EnhancedTemplateMapperWithImages:
         if not data_dict:
             return procedures
         filled_procedures = []
-    
         # Debug: Print available data
         print(f"\n=== DEBUG: Available data in data_dict ===")
         for key, value in data_dict.items():
             print(f"  '{key}': '{value}'")
         print("=" * 50)
-    
         for procedure in procedures:
             filled_procedure = procedure
-        
             # Enhanced mapping with multiple fallback options
             replacements = {
                 # Quantity mappings - multiple fallbacks
                 '{x No. of Parts}': (
                     data_dict.get('x No. of Parts') or 
+                    data_dict.get('X No. of Parts') or
+                    data_dict.get('x no. of parts') or
+                    data_dict.get('X no. of parts') or
                     '1'  # Default fallback
                 ),
-                # ALL dimensions - Extract from Excel WITHOUT prefixes
+                # Inner dimensions - try multiple key variations
                 '{Inner L}': (
                     data_dict.get('Inner L') or 
+                    data_dict.get('inner l') or
+                    data_dict.get('Inner l') or
+                    data_dict.get('INNER L') or
                     'XXX'
                 ),
                 '{Inner W}': (
                     data_dict.get('Inner W') or 
+                    data_dict.get('inner w') or
+                    data_dict.get('Inner w') or
+                    data_dict.get('INNER W') or
                     'XXX'
                 ),
                 '{Inner H}': (
                     data_dict.get('Inner H') or 
+                    data_dict.get('inner h') or
+                    data_dict.get('Inner h') or
+                    data_dict.get('INNER H') or
                     'XXX'
                 ),
-                # Inner Qty/Pack - Extract WITHOUT prefix
+                # Inner Qty/Pack - try multiple variations
                 '{Inner Qty/Pack}': (
                     data_dict.get('Inner Qty/Pack') or
+                    data_dict.get('inner qty/pack') or
+                    data_dict.get('Inner qty/pack') or
+                    data_dict.get('INNER QTY/PACK') or
                     '1'
                 ),
-                # Secondary/Outer dimensions - Extract WITHOUT prefixes
+                # Outer dimensions - try multiple variations
                 '{Outer L}': (
                     data_dict.get('Outer L') or 
+                    data_dict.get('outer l') or
+                    data_dict.get('Outer l') or
+                    data_dict.get('OUTER L') or
                     'XXX'
                 ),
                 '{Outer W}': (
                     data_dict.get('Outer W') or 
+                    data_dict.get('outer w') or
+                    data_dict.get('Outer w') or
+                    data_dict.get('OUTER W') or
                     'XXX'
                 ),
                 '{Outer H}': (
                     data_dict.get('Outer H') or 
+                    data_dict.get('outer h') or
+                    data_dict.get('Outer h') or
+                    data_dict.get('OUTER H') or
                     'XXX'
                 ),
-            
-                # Primary Qty/Pack (specific for procedures)
+                # Primary Qty/Pack - try multiple variations
                 '{Primary Qty/Pack}': (
                     data_dict.get('Primary Qty/Pack') or
+                    data_dict.get('primary qty/pack') or
+                    data_dict.get('Primary qty/pack') or
+                    data_dict.get('PRIMARY QTY/PACK') or
                     '1'
                 ),
-                # Pallet information - Extract from Excel
+                # Layer and Level - try multiple variations
                 '{Layer}': (
                     data_dict.get('Layer') or
+                    data_dict.get('layer') or
+                    data_dict.get('LAYER') or
                     data_dict.get('Layers') or
+                    data_dict.get('layers') or
                     '4'  # Default fallback
                 ),
                 '{Level}': (
                     data_dict.get('Level') or
+                    data_dict.get('level') or
+                    data_dict.get('LEVEL') or
                     data_dict.get('Levels') or
+                    data_dict.get('levels') or
                     '3'  # Default fallback
                 ),
-            
-                # Generic Qty/Pack - Extract WITHOUT prefix
+                # Generic Qty/Pack - try multiple variations
                 '{Qty/Pack}': (
                     data_dict.get('Qty/Pack') or
+                    data_dict.get('qty/pack') or
+                    data_dict.get('QTY/PACK') or
                     data_dict.get('Quantity') or
+                    data_dict.get('quantity') or
                     '1'
                 ),
                 '{Qty/Veh}': (
                     data_dict.get('Qty/Veh') or
+                    data_dict.get('qty/veh') or
+                    data_dict.get('QTY/VEH') or
                     data_dict.get('Qty/Pack') or
+                    data_dict.get('qty/pack') or
                     '1'
                 )
             }
@@ -1634,11 +1703,10 @@ class EnhancedTemplateMapperWithImages:
                     clean_value = self.clean_data_value(raw_value)
                     if not clean_value or clean_value == "":
                         clean_value = 'XXX'
-                        print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
-                        filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
+                    print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
+                    filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
             filled_procedures.append(filled_procedure)
         return filled_procedures
-
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write packaging procedure steps in merged cells B to P starting from Row 28"""
