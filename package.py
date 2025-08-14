@@ -935,7 +935,25 @@ class EnhancedTemplateMapperWithImages:
                     'supplier location': 'Vendor Location',
                     'address': 'Vendor Location'
                 }
-            }
+            },
+            'procedure_information': {
+                'section_keywords': [
+                    'procedure information', 'procedure', 'packaging procedure', 'loading details'
+                ],
+                'field_mappings': {
+                    'x no. of parts': 'x No. of Parts',
+                    'layer': 'Layer',
+                    'level': 'Level',
+                    'inner l': 'Inner L',
+                    'inner w': 'Inner W',
+                    'inner h': 'Inner H',
+                    'outer l': 'Outer L',
+                    'outer w': 'Outer W',
+                    'outer h': 'Outer H',
+                    'inner qty/pack': 'Inner Qty/Pack'
+                }
+            },
+
         }
 
     def preprocess_text(self, text):
