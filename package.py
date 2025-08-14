@@ -678,80 +678,103 @@ class EnhancedImageExtractor:
             return 0, []
     
     def _place_image_smart(self, worksheet, img_key, img_data, zone_info, temp_image_paths):
-        """Place image using smart zone information"""
+        """Place image using smart zone information - FIXED VERSION"""
         try:
             # Handle placeholder images
             if img_data.get('placeholder'):
                 st.write(f"⏭️ Skipping placeholder image {img_key}")
                 return True
-            
-            # Create temporary image file
+             # Create temporary image file
             with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img:
                 image_bytes = base64.b64decode(img_data['data'])
                 tmp_img.write(image_bytes)
                 tmp_img_path = tmp_img.name
-            
             # Create openpyxl image object
             img = OpenpyxlImage(tmp_img_path)
-            
+        
             # Calculate size based on zone dimensions
             cell_width_px = 80  # Approximate Excel cell width in pixels
             cell_height_px = 20  # Approximate Excel cell height in pixels
-            
+        
             img.width = zone_info['width_cells'] * cell_width_px
             img.height = zone_info['height_cells'] * cell_height_px
-            
+        
             # Set position
             img.anchor = zone_info['cell']
-            
+        
             # Add image to worksheet
             worksheet.add_image(img)
-            
+        
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            
+        
+            st.write(f"✅ Successfully placed {img_key} in smart zone at {zone_info['cell']}")
             return True
-            
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
+            # Clean up temp file if it was created
+            if 'tmp_img_path' in locals():
+                try:
+                    os.unlink(tmp_img_path)
+                except:
+                    pass
             return False
-
+        
     def add_images_to_template(self, worksheet, uploaded_images):
-        """Add uploaded images to template at specific positions"""
+        """Add uploaded images to template at specific positions - ENHANCED WITH DEBUGGING"""
         try:
             added_images = 0
             temp_image_paths = []
-            
+        
+            st.write(f"🔍 Starting image placement process with {len(uploaded_images)} images")
+        
             # Fixed positions for different image types
             positions = {
-                'current': 'T3',  # Current packaging at T3
-                'primary': 'A42',  # Primary packaging at A42
-                'secondary': 'F42',  # Secondary packaging at F42 (next column set)
-                'label': 'K42'  # Label at K42 (next column set)
+                'current': 'T3',      # Current packaging at T3
+                'primary': 'A42',     # Primary packaging at A42
+                'secondary': 'F42',   # Secondary packaging at F42
+                'label': 'K42'        # Label at K42
             }
-            
+        
             for img_key, img_data in uploaded_images.items():
+                st.write(f"📍 Processing image: {img_key}")
+            
                 # Skip placeholder images
                 if img_data.get('placeholder'):
                     st.write(f"⏭️ Skipping placeholder for {img_key}")
                     continue
-                    
                 img_type = img_data.get('type', 'current')
+                st.write(f"🏷️ Image type: {img_type}")
+            
                 if img_type in positions:
                     position = positions[img_type]
+                    st.write(f"📍 Target position: {position}")
+                
+                    # Different sizes for different types
+                    if img_type == 'current':
+                        width_cm, height_cm = 8.3, 8.3
+                    else:
+                        width_cm, height_cm = 4.3, 4.3
+                
+                    st.write(f"📏 Image size: {width_cm}x{height_cm} cm")
+                
                     success = self._place_image_at_position(
                         worksheet, img_key, img_data, position,
-                        width_cm=4.3 if img_type != 'current' else 8.3,
-                        height_cm=4.3 if img_type != 'current' else 8.3,
-                        temp_image_paths=temp_image_paths
+                        width_cm, height_cm, temp_image_paths
                     )
+                
                     if success:
                         added_images += 1
-            
-            return added_images, temp_image_paths
-            
+                        st.write(f"✅ Successfully added {img_key} to template")
+                    else:
+                        st.write(f"❌ Failed to add {img_key} to template")
+                else:
+                    st.write(f"⚠️ Unknown image type: {img_type}")
+                st.write(f"📊 Final result: {added_images} images successfully added to template")
+                return added_images, temp_image_paths
         except Exception as e:
-            st.error(f"Error adding images to template: {e}")
+            st.error(f"❌ Error in add_images_to_template: {e}")
+            st.write(f"Error details: {str(e)}")
             return 0, []
 
     def _place_image_at_position(self, worksheet, img_key, img_data, cell_position, width_cm, height_cm, temp_image_paths):
