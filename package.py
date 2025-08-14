@@ -1459,6 +1459,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
             return False, []
+            
     def map_data_with_section_context_for_row(self, template_fields, data_df, row_idx):
         """Map data for specific row"""
         mapping_results = {}
@@ -2064,34 +2065,86 @@ def main():
         # Auto-match option for extracted images
         if (st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images and hasattr(st.session_state, 'all_row_data')):
             st.subheader("🎯 Auto-Match Images to Parts")
-        
             if st.button("🤖 Auto-Match Images to Current Part Data"):
                 with st.spinner("Matching images to part numbers..."):
                     matched_results = {}
                     extractor = EnhancedImageExtractor()
-                
-                    for row_data in st.session_state.all_row_data:
+                    # Store the extracted images in the correct format expected by the method
+                    all_extracted_images = {'all_sheets': st.session_state.extracted_excel_images}
+                    for idx, row_data in enumerate(st.session_state.all_row_data):
+                        part_no = row_data.get('part_no', f'Part_{idx}')
+                        vendor_code = row_data.get('vendor_code', 'Unknown')
+                        st.write(f"🔍 Processing part: {part_no}")
+                        # Correct method call with proper parameters
                         part_images = extractor.extract_images_for_part(
                             st.session_state.data_file,
-                            row_data.get('part_no', ''),
-                            row_data.get('description', ''),
-                            row_data.get('vendor_code', '')
+                            part_no,
+                            all_extracted_images,  # This was missing!
+                            vendor_code,
+                            current_row=idx + 2  # Assuming row 1 is header, so data starts from row 2
                         )
-                        matched_results[row_data.get('filename', '')] = {
-                            'images': part_images,
-                            'count': len(part_images)
-                        }
                 
+                        if part_images:
+                            matched_results[row_data.get('filename', f'Part_{idx}')] = {
+                                'images': part_images,
+                                'count': len(part_images),
+                                'part_no': part_no,
+                                'vendor': vendor_code
+                            }
+                            st.write(f"✅ Found {len(part_images)} images for {part_no}")
+                        else:
+                            st.write(f"⚠️ No images found for {part_no}")
+                            matched_results[row_data.get('filename', f'Part_{idx}')] = {
+                                'images': {},
+                                'count': 0,
+                                'part_no': part_no,
+                                'vendor': vendor_code
+                            }
                     st.session_state.matched_part_images = matched_results
-                
                     # Show matching summary
                     total_matched = sum(result['count'] for result in matched_results.values())
-                    st.success(f"🎯 Matched {total_matched} images across {len(matched_results)} parts")
-                
+                    parts_with_images = len([r for r in matched_results.values() if r['count'] > 0])
+            
+                    st.success(f"🎯 Matched {total_matched} images across {parts_with_images}/{len(matched_results)} parts")
+            
                     # Detailed breakdown
                     with st.expander("📊 Matching Details"):
                         for filename, result in matched_results.items():
-                            st.write(f"**{filename}**: {result['count']} images matched")
+                            if result['count'] > 0:
+                                st.success(f"**{result['part_no']}** ({result['vendor']}): {result['count']} images")
+                                # Show image types found
+                                image_types = {}
+                                for img_key, img_data in result['images'].items():
+                                    img_type = img_data.get('type', 'unknown')
+                                    image_types[img_type] = image_types.get(img_type, 0) + 1
+                                type_summary = ", ".join([f"{t}: {c}" for t, c in image_types.items()])
+                                st.caption(f"Types found: {type_summary}")
+                            else:
+                                st.warning(f"**{result['part_no']}** ({result['vendor']}): No images")
+        # Also add this debugging section to help diagnose issues:
+        if st.session_state.image_option == 'extract':
+            with st.expander("🔍 Debug Information", expanded=False):
+                st.write("**Available Data:**")
+                st.write(f"- Extracted images: {len(st.session_state.extracted_excel_images)}")
+                st.write(f"- Row data available: {hasattr(st.session_state, 'all_row_data')}")
+                if hasattr(st.session_state, 'all_row_data'):
+                    st.write(f"- Number of rows: {len(st.session_state.all_row_data)}")
+                    st.write("- Sample row data:", st.session_state.all_row_data[0] if st.session_state.all_row_data else "None")
+        
+                st.write("**Image Types Distribution:**")
+                if st.session_state.extracted_excel_images:
+                    type_counts = {}
+                    for img_key, img_data in st.session_state.extracted_excel_images.items():
+                        img_type = img_data.get('type', 'unknown')
+                        type_counts[img_type] = type_counts.get(img_type, 0) + 1
+                    for img_type, count in type_counts.items():
+                        st.write(f"- {img_type}: {count} images")
+                st.write("**Row-Image Mapping:**")
+                extractor_temp = EnhancedImageExtractor()
+                if hasattr(extractor_temp, 'row_image_mapping'):
+                    st.write(f"Row mapping available: {len(extractor_temp.row_image_mapping)} rows")
+                else:
+                    st.write("Row mapping not built yet")
     
         # Continue button with enhanced validation
         can_continue = False
