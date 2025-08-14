@@ -1004,7 +1004,21 @@ class EnhancedTemplateMapperWithImages:
                 r'\blength\b', r'\bwidth\b', r'\bheight\b',
                 r'qty[/\s]*pack', r'quantity\b', r'weight\b', r'empty\s+weight',
                 r'\bcode\b', r'\bname\b', r'\bdescription\b', r'\blocation\b',
-                r'part\s+no\b', r'part\s+number\b'
+                r'part\s+no\b', r'part\s+number\b',
+                # --- New additions for your missing fields ---
+                r'\bdate\b',
+                r'\brev(ision)?\s*no\.?\b',
+                r'\bx\s*no\.?\s*of\s*parts\b',
+                r'\blayer\b',
+                r'\blevel\b',
+                # Inner dimensions
+                r'\binner\s*l\b',
+                r'\binner\s*w\b',
+                r'\binner\s*h\b',
+                # Outer dimensions
+                r'\bouter\s*l\b',
+                r'\bouter\s*w\b',
+                r'\bouter\s*h\b',
             ]
         
             for pattern in mappable_patterns:
