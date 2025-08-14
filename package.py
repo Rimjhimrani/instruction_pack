@@ -661,7 +661,7 @@ class EnhancedImageExtractor:
                         target_zone['height_cells'] = 15  # Taller for 8.3cm
                     else:
                         # Smaller zone for other types
-                        target_zone['width_cells'] = 4  # Standard for 4.3cm
+                        target_zone['width_cells'] = 2  # Standard for 4.3cm
                         target_zone['height_cells'] = 7  # Standard for 4.3cm
                     
                     success = self._place_image_smart(
