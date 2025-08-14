@@ -657,7 +657,7 @@ class EnhancedImageExtractor:
                     # Use detected zone - but update zone size based on image type
                     if img_type == 'current':
                         # Larger zone for current packaging
-                        target_zone['width_cells'] = 7  # Wider for 8.3cm
+                        target_zone['width_cells'] = 4  # Wider for 8.3cm
                         target_zone['height_cells'] = 15  # Taller for 8.3cm
                     else:
                         # Smaller zone for other types
