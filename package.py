@@ -835,6 +835,14 @@ class EnhancedTemplateMapperWithImages:
         
         # Enhanced section-based mapping rules (from your working code)
         self.section_mappings = {
+            'general_information': {
+                'section_keywords': ['general information', 'document info', 'metadata'],
+                'field_mappings': {
+                    'date': 'Date',
+                    'revision no': 'Revision No'
+                }
+            },
+            
             'primary_packaging': {
                 'section_keywords': [
                     'primary packaging instruction', 'primary packaging', 'primary', 
@@ -858,6 +866,7 @@ class EnhancedTemplateMapperWithImages:
                     'pack weight': 'Primary Pack Weight'
                 }
             },
+            
             'secondary_packaging': {
                 'section_keywords': [
                     'secondary packaging instruction', 'secondary packaging', 'secondary', 
@@ -882,6 +891,7 @@ class EnhancedTemplateMapperWithImages:
                     'pack weight': 'Secondary Pack Weight'
                 }
             },
+            
             'part_information': {
                 'section_keywords': [
                     'part information', 'part info', 'part', 'component', 'item', 'component information'
@@ -908,6 +918,7 @@ class EnhancedTemplateMapperWithImages:
                     'unit weight': 'Part Unit Weight'
                 }
             },
+            
             'vendor_information': {
                 'section_keywords': [
                     'vendor information', 'vendor info', 'vendor', 'supplier', 'supplier information', 'supplier info'
