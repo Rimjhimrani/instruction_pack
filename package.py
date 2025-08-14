@@ -629,11 +629,10 @@ class EnhancedImageExtractor:
         try:
             added_images = 0
             temp_image_paths = []
-            
             # Analyze template structure
             image_zones = self.analyze_template_structure(template_path)
             st.write(f"🎯 Detected {len([z for z in image_zones.values() if z])} placement zones")
-            
+        
             # Map image types to detected zones
             type_zone_mapping = {
                 'current': image_zones.get('current_packaging'),
@@ -641,18 +640,35 @@ class EnhancedImageExtractor:
                 'secondary': image_zones.get('secondary_packaging'),
                 'label': image_zones.get('label')
             }
-            
+        
             for img_key, img_data in uploaded_images.items():
                 img_type = img_data.get('type', 'current')
                 target_zone = type_zone_mapping.get(img_type)
-                
+            
+                # Set size based on image type - FIXED SIZE LOGIC
+                if img_type == 'current':
+                    width_cm, height_cm = 8.3, 8.3  # Current packaging is larger
+                    st.write(f"📏 Current packaging size: {width_cm}x{height_cm} cm")
+                else:
+                    width_cm, height_cm = 4.3, 4.3  # Primary, secondary, label are smaller
+                    st.write(f"📏 {img_type.capitalize()} packaging size: {width_cm}x{height_cm} cm")
+            
                 if target_zone:
-                    # Use detected zone
+                    # Use detected zone - but update zone size based on image type
+                    if img_type == 'current':
+                        # Larger zone for current packaging
+                        target_zone['width_cells'] = 6  # Wider for 8.3cm
+                        target_zone['height_cells'] = 6  # Taller for 8.3cm
+                    else:
+                        # Smaller zone for other types
+                        target_zone['width_cells'] = 3  # Standard for 4.3cm
+                        target_zone['height_cells'] = 3  # Standard for 4.3cm
+                    
                     success = self._place_image_smart(
                         worksheet, img_key, img_data, target_zone, temp_image_paths
                     )
                 else:
-                    # Fallback to default positions
+                    # Fallback to default positions with correct sizes
                     fallback_positions = {
                         'current': 'T3',
                         'primary': 'A42',
@@ -662,17 +678,16 @@ class EnhancedImageExtractor:
                     position = fallback_positions.get(img_type, 'A1')
                     success = self._place_image_at_position(
                         worksheet, img_key, img_data, position,
-                        width_cm=4.3, height_cm=4.3, temp_image_paths=temp_image_paths
+                        width_cm, height_cm, temp_image_paths  # Use the correct size variables
                     )
-                
+            
                 if success:
                     added_images += 1
                     st.write(f"✅ Placed {img_type} image at detected zone")
                 else:
                     st.write(f"⚠️ Failed to place {img_type} image")
-            
             return added_images, temp_image_paths
-            
+        
         except Exception as e:
             st.error(f"Error in smart image placement: {e}")
             return 0, []
