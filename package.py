@@ -839,7 +839,7 @@ class EnhancedTemplateMapperWithImages:
                 'section_keywords': ['general information', 'document info', 'metadata'],
                 'field_mappings': {
                     'date': 'Date',
-                    'revision no': 'Revision No'
+                    'revision no': 'Revision No.'
                 }
             },
             
@@ -1080,6 +1080,18 @@ class EnhancedTemplateMapperWithImages:
                     try:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
+
+                            # ✅ Force capture Date & Revision No anywhere in sheet
+                            if cell_value.lower() in ['date', 'revision no.', 'revision no']:
+                                fields[cell.coordinate] = {
+                                    'value': cell_value,
+                                    'row': cell.row,
+                                    'column': cell.column,
+                                    'merged_range': None,
+                                    'section_context': 'general_information',
+                                    'is_mappable': True
+                                }
+                                continue  # Skip normal check, already added
                         
                             if cell_value and self.is_mappable_field(cell_value):
                                 cell_coord = cell.coordinate
