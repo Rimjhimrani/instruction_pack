@@ -1527,6 +1527,7 @@ class EnhancedTemplateMapperWithImages:
     
         for procedure in procedures:
             filled_procedure = procedure
+        
             # Enhanced mapping with multiple fallback options
             replacements = {
                 # Quantity mappings - multiple fallbacks
@@ -1534,7 +1535,6 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('x No. of Parts') or 
                     '1'  # Default fallback
                 ),
-            
                 # ALL dimensions - Extract from Excel WITHOUT prefixes
                 '{Inner L}': (
                     data_dict.get('Inner L') or 
@@ -1548,13 +1548,11 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('Inner H') or 
                     'XXX'
                 ),
-                # Inner Qty/Pack - Extract WITHOUT prefi
+                # Inner Qty/Pack - Extract WITHOUT prefix
                 '{Inner Qty/Pack}': (
                     data_dict.get('Inner Qty/Pack') or
-                    data_dict.get('Quantity') or
                     '1'
                 ),
-            
                 # Secondary/Outer dimensions - Extract WITHOUT prefixes
                 '{Outer L}': (
                     data_dict.get('Outer L') or 
@@ -1572,21 +1570,20 @@ class EnhancedTemplateMapperWithImages:
                 # Primary Qty/Pack (specific for procedures)
                 '{Primary Qty/Pack}': (
                     data_dict.get('Primary Qty/Pack') or
-                    data_dict.get('Qty/Pack') or
                     '1'
                 ),
-            
                 # Pallet information - Extract from Excel
                 '{Layer}': (
                     data_dict.get('Layer') or
                     data_dict.get('Layers') or
-                    '4'  # Default fallbac
+                    '4'  # Default fallback
                 ),
                 '{Level}': (
                     data_dict.get('Level') or
                     data_dict.get('Levels') or
                     '3'  # Default fallback
                 ),
+            
                 # Generic Qty/Pack - Extract WITHOUT prefix
                 '{Qty/Pack}': (
                     data_dict.get('Qty/Pack') or
@@ -1595,6 +1592,7 @@ class EnhancedTemplateMapperWithImages:
                 ),
                 '{Qty/Veh}': (
                     data_dict.get('Qty/Veh') or
+                    data_dict.get('Qty/Pack') or
                     '1'
                 )
             }
@@ -1604,10 +1602,11 @@ class EnhancedTemplateMapperWithImages:
                     clean_value = self.clean_data_value(raw_value)
                     if not clean_value or clean_value == "":
                         clean_value = 'XXX'
-                    print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
-                    filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
+                        print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
+                        filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
             filled_procedures.append(filled_procedure)
         return filled_procedures
+
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
         """Write packaging procedure steps in merged cells B to P starting from Row 28"""
