@@ -1456,8 +1456,9 @@ class EnhancedTemplateMapperWithImages:
                             data_dict[mapping['template_field']] = data_value
 
                             # ✅ Step 2: Force map critical fields if the column matches
-                            if data_col in col_map:
-                                data_dict[col_map[data_col]] = data_value
+                            normalized_col = self.preprocess_text(data_col)
+                            if normalized_col in col_map:
+                                data_dict[col_map[normalized_col]] = data_value
                     
                             # Store filename components
                             field_name_lower = mapping['template_field'].lower()
