@@ -1413,7 +1413,8 @@ class EnhancedTemplateMapperWithImages:
                 "Inner W": ["inner w", "inner width", "inner w-mm"],
                 "Inner H": ["inner h", "inner height", "inner h-mm"],
                 "Layer":   ["layer", "layers"],
-                "Level":   ["level", "levels"]
+                "Level":   ["level", "levels"],
+                "x No. of Parts": ["X NO. OF PARTS", "X No. of Parts"]
             }
             # Build a map from Excel columns -> canonical keys
             col_map = {}
