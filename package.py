@@ -1437,6 +1437,16 @@ class EnhancedTemplateMapperWithImages:
                         
                             # Store in data_dict for procedure generation
                             data_dict[mapping['template_field']] = data_value
+                            # ✅ Normalize keys for procedure step usage
+                            normalized_key = self.preprocess_text(mapping['template_field'])
+                            if "outer l" in normalized_key: data_dict["Outer L"] = data_value
+                            if "outer w" in normalized_key: data_dict["Outer W"] = data_value
+                            if "outer h" in normalized_key: data_dict["Outer H"] = data_value
+                            if "inner l" in normalized_key: data_dict["Inner L"] = data_value
+                            if "inner w" in normalized_key: data_dict["Inner W"] = data_value
+                            if "inner h" in normalized_key: data_dict["Inner H"] = data_value
+                            if "layer" in normalized_key:   data_dict["Layer"]   = data_value
+                            if "level" in normalized_key:   data_dict["Level"]   = data_value
                         
                             # Store filename components
                             field_name_lower = mapping['template_field'].lower()
