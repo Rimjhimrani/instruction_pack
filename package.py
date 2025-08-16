@@ -1422,7 +1422,7 @@ class EnhancedTemplateMapperWithImages:
                 for col in data_df.columns:
                     col_norm = self.preprocess_text(col)
                     if any(v in col_norm for v in variants):
-                        col_map[col] = canonical
+                        col_map[col_norm] = canonical
                         break
             # Store all row data for multi-template generation
             st.session_state.all_row_data = []
