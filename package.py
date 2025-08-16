@@ -1403,51 +1403,61 @@ class EnhancedTemplateMapperWithImages:
             # Read data from Excel with proper NaN handling
             data_df = pd.read_excel(data_path)
             data_df = data_df.fillna("")
-        
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
-        
+            # ✅ Step 1: Force direct capture of critical procedure columns if present in Excel
+            critical_cols = {
+                "Outer L": ["outer l", "outer length", "outer l-mm"],
+                "Outer W": ["outer w", "outer width", "outer w-mm"],
+                "Outer H": ["outer h", "outer height", "outer h-mm"],
+                "Inner L": ["inner l", "inner length", "inner l-mm"],
+                "Inner W": ["inner w", "inner width", "inner w-mm"],
+                "Inner H": ["inner h", "inner height", "inner h-mm"],
+                "Layer":   ["layer", "layers"],
+                "Level":   ["level", "levels"]
+            }
+            # Build a map from Excel columns -> canonical keys
+            col_map = {}
+            for canonical, variants in critical_cols.items():
+                for col in data_df.columns:
+                    col_norm = self.preprocess_text(col)
+                    if any(v in col_norm for v in variants):
+                        col_map[col] = canonical
+                        break
             # Store all row data for multi-template generation
             st.session_state.all_row_data = []
-        
+    
             # Process each row
             for row_idx in range(len(data_df)):
                 st.write(f"🔄 Processing row {row_idx + 1}/{len(data_df)}")
-            
                 # Load fresh template for each row
                 workbook = openpyxl.load_workbook(template_path)
                 worksheet = workbook.active
-            
+        
                 # Find template fields with section context
                 template_fields, _ = self.find_template_fields_with_context_and_images(template_path)
-            
+        
                 # Map data with section context for current row
                 mapping_results = self.map_data_with_section_context_for_row(template_fields, data_df, row_idx)
-            
+        
                 # Apply mappings to template
                 mapping_count = 0
                 data_dict = {}  # Store mapped data for procedure generation
                 filename_parts = {}  # Store parts for filename
-            
+        
                 for coord, mapping in mapping_results.items():
                     if mapping['is_mappable'] and mapping['data_column']:
                         try:
                             data_col = mapping['data_column']
                             raw_value = data_df[data_col].iloc[row_idx]  # Use current row
                             data_value = self.clean_data_value(raw_value)
-                        
+                    
                             # Store in data_dict for procedure generation
                             data_dict[mapping['template_field']] = data_value
-                            # ✅ Normalize keys for procedure step usage
-                            normalized_key = self.preprocess_text(mapping['template_field'])
-                            if "outer l" in normalized_key: data_dict["Outer L"] = data_value
-                            if "outer w" in normalized_key: data_dict["Outer W"] = data_value
-                            if "outer h" in normalized_key: data_dict["Outer H"] = data_value
-                            if "inner l" in normalized_key: data_dict["Inner L"] = data_value
-                            if "inner w" in normalized_key: data_dict["Inner W"] = data_value
-                            if "inner h" in normalized_key: data_dict["Inner H"] = data_value
-                            if "layer" in normalized_key:   data_dict["Layer"]   = data_value
-                            if "level" in normalized_key:   data_dict["Level"]   = data_value
-                        
+
+                            # ✅ Step 2: Force map critical fields if the column matches
+                            if data_col in col_map:
+                                data_dict[col_map[data_col]] = data_value
+                    
                             # Store filename components
                             field_name_lower = mapping['template_field'].lower()
                             if any(term in field_name_lower for term in ['vendor code', 'supplier code', 'code']):
@@ -1456,38 +1466,39 @@ class EnhancedTemplateMapperWithImages:
                                 filename_parts['part_no'] = data_value
                             elif 'description' in field_name_lower or 'desc' in field_name_lower:
                                 filename_parts['description'] = data_value
-                        
+                    
                             # Find target cell and write data
                             target_cell_coord = self.find_data_cell_for_label(worksheet, mapping['field_info'])
-                        
+                    
                             if target_cell_coord and data_value:
                                 target_cell = worksheet[target_cell_coord]
                                 target_cell.value = data_value
                                 mapping_count += 1
-                            
                         except Exception as e:
-                            st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
-            
+                        st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
                 # Add procedure steps
                 if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
-                    steps_written = self.write_procedure_steps_to_template(worksheet, st.session_state.selected_packaging_type, data_dict)
-            
+                    steps_written = self.write_procedure_steps_to_template(
+                        worksheet, 
+                        st.session_state.selected_packaging_type, 
+                        data_dict
+                    )
                 # Generate filename
                 vendor_code = filename_parts.get('vendor_code', 'Unknown')
                 part_no = filename_parts.get('part_no', 'Unknown') 
                 description = filename_parts.get('description', 'Unknown')
-            
+        
                 # Clean filename parts
                 vendor_code = re.sub(r'[^\w\-_]', '', str(vendor_code))[:10]
                 part_no = re.sub(r'[^\w\-_]', '', str(part_no))[:15]
                 description = re.sub(r'[^\w\-_]', '', str(description))[:20]
-            
+        
                 filename = f"{vendor_code}_{part_no}_{description}.xlsx"
-            
+        
                 # Save workbook to temporary file
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
                     workbook.save(tmp_file.name)
-                
+            
                     # Store row data
                     row_data = {
                         'row_index': row_idx,
@@ -1500,13 +1511,10 @@ class EnhancedTemplateMapperWithImages:
                         'description': description
                     }
                     st.session_state.all_row_data.append(row_data)
-            
                 workbook.close()
                 st.write(f"✅ Row {row_idx + 1} processed: {mapping_count} fields mapped -> {filename}")
-        
             st.success(f"🎉 Successfully processed {len(data_df)} rows!")
             return True, st.session_state.all_row_data
-        
         except Exception as e:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
