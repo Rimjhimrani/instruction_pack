@@ -1475,7 +1475,7 @@ class EnhancedTemplateMapperWithImages:
                                 target_cell.value = data_value
                                 mapping_count += 1
                         except Exception as e:
-                        st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
+                            st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
                 # Add procedure steps
                 if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
                     steps_written = self.write_procedure_steps_to_template(
