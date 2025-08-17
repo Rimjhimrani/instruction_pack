@@ -937,73 +937,59 @@ class EnhancedTemplateMapperWithImages:
                 }
             },
             # ENHANCED PROCEDURE INFORMATION SECTION
-            'procedure_information': {
-                'section_keywords': [
-                    'procedure information', 'procedure', 'packaging procedure', 'loading details',
-                    'pallet information', 'pallet details', 'packaging details',
-                    'loading instruction', 'packing procedure', 'palletization'
-                ],
-                'field_mappings': {
-                    # *** ENHANCED X NO. OF PARTS VARIATIONS ***
-                    'x no. of parts': 'x No. of Parts',
-                    'x no of parts': 'x No. of Parts',
-                    'x number of parts': 'x No. of Parts',
-                    'no. of parts': 'x No. of Parts',
-                    'no of parts': 'x No. of Parts',
-                    'number of parts': 'x No. of Parts',
-                    'parts per pack': 'x No. of Parts',
-                    'parts quantity': 'x No. of Parts',
-                    'qty of parts': 'x No. of Parts',
-                    'part qty': 'x No. of Parts',
-                    # *** ENHANCED LAYER AND LEVEL VARIATIONS ***
-                    'layer': 'Layer',
-                    'layers': 'Layer',
-                    'max layer': 'Layer',
-                    'maximum layer': 'Layer',
-                    'pallet layer': 'Layer',
-                    'boxes per layer': 'Layer',
-                    'level': 'Level',
-                    'levels': 'Level',
-                    'max level': 'Level',
-                    'maximum level': 'Level',
-                    'stacking level': 'Level',
-                    'pallet level': 'Level',
-                    'max levels': 'Level',
-                    'maximum levels': 'Level',
-                    # Inner dimensions (these should map directly without prefixes)
-                    'inner l': 'Inner L',
-                    'inner w': 'Inner W', 
-                    'inner h': 'Inner H',
-                    'inner length': 'Inner L',
-                    'inner width': 'Inner W',
-                    'inner height': 'Inner H',
-                    # Outer dimensions (these should map directly without prefixes)
-                    'outer l': 'Outer L',
-                    'outer w': 'Outer W',
-                    'outer h': 'Outer H',
-                    'outer length': 'Outer L',
-                    'outer width': 'Outer W',
-                    'outer height': 'Outer H',
-                    # Inner Qty/Pack
-                    'inner qty/pack': 'Inner Qty/Pack',
-                    'inner quantity': 'Inner Qty/Pack',
-                    'inner qty': 'Inner Qty/Pack'
-                }
-            },
-            # ADD NEW SECTION FOR DIRECT DIMENSION MAPPIN
-            'dimensions': {
-                'section_keywords': [
-                    'dimensions', 'measurements', 'size', 'inner', 'outer'
-                ],
-                'field_mappings': {
-                    # Direct mapping for procedure fields (NO PREFIXES)
-                    'inner l': 'Inner L',
-                    'inner w': 'Inner W',
-                    'inner h': 'Inner H', 
-
-                    'outer l': 'Outer L',
-                    'outer w': 'Outer W',
-                    'outer h': 'Outer H'
+            # ... existing code ...
+    
+        # *** FIXED PROCEDURE INFORMATION SECTION ***
+        'procedure_information': {
+            'section_keywords': [
+                'procedure information', 'procedure', 'packaging procedure', 'loading details',
+                'pallet information', 'pallet details', 'packaging details',
+                'loading instruction', 'packing procedure', 'palletization'
+            ],
+            'field_mappings': {
+                # *** CRITICAL FIX: Map to EXACT column names from your Excel ***
+            
+                # x No. of Parts mapping (Column AH: "x No. of Parts")
+                'x no. of parts': 'x No. of Parts',        # Maps template field → Excel column
+                'x no of parts': 'x No. of Parts',
+                'x number of parts': 'x No. of Parts',
+                'no. of parts': 'x No. of Parts',
+                'no of parts': 'x No. of Parts',
+                'number of parts': 'x No. of Parts',
+                'parts': 'x No. of Parts',                 # Simple "Parts" maps to "x No. of Parts"
+            
+                # Layer mapping (Column AF: "Layer") 
+                'layer': 'Layer',                          # Maps template field → Excel column
+                'layers': 'Layer',
+                'max layer': 'Layer',
+                'maximum layer': 'Layer',
+                'pallet layer': 'Layer',
+                'boxes per layer': 'Layer',
+            
+                # Level mapping (Column AG: "Level")
+                'level': 'Level',                          # Maps template field → Excel column
+                'levels': 'Level',
+                'max level': 'Level',
+                'maximum level': 'Level',
+                'stacking level': 'Level',
+                'pallet level': 'Level',
+            
+                # Keep your existing inner/outer mappings...
+                'inner l': 'Inner L',
+                'inner w': 'Inner W', 
+                'inner h': 'Inner H',
+                'inner length': 'Inner L',
+                'inner width': 'Inner W',
+                'inner height': 'Inner H',
+                'outer l': 'Outer L',
+                'outer w': 'Outer W',
+                'outer h': 'Outer H',
+                'outer length': 'Outer L',
+                'outer width': 'Outer W',
+                'outer height': 'Outer H',
+                'inner qty/pack': 'Inner Qty/Pack',
+                'inner quantity': 'Inner Qty/Pack',
+                'inner qty': 'Inner Qty/Pack'
                 }
             }
         }
@@ -1310,14 +1296,20 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
 
+# *** ADDITIONAL FIX: Enhanced mapping logic to handle direct column matches ***
+
     def map_data_with_section_context(self, template_fields, data_df):
-        """Enhanced mapping with better section-aware logic"""
+        """Enhanced mapping with EXACT column name matching"""
         mapping_results = {}
         used_columns = set()
 
         try:
             data_columns = data_df.columns.tolist()
             print(f"DEBUG: Available data columns: {data_columns}")
+        
+            # Print exact column names for debugging
+            for i, col in enumerate(data_columns):
+                print(f"  Column {i}: '{col}'")
 
             for coord, field in template_fields.items():
                 try:
@@ -1328,24 +1320,135 @@ class EnhancedTemplateMapperWithImages:
 
                     print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")
 
-                    # *** CRITICAL FIX: Force procedure context for specific fields ***
+                    # *** CRITICAL FIX 1: Direct exact column name matching first ***
+                    field_lower = self.preprocess_text(field_value)
+                
+                    # Try direct column name matching first (highest priority)
+                    for data_col in data_columns:
+                        if data_col in used_columns:
+                            continue
+                        
+                        col_lower = self.preprocess_text(data_col)
+                    
+                        # Exact matches
+                        if col_lower == field_lower:
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT EXACT MATCH: '{field_value}' → '{data_col}'")
+                            break
+                    
+                        # Special case matches for your specific columns
+                        if field_lower == 'layer' and col_lower == 'layer':
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT LAYER MATCH: '{field_value}' → '{data_col}'")
+                            break
+                        elif field_lower == 'level' and col_lower == 'level':
+                            best_match = data_col  
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT LEVEL MATCH: '{field_value}' → '{data_col}'")
+                            break
+                        elif ('x no' in field_lower or 'no. of parts' in field_lower) and 'x no of parts' in col_lower:
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT X NO OF PARTS MATCH: '{field_value}' → '{data_col}'")
+                            break
+
+                    # If direct match found, use it
+                    if best_match:
+                        mapping_results[coord] = {
+                            'template_field': field_value,
+                            'data_column': best_match,
+                            'similarity': best_score,
+                            'field_info': field,
+                            'section_context': section_context,
+                            'is_mappable': True
+                        }
+                        used_columns.add(best_match)
+                        print(f"DEBUG: DIRECT MATCH SUCCESS: {field_value} → {best_match}")
+                        continue
+
+                    # *** CRITICAL FIX 2: Force procedure context for specific fields ***
                     if not section_context:
-                        field_lower = self.preprocess_text(field_value)
-                        procedure_fields = ['level', 'levels', 'layer', 'layers', 'x no of parts', 'no of parts', 'number of parts']
+                        procedure_fields = ['layer', 'level', 'x no of parts', 'no. of parts', 'parts']
                         if any(proc_field in field_lower for proc_field in procedure_fields):
                             section_context = 'procedure_information'
                             print(f"DEBUG: FORCED procedure context for field '{field_value}'")
 
-                    # Rest of your existing mapping logic...
-                    # [Keep the existing section mapping logic here]
-                
+                    # *** EXISTING SECTION MAPPING LOGIC (if direct match failed) ***
+                    if section_context and section_context in self.section_mappings:
+                        section_mappings = self.section_mappings[section_context]['field_mappings']
+                        print(f"DEBUG: Section mappings: {section_mappings}")
+
+                        for template_field_key, data_column_pattern in section_mappings.items():
+                            normalized_field_value = self.preprocess_text(field_value)
+                            normalized_template_key = self.preprocess_text(template_field_key)
+
+                            print(f"DEBUG: Comparing '{normalized_field_value}' with '{normalized_template_key}'")
+
+                            if normalized_field_value == normalized_template_key:
+                                # For procedure_information, don't add section prefix
+                                if section_context == 'procedure_information':
+                                    expected_column = data_column_pattern  # Use exact pattern (e.g., "Layer", "Level")
+                                else:
+                                    section_prefix = section_context.split('_')[0].capitalize()
+                                    expected_column = f"{section_prefix} {data_column_pattern}".strip()
+                            
+                                print(f"DEBUG: Looking for expected column: '{expected_column}'")
+
+                                for data_col in data_columns:
+                                    if data_col in used_columns:
+                                        continue
+                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
+                                        best_match = data_col
+                                        best_score = 1.0
+                                        print(f"DEBUG: SECTION EXACT MATCH FOUND: {data_col}")
+                                        break
+
+                                # Fallback to similarity match if no exact match
+                                if not best_match:
+                                    for data_col in data_columns:
+                                        if data_col in used_columns:
+                                            continue
+                                        similarity = self.calculate_similarity(expected_column, data_col)
+                                        if similarity > best_score and similarity >= self.similarity_threshold:
+                                            best_score = similarity
+                                            best_match = data_col
+                                            print(f"DEBUG: SECTION SIMILARITY MATCH: {data_col} (score: {similarity})")
+                                break
+
+                    # Final fallback: general similarity matching
+                    if not best_match:
+                        for data_col in data_columns:
+                            if data_col in used_columns:
+                                continue
+                            similarity = self.calculate_similarity(field_value, data_col)
+                            if similarity > best_score and similarity >= self.similarity_threshold:
+                                best_score = similarity
+                                best_match = data_col
+
+                    print(f"DEBUG: Final mapping result - Field: '{field_value}' → Column: '{best_match}' (Score: {best_score})")
+                    print("=" * 50)
+
+                    # Save mapping
+                    mapping_results[coord] = {
+                        'template_field': field_value,
+                        'data_column': best_match,
+                        'similarity': best_score,
+                        'field_info': field,
+                        'section_context': section_context,
+                        'is_mappable': best_match is not None
+                    }
+
+                    if best_match:
+                        used_columns.add(best_match)
+
                 except Exception as e:
                     st.error(f"Error mapping field {coord}: {e}")
                     continue
 
         except Exception as e:
             st.error(f"Error in map_data_with_section_context: {e}")
-
         return mapping_results
 
     def clean_data_value(self, value):
@@ -1641,7 +1744,6 @@ class EnhancedTemplateMapperWithImages:
                         clean_value = 'XXX'
                     print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
                     filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
-        
             filled_procedures.append(filled_procedure)
     
         return filled_procedures
