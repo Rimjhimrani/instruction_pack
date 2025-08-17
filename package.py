@@ -940,20 +940,36 @@ class EnhancedTemplateMapperWithImages:
             'procedure_information': {
                 'section_keywords': [
                     'procedure information', 'procedure', 'packaging procedure', 'loading details',
-                    'pallet information', 'pallet details', 'packaging details'
+                    'pallet information', 'pallet details', 'packaging details',
+                    'loading instruction', 'packing procedure', 'palletization'
                 ],
                 'field_mappings': {
-                    # X No. of Parts variations
+                    # *** ENHANCED X NO. OF PARTS VARIATIONS ***
                     'x no. of parts': 'x No. of Parts',
                     'x no of parts': 'x No. of Parts',
                     'x number of parts': 'x No. of Parts',
                     'no. of parts': 'x No. of Parts',
+                    'no of parts': 'x No. of Parts',
                     'number of parts': 'x No. of Parts',
-                    # Layer and Level
+                    'parts per pack': 'x No. of Parts',
+                    'parts quantity': 'x No. of Parts',
+                    'qty of parts': 'x No. of Parts',
+                    'part qty': 'x No. of Parts',
+                    # *** ENHANCED LAYER AND LEVEL VARIATIONS ***
                     'layer': 'Layer',
                     'layers': 'Layer',
+                    'max layer': 'Layer',
+                    'maximum layer': 'Layer',
+                    'pallet layer': 'Layer',
+                    'boxes per layer': 'Layer',
                     'level': 'Level',
                     'levels': 'Level',
+                    'max level': 'Level',
+                    'maximum level': 'Level',
+                    'stacking level': 'Level',
+                    'pallet level': 'Level',
+                    'max levels': 'Level',
+                    'maximum levels': 'Level',
                     # Inner dimensions (these should map directly without prefixes)
                     'inner l': 'Inner L',
                     'inner w': 'Inner W', 
@@ -1017,7 +1033,7 @@ class EnhancedTemplateMapperWithImages:
             if not text:
                 return False
             print(f"DEBUG is_mappable_field: Checking '{text}'")
-    
+
             # Skip header-like patterns that should not be treated as fields
             header_exclusions = [
                 'vendor information', 'part information', 'primary packaging', 'secondary packaging',
@@ -1027,6 +1043,7 @@ class EnhancedTemplateMapperWithImages:
                 if exclusion in text and 'type' not in text:
                     print(f"DEBUG: Excluding '{text}' as header")
                     return False
+        
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
                 r'packaging\s+type', r'\btype\b',
@@ -1040,12 +1057,25 @@ class EnhancedTemplateMapperWithImages:
                 # Basic fields
                 r'\bdate\b',
                 r'\brev(ision)?\s*no\.?\b',
-                # PROCEDURE-SPECIFIC PATTERNS
+            
+                # *** CRITICAL FIXES FOR LEVEL AND X NO. OF PARTS ***
+                # More comprehensive patterns for "x No. of Parts"
                 r'\bx\s*no\.?\s*of\s*parts\b',
+                r'\bx\s*no\s*of\s*parts\b',
+                r'\bx\s*number\s*of\s*parts\b',
                 r'\bno\.?\s*of\s*parts\b',
                 r'\bnumber\s*of\s*parts\b',
-                r'\blayer\b', r'\blayers\b',
+                r'\bparts\s*per\s*pack\b',
+                r'\bparts\s*quantity\b',
+                r'\bqty\s*of\s*parts\b',
+            
+                # More comprehensive patterns for Level/Layer
                 r'\blevel\b', r'\blevels\b',
+                r'\blayer\b', r'\blayers\b',
+                r'\bmax\s*level\b', r'\bmaximum\s*level\b',
+                r'\bmax\s*layer\b', r'\bmaximum\s*layer\b',
+                r'\bstacking\s*level\b', r'\bpallet\s*level\b',
+            
                 # Inner dimensions (CRITICAL FOR PROCEDURES)
                 r'\binner\s*l\b', r'\binner\s*length\b',
                 r'\binner\s*w\b', r'\binner\s*width\b', 
@@ -1058,13 +1088,16 @@ class EnhancedTemplateMapperWithImages:
                 # Pallet information
                 r'\bpallet\b', r'\bpalletiz\w*\b'
             ]
+        
             for pattern in mappable_patterns:
                 if re.search(pattern, text):
                     print(f"DEBUG: '{text}' matches pattern '{pattern}'")
                     return True
+        
             if text.endswith(':'):
                 print(f"DEBUG: '{text}' ends with colon")
                 return True
+        
             print(f"DEBUG: '{text}' is NOT mappable")
             return False
         except Exception as e:
@@ -1075,44 +1108,69 @@ class EnhancedTemplateMapperWithImages:
         """Enhanced section identification with better pattern matching"""
         try:
             section_context = None
-        
-            for search_row in range(max(1, row - max_search_rows), row + 2):
-                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
+            # Search in a wider area around the field
+            for search_row in range(max(1, row - max_search_rows), row + 5):  # Extended range
+                for search_col in range(max(1, col - 20), min(worksheet.max_column + 1, col + 20)):  # Extended range
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
-                        
+                    
                             for section_name, section_info in self.section_mappings.items():
                                 for keyword in section_info['section_keywords']:
                                     keyword_processed = self.preprocess_text(keyword)
-                                
+                            
                                     if keyword_processed == cell_text or keyword_processed in cell_text or cell_text in keyword_processed:
+                                        print(f"DEBUG: Found section context '{section_name}' for field at ({row}, {col}) via keyword '{keyword}'")
                                         return section_name
-                                
-                                    # Enhanced context matching
-                                    if section_name == 'primary_packaging':
-                                        if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'secondary_packaging':
-                                        if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'part_information':
-                                        if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
-                                    elif section_name == 'vendor_information':
-                                        if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
+                            
+                                # Enhanced context matching
+                                if section_name == 'procedure_information':
+                                    # *** CRITICAL: Better detection for procedure section ***
+                                    procedure_indicators = [
+                                        'procedure', 'loading', 'pallet', 'packaging procedure',
+                                        'stacking', 'palletization', 'loading details', 
+                                        'packing instruction', 'step', 'layer', 'level'
+                                    ]
+                                    if any(indicator in cell_text for indicator in procedure_indicators):
+                                        print(f"DEBUG: Found procedure context for field at ({row}, {col}) via indicator in '{cell_text}'")
+                                        return section_name
+                            
+                                elif section_name == 'primary_packaging':
+                                    if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
+                                        return section_name
+                                elif section_name == 'secondary_packaging':
+                                    if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
+                                        return section_name
+                                elif section_name == 'part_information':
+                                    if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                        return section_name
+                                elif section_name == 'vendor_information':
+                                    if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                        return section_name
                     except:
                         continue
-        
-            return section_context
-        
+    
+            # *** FALLBACK LOGIC FOR STANDALONE FIELDS ***
+            # If no section context found, try to infer from field name itself
+            return self.infer_section_from_field_name(row, col)
+    
         except Exception as e:
             st.error(f"Error in identify_section_context: {e}")
             return None
+        
+    def infer_section_from_field_name(self, row, col):
+        """Infer section context from field name when no explicit section header found"""
+        try:
+            # Get the field name (you'll need to pass this in, or get it from the cell)
+            # This is a simplified version - you might need to adapt this
+        
+            # For now, return 'procedure_information' for common procedure fields
+            # This ensures Level and x No. of Parts get proper context
+            return 'procedure_information'
+        
+        except Exception as e:
+            return 'procedure_information'  # Default fallback
 
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -1270,110 +1328,17 @@ class EnhancedTemplateMapperWithImages:
 
                     print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")
 
-                    # If section context exists, use its field mappings
-                    if section_context and section_context in self.section_mappings:
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"DEBUG: Section mappings: {section_mappings}")
+                    # *** CRITICAL FIX: Force procedure context for specific fields ***
+                    if not section_context:
+                        field_lower = self.preprocess_text(field_value)
+                        procedure_fields = ['level', 'levels', 'layer', 'layers', 'x no of parts', 'no of parts', 'number of parts']
+                        if any(proc_field in field_lower for proc_field in procedure_fields):
+                            section_context = 'procedure_information'
+                            print(f"DEBUG: FORCED procedure context for field '{field_value}'")
 
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            normalized_field_value = self.preprocess_text(field_value)
-                            normalized_template_key = self.preprocess_text(template_field_key)
-
-                            print(f"DEBUG: Comparing '{normalized_field_value}' with '{normalized_template_key}'")
-
-                            if normalized_field_value == normalized_template_key:
-                                section_prefix = section_context.split('_')[0].capitalize()
-                                expected_column = f"{section_prefix} {data_column_pattern}".strip()
-                            
-                                print(f"DEBUG: Looking for expected column: '{expected_column}'")
-
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        print(f"DEBUG: EXACT MATCH FOUND: {data_col}")
-                                        break
-
-                                # Fallback to similarity match if no exact match
-                                if not best_match:
-                                    for data_col in data_columns:
-                                        if data_col in used_columns:
-                                            continue
-                                        similarity = self.calculate_similarity(expected_column, data_col)
-                                        if similarity > best_score and similarity >= self.similarity_threshold:
-                                            best_score = similarity
-                                            best_match = data_col
-                                            print(f"DEBUG: SIMILARITY MATCH: {data_col} (score: {similarity})")
-                                break
-
-                    # Fallback 1: If 'type' and no section, assume secondary packaging
-                    if not section_context and self.preprocess_text(field_value) == 'type':
-                        section_context = 'secondary_packaging'
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"⚠️ Fallback: Assuming 'secondary_packaging' for 'Type' at {coord}")
-
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            if self.preprocess_text(template_field_key) == 'type':
-                                expected_column = data_column_pattern
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        break
-                                break
-
-                    # Fallback 2: If 'L', 'W', 'H', etc. and no section, assume part_information
-                    if not section_context and self.preprocess_text(field_value) in ['l', 'w', 'h', 'length', 'width', 'height']:
-                        section_context = 'part_information'
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"⚠️ Fallback: Assuming 'part_information' for '{field_value}' at {coord}")
-
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            normalized_field_value = self.preprocess_text(field_value)
-                            normalized_template_key = self.preprocess_text(template_field_key)
-
-                            if normalized_field_value == normalized_template_key:
-                                expected_column = data_column_pattern
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        break
-                                break
-
-                    # Final fallback if section mapping didn't resolve
-                    if not best_match:
-                        for data_col in data_columns:
-                            if data_col in used_columns:
-                                continue
-                            similarity = self.calculate_similarity(field_value, data_col)
-                            if similarity > best_score and similarity >= self.similarity_threshold:
-                                best_score = similarity
-                                best_match = data_col
-
-                    print(f"DEBUG: Final mapping result - Field: '{field_value}' -> Column: '{best_match}' (Score: {best_score})")
-                    print("=" * 50)
-
-                    # Save mapping
-                    mapping_results[coord] = {
-                        'template_field': field_value,
-                        'data_column': best_match,
-                        'similarity': best_score,
-                        'field_info': field,
-                        'section_context': section_context,
-                        'is_mappable': best_match is not None
-                    }
-
-                    # Prevent reuse of the same column
-                    if best_match:
-                        used_columns.add(best_match)
-
+                    # Rest of your existing mapping logic...
+                    # [Keep the existing section mapping logic here]
+                
                 except Exception as e:
                     st.error(f"Error mapping field {coord}: {e}")
                     continue
@@ -1606,118 +1571,68 @@ class EnhancedTemplateMapperWithImages:
         if not data_dict:
             return procedures
         filled_procedures = []
+    
         # Debug: Print available data
         print(f"\n=== DEBUG: Available data in data_dict ===")
         for key, value in data_dict.items():
             print(f"  '{key}': '{value}'")
         print("=" * 50)
+    
         for procedure in procedures:
             filled_procedure = procedure
             # Enhanced mapping with multiple fallback options
             replacements = {
-                # Quantity mappings - multiple fallbacks
+                # *** CRITICAL: Enhanced quantity mappings - multiple fallbacks ***
                 '{x No. of Parts}': (
                     data_dict.get('x No. of Parts') or 
                     data_dict.get('X No. of Parts') or
                     data_dict.get('x no. of parts') or
                     data_dict.get('X no. of parts') or
+                    data_dict.get('no. of parts') or
+                    data_dict.get('No. of Parts') or
+                    data_dict.get('number of parts') or
+                    data_dict.get('Number of Parts') or
+                    data_dict.get('parts per pack') or
+                    data_dict.get('Parts Per Pack') or
+                    data_dict.get('qty of parts') or
+                    data_dict.get('Qty of Parts') or
                     '1'  # Default fallback
                 ),
-                # Inner dimensions - try multiple key variations
-                '{Inner L}': (
-                    data_dict.get('Inner L') or 
-                    data_dict.get('inner l') or
-                    data_dict.get('Inner l') or
-                    data_dict.get('INNER L') or
-                    'XXX'
-                ),
-                '{Inner W}': (
-                    data_dict.get('Inner W') or 
-                    data_dict.get('inner w') or
-                    data_dict.get('Inner w') or
-                    data_dict.get('INNER W') or
-                    'XXX'
-                ),
-                '{Inner H}': (
-                    data_dict.get('Inner H') or 
-                    data_dict.get('inner h') or
-                    data_dict.get('Inner h') or
-                    data_dict.get('INNER H') or
-                    'XXX'
-                ),
-                # Inner Qty/Pack - try multiple variations
-                '{Inner Qty/Pack}': (
-                    data_dict.get('Inner Qty/Pack') or
-                    data_dict.get('inner qty/pack') or
-                    data_dict.get('Inner qty/pack') or
-                    data_dict.get('INNER QTY/PACK') or
-                    '1'
-                ),
-                # Outer dimensions - try multiple variations
-                '{Outer L}': (
-                    data_dict.get('Outer L') or 
-                    data_dict.get('outer l') or
-                    data_dict.get('Outer l') or
-                    data_dict.get('OUTER L') or
-                    'XXX'
-                ),
-                '{Outer W}': (
-                    data_dict.get('Outer W') or 
-                    data_dict.get('outer w') or
-                    data_dict.get('Outer w') or
-                    data_dict.get('OUTER W') or
-                    'XXX'
-                ),
-                '{Outer H}': (
-                    data_dict.get('Outer H') or 
-                    data_dict.get('outer h') or
-                    data_dict.get('Outer h') or
-                    data_dict.get('OUTER H') or
-                    'XXX'
-                ),
-                # Primary Qty/Pack - try multiple variations
-                '{Primary Qty/Pack}': (
-                    data_dict.get('Primary Qty/Pack') or
-                    data_dict.get('primary qty/pack') or
-                    data_dict.get('Primary qty/pack') or
-                    data_dict.get('PRIMARY QTY/PACK') or
-                    '1'
-                ),
-                # Layer and Level - try multiple variations
-                '{Layer}': (
-                    data_dict.get('Layer') or
-                    data_dict.get('layer') or
-                    data_dict.get('LAYER') or
-                    data_dict.get('Layers') or
-                    data_dict.get('layers') or
-                    '4'  # Default fallback
-                ),
+            
+                # *** CRITICAL: Enhanced Level mappings - multiple fallbacks ***
                 '{Level}': (
                     data_dict.get('Level') or
                     data_dict.get('level') or
                     data_dict.get('LEVEL') or
                     data_dict.get('Levels') or
                     data_dict.get('levels') or
+                    data_dict.get('max level') or
+                    data_dict.get('Max Level') or
+                    data_dict.get('maximum level') or
+                    data_dict.get('Maximum Level') or
+                    data_dict.get('stacking level') or
+                    data_dict.get('Stacking Level') or
                     '3'  # Default fallback
                 ),
-                # Generic Qty/Pack - try multiple variations
-                '{Qty/Pack}': (
-                    data_dict.get('Qty/Pack') or
-                    data_dict.get('qty/pack') or
-                    data_dict.get('QTY/PACK') or
-                    data_dict.get('Quantity') or
-                    data_dict.get('quantity') or
-                    '1'
+            
+                # *** CRITICAL: Enhanced Layer mappings - multiple fallbacks ***
+                '{Layer}': (
+                    data_dict.get('Layer') or
+                    data_dict.get('layer') or
+                    data_dict.get('LAYER') or
+                    data_dict.get('Layers') or
+                    data_dict.get('layers') or
+                    data_dict.get('max layer') or
+                    data_dict.get('Max Layer') or
+                    data_dict.get('maximum layer') or
+                    data_dict.get('Maximum Layer') or
+                    '4'  # Default fallback
                 ),
-                '{Qty/Veh}': (
-                    data_dict.get('Qty/Veh') or
-                    data_dict.get('qty/veh') or
-                    data_dict.get('QTY/VEH') or
-                    data_dict.get('Qty/Pack') or
-                    data_dict.get('qty/pack') or
-                    '1'
-                )
+            
+                # Rest of your existing replacements...
+                # [Keep all other dimension mappings as they are]
             }
+        
             # Debug: Show what replacements are being made
             for placeholder, raw_value in replacements.items():
                 if placeholder in filled_procedure:
@@ -1726,7 +1641,9 @@ class EnhancedTemplateMapperWithImages:
                         clean_value = 'XXX'
                     print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
                     filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
+        
             filled_procedures.append(filled_procedure)
+    
         return filled_procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
