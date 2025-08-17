@@ -1599,7 +1599,14 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in map_data_with_section_context_for_row: {e}")
 
         return mapping_results
-    
+        
+    def safe_get(data_dict, variants, default=""):
+        for k, v in data_dict.items():
+            if str(k).strip().lower() in [s.lower() for s in variants]:
+                if v not in [None, "", "nan", "NaN"]:
+                    return v
+        return default
+        
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
         """Get procedure steps with enhanced data substitution"""
@@ -1617,13 +1624,7 @@ class EnhancedTemplateMapperWithImages:
             # Enhanced mapping with multiple fallback options
             replacements = {
                 # Quantity mappings - multiple fallbacks
-                '{x No. of Parts}': (
-                    data_dict.get('x No. of Parts') or 
-                    data_dict.get('X No. of Parts') or
-                    data_dict.get('x no. of parts') or
-                    data_dict.get('X no. of parts') or
-                    '1'  # Default fallback
-                ),
+                '{x No. of Parts}': safe_get(data_dict, ['x No. of Parts', 'x no of parts', 'no of parts'], '1'),
                 # Inner dimensions - try multiple key variations
                 '{Inner L}': (
                     data_dict.get('Inner L') or 
@@ -1693,13 +1694,7 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('layers') or
                     '4'  # Default fallback
                 ),
-                '{Level}': (
-                    data_dict.get('Level') or
-                    data_dict.get('level') or
-                    data_dict.get('LEVEL') or
-                    data_dict.get('Levels') or
-                    data_dict.get('levels') or
-                    '3'  # Default fallback
+                '{Level}': safe_get(data_dict, ['Level', 'level', 'levels'], '3'),
                 ),
                 # Generic Qty/Pack - try multiple variations
                 '{Qty/Pack}': (
