@@ -1421,8 +1421,9 @@ class EnhancedTemplateMapperWithImages:
             for canonical, variants in critical_cols.items():
                 for col in data_df.columns:
                     col_norm = self.preprocess_text(col)
-                    if any(v in col_norm for v in variants):
+                    if any(col_norm == self.preprocess_text(v) for v in variants):
                         col_map[col_norm] = canonical
+                        print(f"DEBUG: Matched column '{col}' ({col_norm}) -> '{canonical}'")
                         break
             # Store all row data for multi-template generation
             st.session_state.all_row_data = []
