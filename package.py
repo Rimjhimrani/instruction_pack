@@ -1694,7 +1694,7 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('layers') or
                     '4'  # Default fallback
                 ),
-                '{Level}': safe_get(data_dict, ['Level', 'level', 'levels'], '3')',
+                '{Level}': safe_get(data_dict, ['Level', 'level', 'levels'], '3'),
                 # Generic Qty/Pack - try multiple variations
                 '{Qty/Pack}': (
                     data_dict.get('Qty/Pack') or
