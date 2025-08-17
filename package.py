@@ -1384,18 +1384,19 @@ class EnhancedTemplateMapperWithImages:
         return mapping_results
 
     def clean_data_value(self, value):
-        """Clean data value to handle NaN, None, and empty values"""
-        if pd.isna(value) or value is None:
+        """Clean data value to handle NaN, None, and empty values safely"""
+        try:
+            # If it's a number (int/float) and not NaN → keep it
+            if isinstance(value, (int, float)) and not pd.isna(value):
+                return str(int(value)) if float(value).is_integer() else str(value)
+            # Convert everything else to string
+            str_value = str(value).strip()
+            # Handle NaN/None/null-like cases
+            if not str_value or str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a']:
+                return ""
+            return str_value
+        except Exception:
             return ""
-        
-        # Convert to string and strip whitespace
-        str_value = str(value).strip()
-        
-        # Handle common representations of empty/null values
-        if str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a', '']:
-            return ""
-            
-        return str_value
 
     def map_template_with_data(self, template_path, data_path):
         """Enhanced mapping with section-based approach and multiple row processing"""
