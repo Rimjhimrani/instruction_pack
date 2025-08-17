@@ -1384,19 +1384,18 @@ class EnhancedTemplateMapperWithImages:
         return mapping_results
 
     def clean_data_value(self, value):
-        """Clean data value to handle NaN, None, and empty values safely"""
-        try:
-            # If it's a number (int/float) and not NaN → keep it
-            if isinstance(value, (int, float)) and not pd.isna(value):
-                return str(int(value)) if float(value).is_integer() else str(value)
-            # Convert everything else to string
-            str_value = str(value).strip()
-            # Handle NaN/None/null-like cases
-            if not str_value or str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a']:
-                return ""
-            return str_value
-        except Exception:
+        """Clean data value to handle NaN, None, and empty values"""
+        if pd.isna(value) or value is None:
             return ""
+        
+        # Convert to string and strip whitespace
+        str_value = str(value).strip()
+        
+        # Handle common representations of empty/null values
+        if str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a', '']:
+            return ""
+            
+        return str_value
 
     def map_template_with_data(self, template_path, data_path):
         """Enhanced mapping with section-based approach and multiple row processing"""
@@ -1599,14 +1598,7 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in map_data_with_section_context_for_row: {e}")
 
         return mapping_results
-        
-    def safe_get(data_dict, variants, default=""):
-        for k, v in data_dict.items():
-            if str(k).strip().lower() in [s.lower() for s in variants]:
-                if v not in [None, "", "nan", "NaN"]:
-                    return v
-        return default
-        
+    
     # Keep your packaging procedure methods
     def get_procedure_steps(self, packaging_type, data_dict=None):
         """Get procedure steps with enhanced data substitution"""
@@ -1624,7 +1616,13 @@ class EnhancedTemplateMapperWithImages:
             # Enhanced mapping with multiple fallback options
             replacements = {
                 # Quantity mappings - multiple fallbacks
-                '{x No. of Parts}': safe_get(data_dict, ['x No. of Parts', 'x no of parts', 'no of parts'], '1'),
+                '{x No. of Parts}': (
+                    data_dict.get('x No. of Parts') or 
+                    data_dict.get('X No. of Parts') or
+                    data_dict.get('x no. of parts') or
+                    data_dict.get('X no. of parts') or
+                    '1'  # Default fallback
+                ),
                 # Inner dimensions - try multiple key variations
                 '{Inner L}': (
                     data_dict.get('Inner L') or 
@@ -1694,7 +1692,14 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('layers') or
                     '4'  # Default fallback
                 ),
-                '{Level}': safe_get(data_dict, ['Level', 'level', 'levels'], '3'),
+                '{Level}': (
+                    data_dict.get('Level') or
+                    data_dict.get('level') or
+                    data_dict.get('LEVEL') or
+                    data_dict.get('Levels') or
+                    data_dict.get('levels') or
+                    '3'  # Default fallback
+                ),
                 # Generic Qty/Pack - try multiple variations
                 '{Qty/Pack}': (
                     data_dict.get('Qty/Pack') or
