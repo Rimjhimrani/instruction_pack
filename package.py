@@ -1388,8 +1388,9 @@ class EnhancedTemplateMapperWithImages:
 
                             if normalized_field_value == normalized_template_key:
                                 # For procedure_information, don't add section prefix
-                                if section_context == 'procedure_information':
-                                    expected_column = data_column_pattern  # Use exact pattern (e.g., "Layer", "Level")
+                                if section_context == "procedure_information":
+                                    # For procedure fields, DO NOT prefix — match exactly
+                                    expected_column = data_column_pattern 
                                 else:
                                     section_prefix = section_context.split('_')[0].capitalize()
                                     expected_column = f"{section_prefix} {data_column_pattern}".strip()
