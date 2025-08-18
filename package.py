@@ -720,7 +720,6 @@ class EnhancedImageExtractor:
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
         
-            st.write(f"✅ Successfully placed {img_key} in smart zone at {zone_info['cell']}")
             return True
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
@@ -812,7 +811,6 @@ class EnhancedImageExtractor:
             worksheet.add_image(img)
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            st.write(f"✅ Successfully placed {img_key} at {cell_position} (size: {width_cm}x{height_cm}cm)")
             return True
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} at {cell_position}: {e}")
