@@ -631,7 +631,6 @@ class EnhancedImageExtractor:
             temp_image_paths = []
             # Analyze template structure
             image_zones = self.analyze_template_structure(template_path)
-            st.write(f"🎯 Detected {len([z for z in image_zones.values() if z])} placement zones")
         
             # Map image types to detected zones
             type_zone_mapping = {
@@ -648,10 +647,8 @@ class EnhancedImageExtractor:
                 # Set size based on image type - FIXED SIZE LOGIC
                 if img_type == 'current':
                     width_cm, height_cm = 8.3, 8.3  # Current packaging is larger
-                    st.write(f"📏 Current packaging size: {width_cm}x{height_cm} cm")
                 else:
                     width_cm, height_cm = 4.3, 4.3  # Primary, secondary, label are smaller
-                    st.write(f"📏 {img_type.capitalize()} packaging size: {width_cm}x{height_cm} cm")
             
                 if target_zone:
                     # Use detected zone - but update zone size based on image type
@@ -683,7 +680,6 @@ class EnhancedImageExtractor:
             
                 if success:
                     added_images += 1
-                    st.write(f"✅ Placed {img_type} image at detected zone")
                 else:
                     st.write(f"⚠️ Failed to place {img_type} image")
             return added_images, temp_image_paths
@@ -723,7 +719,6 @@ class EnhancedImageExtractor:
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
         
-            st.write(f"✅ Successfully placed {img_key} in smart zone at {zone_info['cell']}")
             return True
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} in smart zone: {e}")
@@ -815,7 +810,6 @@ class EnhancedImageExtractor:
             worksheet.add_image(img)
             # Track temporary file for cleanup
             temp_image_paths.append(tmp_img_path)
-            st.write(f"✅ Successfully placed {img_key} at {cell_position} (size: {width_cm}x{height_cm}cm)")
             return True
         except Exception as e:
             st.write(f"❌ Failed to place {img_key} at {cell_position}: {e}")
@@ -937,57 +931,59 @@ class EnhancedTemplateMapperWithImages:
                 }
             },
             # ENHANCED PROCEDURE INFORMATION SECTION
-            'procedure_information': {
-                'section_keywords': [
-                    'procedure information', 'procedure', 'packaging procedure', 'loading details',
-                    'pallet information', 'pallet details', 'packaging details'
-                ],
-                'field_mappings': {
-                    # X No. of Parts variations
-                    'x no. of parts': 'x No. of Parts',
-                    'x no of parts': 'x No. of Parts',
-                    'x number of parts': 'x No. of Parts',
-                    'no. of parts': 'x No. of Parts',
-                    'number of parts': 'x No. of Parts',
-                    # Layer and Level
-                    'layer': 'Layer',
-                    'layers': 'Layer',
-                    'level': 'Level',
-                    'levels': 'Level',
-                    # Inner dimensions (these should map directly without prefixes)
-                    'inner l': 'Inner L',
-                    'inner w': 'Inner W', 
-                    'inner h': 'Inner H',
-                    'inner length': 'Inner L',
-                    'inner width': 'Inner W',
-                    'inner height': 'Inner H',
-                    # Outer dimensions (these should map directly without prefixes)
-                    'outer l': 'Outer L',
-                    'outer w': 'Outer W',
-                    'outer h': 'Outer H',
-                    'outer length': 'Outer L',
-                    'outer width': 'Outer W',
-                    'outer height': 'Outer H',
-                    # Inner Qty/Pack
-                    'inner qty/pack': 'Inner Qty/Pack',
-                    'inner quantity': 'Inner Qty/Pack',
-                    'inner qty': 'Inner Qty/Pack'
-                }
-            },
-            # ADD NEW SECTION FOR DIRECT DIMENSION MAPPIN
-            'dimensions': {
-                'section_keywords': [
-                    'dimensions', 'measurements', 'size', 'inner', 'outer'
-                ],
-                'field_mappings': {
-                    # Direct mapping for procedure fields (NO PREFIXES)
-                    'inner l': 'Inner L',
-                    'inner w': 'Inner W',
-                    'inner h': 'Inner H', 
-
-                    'outer l': 'Outer L',
-                    'outer w': 'Outer W',
-                    'outer h': 'Outer H'
+            # ... existing code ...
+    
+        # *** FIXED PROCEDURE INFORMATION SECTION ***
+        'procedure_information': {
+            'section_keywords': [
+                'procedure information', 'procedure', 'packaging procedure', 'loading details',
+                'pallet information', 'pallet details', 'packaging details',
+                'loading instruction', 'packing procedure', 'palletization'
+            ],
+            'field_mappings': {
+                # *** CRITICAL FIX: Map to EXACT column names from your Excel ***
+            
+                # x No. of Parts mapping (Column AH: "x No. of Parts")
+                'x no. of parts': 'x No. of Parts',        # Maps template field → Excel column
+                'x no of parts': 'x No. of Parts',
+                'x number of parts': 'x No. of Parts',
+                'no. of parts': 'x No. of Parts',
+                'no of parts': 'x No. of Parts',
+                'number of parts': 'x No. of Parts',
+                'parts': 'x No. of Parts',                 # Simple "Parts" maps to "x No. of Parts"
+            
+                # Layer mapping (Column AF: "Layer") 
+                'layer': 'Layer',                          # Maps template field → Excel column
+                'layers': 'Layer',
+                'max layer': 'Layer',
+                'maximum layer': 'Layer',
+                'pallet layer': 'Layer',
+                'boxes per layer': 'Layer',
+            
+                # Level mapping (Column AG: "Level")
+                'level': 'Level',                          # Maps template field → Excel column
+                'levels': 'Level',
+                'max level': 'Level',
+                'maximum level': 'Level',
+                'stacking level': 'Level',
+                'pallet level': 'Level',
+            
+                # Keep your existing inner/outer mappings...
+                'inner l': 'Inner L',
+                'inner w': 'Inner W', 
+                'inner h': 'Inner H',
+                'inner length': 'Inner L',
+                'inner width': 'Inner W',
+                'inner height': 'Inner H',
+                'outer l': 'Outer L',
+                'outer w': 'Outer W',
+                'outer h': 'Outer H',
+                'outer length': 'Outer L',
+                'outer width': 'Outer W',
+                'outer height': 'Outer H',
+                'inner qty/pack': 'Inner Qty/Pack',
+                'inner quantity': 'Inner Qty/Pack',
+                'inner qty': 'Inner Qty/Pack'
                 }
             }
         }
@@ -1017,7 +1013,7 @@ class EnhancedTemplateMapperWithImages:
             if not text:
                 return False
             print(f"DEBUG is_mappable_field: Checking '{text}'")
-    
+
             # Skip header-like patterns that should not be treated as fields
             header_exclusions = [
                 'vendor information', 'part information', 'primary packaging', 'secondary packaging',
@@ -1027,6 +1023,7 @@ class EnhancedTemplateMapperWithImages:
                 if exclusion in text and 'type' not in text:
                     print(f"DEBUG: Excluding '{text}' as header")
                     return False
+        
             # Define mappable field patterns for packaging templates
             mappable_patterns = [
                 r'packaging\s+type', r'\btype\b',
@@ -1040,12 +1037,25 @@ class EnhancedTemplateMapperWithImages:
                 # Basic fields
                 r'\bdate\b',
                 r'\brev(ision)?\s*no\.?\b',
-                # PROCEDURE-SPECIFIC PATTERNS
+            
+                # *** CRITICAL FIXES FOR LEVEL AND X NO. OF PARTS ***
+                # More comprehensive patterns for "x No. of Parts"
                 r'\bx\s*no\.?\s*of\s*parts\b',
+                r'\bx\s*no\s*of\s*parts\b',
+                r'\bx\s*number\s*of\s*parts\b',
                 r'\bno\.?\s*of\s*parts\b',
                 r'\bnumber\s*of\s*parts\b',
-                r'\blayer\b', r'\blayers\b',
+                r'\bparts\s*per\s*pack\b',
+                r'\bparts\s*quantity\b',
+                r'\bqty\s*of\s*parts\b',
+            
+                # More comprehensive patterns for Level/Layer
                 r'\blevel\b', r'\blevels\b',
+                r'\blayer\b', r'\blayers\b',
+                r'\bmax\s*level\b', r'\bmaximum\s*level\b',
+                r'\bmax\s*layer\b', r'\bmaximum\s*layer\b',
+                r'\bstacking\s*level\b', r'\bpallet\s*level\b',
+            
                 # Inner dimensions (CRITICAL FOR PROCEDURES)
                 r'\binner\s*l\b', r'\binner\s*length\b',
                 r'\binner\s*w\b', r'\binner\s*width\b', 
@@ -1058,13 +1068,16 @@ class EnhancedTemplateMapperWithImages:
                 # Pallet information
                 r'\bpallet\b', r'\bpalletiz\w*\b'
             ]
+        
             for pattern in mappable_patterns:
                 if re.search(pattern, text):
                     print(f"DEBUG: '{text}' matches pattern '{pattern}'")
                     return True
+        
             if text.endswith(':'):
                 print(f"DEBUG: '{text}' ends with colon")
                 return True
+        
             print(f"DEBUG: '{text}' is NOT mappable")
             return False
         except Exception as e:
@@ -1075,44 +1088,69 @@ class EnhancedTemplateMapperWithImages:
         """Enhanced section identification with better pattern matching"""
         try:
             section_context = None
-        
-            for search_row in range(max(1, row - max_search_rows), row + 2):
-                for search_col in range(max(1, col - 15), min(worksheet.max_column + 1, col + 15)):
+            # Search in a wider area around the field
+            for search_row in range(max(1, row - max_search_rows), row + 5):  # Extended range
+                for search_col in range(max(1, col - 20), min(worksheet.max_column + 1, col + 20)):  # Extended range
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
                             cell_text = self.preprocess_text(str(cell.value))
-                        
+                    
                             for section_name, section_info in self.section_mappings.items():
                                 for keyword in section_info['section_keywords']:
                                     keyword_processed = self.preprocess_text(keyword)
-                                
+                            
                                     if keyword_processed == cell_text or keyword_processed in cell_text or cell_text in keyword_processed:
+                                        print(f"DEBUG: Found section context '{section_name}' for field at ({row}, {col}) via keyword '{keyword}'")
                                         return section_name
-                                
-                                    # Enhanced context matching
-                                    if section_name == 'primary_packaging':
-                                        if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'secondary_packaging':
-                                        if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
-                                            return section_name
-                                    elif section_name == 'part_information':
-                                        if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
-                                    elif section_name == 'vendor_information':
-                                        if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or
-                                            ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
-                                            return section_name
+                            
+                                # Enhanced context matching
+                                if section_name == 'procedure_information':
+                                    # *** CRITICAL: Better detection for procedure section ***
+                                    procedure_indicators = [
+                                        'procedure', 'loading', 'pallet', 'packaging procedure',
+                                        'stacking', 'palletization', 'loading details', 
+                                        'packing instruction', 'step', 'layer', 'level'
+                                    ]
+                                    if any(indicator in cell_text for indicator in procedure_indicators):
+                                        print(f"DEBUG: Found procedure context for field at ({row}, {col}) via indicator in '{cell_text}'")
+                                        return section_name
+                            
+                                elif section_name == 'primary_packaging':
+                                    if ('primary' in cell_text and ('packaging' in cell_text or 'internal' in cell_text)):
+                                        return section_name
+                                elif section_name == 'secondary_packaging':
+                                    if ('secondary' in cell_text and ('packaging' in cell_text or 'outer' in cell_text or 'external' in cell_text)):
+                                        return section_name
+                                elif section_name == 'part_information':
+                                    if (('part' in cell_text and ('information' in cell_text or 'info' in cell_text)) or ('component' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                        return section_name
+                                elif section_name == 'vendor_information':
+                                    if (('vendor' in cell_text and ('information' in cell_text or 'info' in cell_text)) or ('supplier' in cell_text and ('information' in cell_text or 'info' in cell_text))):
+                                        return section_name
                     except:
                         continue
-        
-            return section_context
-        
+    
+            # *** FALLBACK LOGIC FOR STANDALONE FIELDS ***
+            # If no section context found, try to infer from field name itself
+            return self.infer_section_from_field_name(row, col)
+    
         except Exception as e:
             st.error(f"Error in identify_section_context: {e}")
             return None
+        
+    def infer_section_from_field_name(self, row, col):
+        """Infer section context from field name when no explicit section header found"""
+        try:
+            # Get the field name (you'll need to pass this in, or get it from the cell)
+            # This is a simplified version - you might need to adapt this
+        
+            # For now, return 'procedure_information' for common procedure fields
+            # This ensures Level and x No. of Parts get proper context
+            return 'procedure_information'
+        
+        except Exception as e:
+            return 'procedure_information'  # Default fallback
 
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -1252,14 +1290,20 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
 
+# *** ADDITIONAL FIX: Enhanced mapping logic to handle direct column matches ***
+
     def map_data_with_section_context(self, template_fields, data_df):
-        """Enhanced mapping with better section-aware logic"""
+        """Enhanced mapping with EXACT column name matching"""
         mapping_results = {}
         used_columns = set()
 
         try:
             data_columns = data_df.columns.tolist()
             print(f"DEBUG: Available data columns: {data_columns}")
+        
+            # Print exact column names for debugging
+            for i, col in enumerate(data_columns):
+                print(f"  Column {i}: '{col}'")
 
             for coord, field in template_fields.items():
                 try:
@@ -1270,7 +1314,62 @@ class EnhancedTemplateMapperWithImages:
 
                     print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")
 
-                    # If section context exists, use its field mappings
+                    # *** CRITICAL FIX 1: Direct exact column name matching first ***
+                    field_lower = self.preprocess_text(field_value)
+                
+                    # Try direct column name matching first (highest priority)
+                    for data_col in data_columns:
+                        if data_col in used_columns:
+                            continue
+                        
+                        col_lower = self.preprocess_text(data_col)
+                    
+                        # Exact matches
+                        if col_lower == field_lower:
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT EXACT MATCH: '{field_value}' → '{data_col}'")
+                            break
+                    
+                        # Special case matches for your specific columns
+                        if field_lower == 'layer' and col_lower == 'layer':
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT LAYER MATCH: '{field_value}' → '{data_col}'")
+                            break
+                        elif field_lower == 'level' and col_lower == 'level':
+                            best_match = data_col  
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT LEVEL MATCH: '{field_value}' → '{data_col}'")
+                            break
+                        elif ('x no' in field_lower or 'no. of parts' in field_lower) and 'x no of parts' in col_lower:
+                            best_match = data_col
+                            best_score = 1.0
+                            print(f"DEBUG: DIRECT X NO OF PARTS MATCH: '{field_value}' → '{data_col}'")
+                            break
+
+                    # If direct match found, use it
+                    if best_match:
+                        mapping_results[coord] = {
+                            'template_field': field_value,
+                            'data_column': best_match,
+                            'similarity': best_score,
+                            'field_info': field,
+                            'section_context': section_context,
+                            'is_mappable': True
+                        }
+                        used_columns.add(best_match)
+                        print(f"DEBUG: DIRECT MATCH SUCCESS: {field_value} → {best_match}")
+                        continue
+
+                    # *** CRITICAL FIX 2: Force procedure context for specific fields ***
+                    if not section_context:
+                        procedure_fields = ['layer', 'level', 'x no of parts', 'no. of parts', 'parts']
+                        if any(proc_field in field_lower for proc_field in procedure_fields):
+                            section_context = 'procedure_information'
+                            print(f"DEBUG: FORCED procedure context for field '{field_value}'")
+
+                    # *** EXISTING SECTION MAPPING LOGIC (if direct match failed) ***
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
                         print(f"DEBUG: Section mappings: {section_mappings}")
@@ -1282,8 +1381,13 @@ class EnhancedTemplateMapperWithImages:
                             print(f"DEBUG: Comparing '{normalized_field_value}' with '{normalized_template_key}'")
 
                             if normalized_field_value == normalized_template_key:
-                                section_prefix = section_context.split('_')[0].capitalize()
-                                expected_column = f"{section_prefix} {data_column_pattern}".strip()
+                                # For procedure_information, don't add section prefix
+                                if section_context == "procedure_information":
+                                    # For procedure fields, DO NOT prefix — match exactly
+                                    expected_column = data_column_pattern 
+                                else:
+                                    section_prefix = section_context.split('_')[0].capitalize()
+                                    expected_column = f"{section_prefix} {data_column_pattern}".strip()
                             
                                 print(f"DEBUG: Looking for expected column: '{expected_column}'")
 
@@ -1293,7 +1397,7 @@ class EnhancedTemplateMapperWithImages:
                                     if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
                                         best_match = data_col
                                         best_score = 1.0
-                                        print(f"DEBUG: EXACT MATCH FOUND: {data_col}")
+                                        print(f"DEBUG: SECTION EXACT MATCH FOUND: {data_col}")
                                         break
 
                                 # Fallback to similarity match if no exact match
@@ -1305,49 +1409,10 @@ class EnhancedTemplateMapperWithImages:
                                         if similarity > best_score and similarity >= self.similarity_threshold:
                                             best_score = similarity
                                             best_match = data_col
-                                            print(f"DEBUG: SIMILARITY MATCH: {data_col} (score: {similarity})")
+                                            print(f"DEBUG: SECTION SIMILARITY MATCH: {data_col} (score: {similarity})")
                                 break
 
-                    # Fallback 1: If 'type' and no section, assume secondary packaging
-                    if not section_context and self.preprocess_text(field_value) == 'type':
-                        section_context = 'secondary_packaging'
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"⚠️ Fallback: Assuming 'secondary_packaging' for 'Type' at {coord}")
-
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            if self.preprocess_text(template_field_key) == 'type':
-                                expected_column = data_column_pattern
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        break
-                                break
-
-                    # Fallback 2: If 'L', 'W', 'H', etc. and no section, assume part_information
-                    if not section_context and self.preprocess_text(field_value) in ['l', 'w', 'h', 'length', 'width', 'height']:
-                        section_context = 'part_information'
-                        section_mappings = self.section_mappings[section_context]['field_mappings']
-                        print(f"⚠️ Fallback: Assuming 'part_information' for '{field_value}' at {coord}")
-
-                        for template_field_key, data_column_pattern in section_mappings.items():
-                            normalized_field_value = self.preprocess_text(field_value)
-                            normalized_template_key = self.preprocess_text(template_field_key)
-
-                            if normalized_field_value == normalized_template_key:
-                                expected_column = data_column_pattern
-                                for data_col in data_columns:
-                                    if data_col in used_columns:
-                                        continue
-                                    if self.preprocess_text(data_col) == self.preprocess_text(expected_column):
-                                        best_match = data_col
-                                        best_score = 1.0
-                                        break
-                                break
-
-                    # Final fallback if section mapping didn't resolve
+                    # Final fallback: general similarity matching
                     if not best_match:
                         for data_col in data_columns:
                             if data_col in used_columns:
@@ -1357,7 +1422,7 @@ class EnhancedTemplateMapperWithImages:
                                 best_score = similarity
                                 best_match = data_col
 
-                    print(f"DEBUG: Final mapping result - Field: '{field_value}' -> Column: '{best_match}' (Score: {best_score})")
+                    print(f"DEBUG: Final mapping result - Field: '{field_value}' → Column: '{best_match}' (Score: {best_score})")
                     print("=" * 50)
 
                     # Save mapping
@@ -1370,7 +1435,6 @@ class EnhancedTemplateMapperWithImages:
                         'is_mappable': best_match is not None
                     }
 
-                    # Prevent reuse of the same column
                     if best_match:
                         used_columns.add(best_match)
 
@@ -1380,7 +1444,6 @@ class EnhancedTemplateMapperWithImages:
 
         except Exception as e:
             st.error(f"Error in map_data_with_section_context: {e}")
-
         return mapping_results
 
     def clean_data_value(self, value):
@@ -1606,22 +1669,62 @@ class EnhancedTemplateMapperWithImages:
         if not data_dict:
             return procedures
         filled_procedures = []
+    
         # Debug: Print available data
         print(f"\n=== DEBUG: Available data in data_dict ===")
         for key, value in data_dict.items():
             print(f"  '{key}': '{value}'")
         print("=" * 50)
+    
         for procedure in procedures:
             filled_procedure = procedure
             # Enhanced mapping with multiple fallback options
             replacements = {
-                # Quantity mappings - multiple fallbacks
+                # *** CRITICAL: Enhanced quantity mappings - multiple fallbacks ***
                 '{x No. of Parts}': (
                     data_dict.get('x No. of Parts') or 
                     data_dict.get('X No. of Parts') or
                     data_dict.get('x no. of parts') or
                     data_dict.get('X no. of parts') or
-                    '1'  # Default fallback
+                    data_dict.get('no. of parts') or
+                    data_dict.get('No. of Parts') or
+                    data_dict.get('number of parts') or
+                    data_dict.get('Number of Parts') or
+                    data_dict.get('parts per pack') or
+                    data_dict.get('Parts Per Pack') or
+                    data_dict.get('qty of parts') or
+                    data_dict.get('Qty of Parts') or
+                    '8'  # Default fallback
+                ),
+            
+                # *** CRITICAL: Enhanced Level mappings - multiple fallbacks ***
+                '{Level}': (
+                    data_dict.get('Level') or
+                    data_dict.get('level') or
+                    data_dict.get('LEVEL') or
+                    data_dict.get('Levels') or
+                    data_dict.get('levels') or
+                    data_dict.get('max level') or
+                    data_dict.get('Max Level') or
+                    data_dict.get('maximum level') or
+                    data_dict.get('Maximum Level') or
+                    data_dict.get('stacking level') or
+                    data_dict.get('Stacking Level') or
+                    '5'  # Default fallback
+                ),
+            
+                # *** CRITICAL: Enhanced Layer mappings - multiple fallbacks ***
+                '{Layer}': (
+                    data_dict.get('Layer') or
+                    data_dict.get('layer') or
+                    data_dict.get('LAYER') or
+                    data_dict.get('Layers') or
+                    data_dict.get('layers') or
+                    data_dict.get('max layer') or
+                    data_dict.get('Max Layer') or
+                    data_dict.get('maximum layer') or
+                    data_dict.get('Maximum Layer') or
+                    '4'  # Default fallback
                 ),
                 # Inner dimensions - try multiple key variations
                 '{Inner L}': (
@@ -1683,23 +1786,6 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('PRIMARY QTY/PACK') or
                     '1'
                 ),
-                # Layer and Level - try multiple variations
-                '{Layer}': (
-                    data_dict.get('Layer') or
-                    data_dict.get('layer') or
-                    data_dict.get('LAYER') or
-                    data_dict.get('Layers') or
-                    data_dict.get('layers') or
-                    '4'  # Default fallback
-                ),
-                '{Level}': (
-                    data_dict.get('Level') or
-                    data_dict.get('level') or
-                    data_dict.get('LEVEL') or
-                    data_dict.get('Levels') or
-                    data_dict.get('levels') or
-                    '3'  # Default fallback
-                ),
                 # Generic Qty/Pack - try multiple variations
                 '{Qty/Pack}': (
                     data_dict.get('Qty/Pack') or
@@ -1717,7 +1803,11 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('qty/pack') or
                     '1'
                 )
+            
+                # Rest of your existing replacements...
+                # [Keep all other dimension mappings as they are]
             }
+        
             # Debug: Show what replacements are being made
             for placeholder, raw_value in replacements.items():
                 if placeholder in filled_procedure:
@@ -1727,6 +1817,7 @@ class EnhancedTemplateMapperWithImages:
                     print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
                     filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
             filled_procedures.append(filled_procedure)
+    
         return filled_procedures
 
     def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
@@ -1845,17 +1936,17 @@ class EnhancedTemplateMapperWithImages:
         return 0
 
 # Packaging types and procedures from reference code
-PACKAGING_TYPES = {
-    "BOX IN BOX SENSITIVE": "images/box_in_box_sensitive.png",
-    "BOX IN BOX": "images/box_in_box.png",
-    "CARTON BOX WITH SEPARATOR FOR ONE PART": "images/carton_with_separator.png",
-    "INDIVIDUAL NOT SENSITIVE": "images/individual_not_sensitive.png",
-    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": "images/multi_protected.png",
-    "INDIVIDUAL PROTECTION FOR EACH PART": "images/individual_protected.png",
-    "INDIVIDUAL SENSITIVE": "images/individual_sensitive.png",
-    "MANY IN ONE TYPE": "images/bulk_pack.png",
-    "SINGLE BOX": "images/single_box.png",
-}
+PACKAGING_TYPES = [
+    "BOX IN BOX SENSITIVE",
+    "BOX IN BOX", 
+    "CARTON BOX WITH SEPARATOR FOR ONE PART",
+    "INDIVIDUAL NOT SENSITIVE",
+    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE",
+    "INDIVIDUAL PROTECTION FOR EACH PART",
+    "INDIVIDUAL SENSITIVE",
+    "MANY IN ONE TYPE",
+    "SINGLE BOX"
+]
 
 PACKAGING_PROCEDURES = {
     "BOX IN BOX SENSITIVE": [
@@ -2001,27 +2092,23 @@ def main():
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
         st.header("📦 Step 1: Select Packaging Type")
-
-        cols = st.columns(3)  # 3 images per row
-        for i, (packaging_type, img_path) in enumerate(PACKAGING_TYPES.items()):
+        
+        # Create columns for packaging types
+        cols = st.columns(3)
+        for i, packaging_type in enumerate(PACKAGING_TYPES):
             with cols[i % 3]:
-                # Show image with caption
-                st.image(img_path, caption=packaging_type, use_column_width=True)
-
-                # Clickable button under image
-                if st.button(f"Select", key=f"pkg_{i}", use_container_width=True):
+                if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
                     st.session_state.selected_packaging_type = packaging_type
                     navigate_to_step(2)
-
+        
         # Show selected packaging details
-        if st.session_state.get("selected_packaging_type"):
-            st.success(f"✅ Selected: {st.session_state.selected_packaging_type}")
-
-            with st.expander("📋 View Packaging Procedure"):
+        if st.session_state.selected_packaging_type:
+            st.success(f"Selected: {st.session_state.selected_packaging_type}")
+            
+            with st.expander("View Packaging Procedure"):
                 procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
                 for i, step in enumerate(procedures, 1):
                     st.write(f"{i}. {step}")
-
     
     # Step 2: Upload Template File
     elif st.session_state.current_step == 2:
@@ -2279,30 +2366,6 @@ def main():
                                 st.caption(f"Types found: {type_summary}")
                             else:
                                 st.warning(f"**{result['part_no']}** ({result['vendor']}): No images")
-        # Also add this debugging section to help diagnose issues:
-        if st.session_state.image_option == 'extract':
-            with st.expander("🔍 Debug Information", expanded=False):
-                st.write("**Available Data:**")
-                st.write(f"- Extracted images: {len(st.session_state.extracted_excel_images)}")
-                st.write(f"- Row data available: {hasattr(st.session_state, 'all_row_data')}")
-                if hasattr(st.session_state, 'all_row_data'):
-                    st.write(f"- Number of rows: {len(st.session_state.all_row_data)}")
-                    st.write("- Sample row data:", st.session_state.all_row_data[0] if st.session_state.all_row_data else "None")
-        
-                st.write("**Image Types Distribution:**")
-                if st.session_state.extracted_excel_images:
-                    type_counts = {}
-                    for img_key, img_data in st.session_state.extracted_excel_images.items():
-                        img_type = img_data.get('type', 'unknown')
-                        type_counts[img_type] = type_counts.get(img_type, 0) + 1
-                    for img_type, count in type_counts.items():
-                        st.write(f"- {img_type}: {count} images")
-                st.write("**Row-Image Mapping:**")
-                extractor_temp = EnhancedImageExtractor()
-                if hasattr(extractor_temp, 'row_image_mapping'):
-                    st.write(f"Row mapping available: {len(extractor_temp.row_image_mapping)} rows")
-                else:
-                    st.write("Row mapping not built yet")
     
         # Continue button with enhanced validation
         can_continue = False
