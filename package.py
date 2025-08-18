@@ -680,7 +680,6 @@ class EnhancedImageExtractor:
             
                 if success:
                     added_images += 1
-                    st.write(f"✅ Placed {img_type} image at detected zone")
                 else:
                     st.write(f"⚠️ Failed to place {img_type} image")
             return added_images, temp_image_paths
