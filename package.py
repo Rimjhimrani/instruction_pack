@@ -647,10 +647,8 @@ class EnhancedImageExtractor:
                 # Set size based on image type - FIXED SIZE LOGIC
                 if img_type == 'current':
                     width_cm, height_cm = 8.3, 8.3  # Current packaging is larger
-                    st.write(f"📏 Current packaging size: {width_cm}x{height_cm} cm")
                 else:
                     width_cm, height_cm = 4.3, 4.3  # Primary, secondary, label are smaller
-                    st.write(f"📏 {img_type.capitalize()} packaging size: {width_cm}x{height_cm} cm")
             
                 if target_zone:
                     # Use detected zone - but update zone size based on image type
