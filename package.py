@@ -2372,30 +2372,6 @@ def main():
                                 st.caption(f"Types found: {type_summary}")
                             else:
                                 st.warning(f"**{result['part_no']}** ({result['vendor']}): No images")
-        # Also add this debugging section to help diagnose issues:
-        if st.session_state.image_option == 'extract':
-            with st.expander("🔍 Debug Information", expanded=False):
-                st.write("**Available Data:**")
-                st.write(f"- Extracted images: {len(st.session_state.extracted_excel_images)}")
-                st.write(f"- Row data available: {hasattr(st.session_state, 'all_row_data')}")
-                if hasattr(st.session_state, 'all_row_data'):
-                    st.write(f"- Number of rows: {len(st.session_state.all_row_data)}")
-                    st.write("- Sample row data:", st.session_state.all_row_data[0] if st.session_state.all_row_data else "None")
-        
-                st.write("**Image Types Distribution:**")
-                if st.session_state.extracted_excel_images:
-                    type_counts = {}
-                    for img_key, img_data in st.session_state.extracted_excel_images.items():
-                        img_type = img_data.get('type', 'unknown')
-                        type_counts[img_type] = type_counts.get(img_type, 0) + 1
-                    for img_type, count in type_counts.items():
-                        st.write(f"- {img_type}: {count} images")
-                st.write("**Row-Image Mapping:**")
-                extractor_temp = EnhancedImageExtractor()
-                if hasattr(extractor_temp, 'row_image_mapping'):
-                    st.write(f"Row mapping available: {len(extractor_temp.row_image_mapping)} rows")
-                else:
-                    st.write("Row mapping not built yet")
     
         # Continue button with enhanced validation
         can_continue = False
