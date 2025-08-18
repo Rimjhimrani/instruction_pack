@@ -1700,7 +1700,7 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('Parts Per Pack') or
                     data_dict.get('qty of parts') or
                     data_dict.get('Qty of Parts') or
-                    '8'  # Default fallback
+                    '1'  # Default fallback
                 ),
             
                 # *** CRITICAL: Enhanced Level mappings - multiple fallbacks ***
@@ -1716,7 +1716,7 @@ class EnhancedTemplateMapperWithImages:
                     data_dict.get('Maximum Level') or
                     data_dict.get('stacking level') or
                     data_dict.get('Stacking Level') or
-                    '5'  # Default fallback
+                    '3'  # Default fallback
                 ),
             
                 # *** CRITICAL: Enhanced Layer mappings - multiple fallbacks ***
