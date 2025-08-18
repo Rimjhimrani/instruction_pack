@@ -631,7 +631,6 @@ class EnhancedImageExtractor:
             temp_image_paths = []
             # Analyze template structure
             image_zones = self.analyze_template_structure(template_path)
-            st.write(f"🎯 Detected {len([z for z in image_zones.values() if z])} placement zones")
         
             # Map image types to detected zones
             type_zone_mapping = {
