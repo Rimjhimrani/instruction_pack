@@ -2113,123 +2113,6 @@ PACKAGING_TYPES = [
     }
 ]
 
-def display_packaging_cards():
-    """Alternative card-style layout for packaging selection with consistent image sizes"""
-    st.header("📦 Step 1: Select Packaging Type")
-    
-    # Custom CSS for cards with consistent image sizing
-    st.markdown("""
-    <style>
-    .packaging-card {
-        border: 2px solid #ddd;
-        border-radius: 10px;
-        padding: 20px;
-        margin: 15px 0;
-        transition: all 0.3s ease;
-        background-color: white;
-    }
-    .packaging-card:hover {
-        border-color: #ff6b6b;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        transform: translateY(-2px);
-    }
-    .packaging-card.selected {
-        border-color: #4CAF50;
-        background-color: #f0f8f0;
-    }
-    .card-image-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 250px;
-        height: 250px;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        background-color: #fafafa;
-        margin: 0 auto;
-    }
-    .card-image-container img {
-        max-width: 230px;
-        max-height: 230px;
-        object-fit: contain;
-    }
-    .stButton > button {
-        width: 100%;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    for i, packaging in enumerate(PACKAGING_TYPES):
-        is_selected = st.session_state.get('selected_packaging_type') == packaging['name']
-        
-        # Create card container with custom styling
-        card_style = """
-        <div style="border: 2px solid {}; border-radius: 10px; padding: 20px; margin: 15px 0; 
-                    background-color: {}; transition: all 0.3s ease;">
-        """.format(
-            "#4CAF50" if is_selected else "#ddd",
-            "#f0f8f0" if is_selected else "white"
-        )
-        
-        st.markdown(card_style, unsafe_allow_html=True)
-        
-        with st.container():
-            col1, col2, col3 = st.columns([2, 3, 1])  # Adjusted column ratios for larger image space
-            
-            with col1:
-                try:
-                    # Use HTML container for consistent sizing (250x250px)
-                    st.markdown(f"""
-                    <div class="card-image-container">
-                        <img src="{packaging['image_url']}" alt="{packaging['name']}" />
-                    </div>
-                    <p style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #666;">Preview</p>
-                    """, unsafe_allow_html=True)
-                except Exception as e:
-                    # Consistent fallback with same dimensions
-                    st.markdown("""
-                    <div class="card-image-container">
-                        <div style="text-align: center; color: #666;">
-                            📦<br>Image loading...
-                        </div>
-                    </div>
-                    <p style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #666;">Preview</p>
-                    """, unsafe_allow_html=True)
-            
-            with col2:
-                st.subheader(packaging["name"])
-                st.write(packaging["description"])
-                
-                # Better button styling and functionality
-                button_text = "✅ Currently Selected" if is_selected else "Select This Type"
-                button_type = "primary" if not is_selected else "secondary"
-                
-                if st.button(
-                    button_text,
-                    key=f"card_{i}",
-                    type=button_type,
-                    disabled=is_selected,
-                    use_container_width=True
-                ):
-                    if not is_selected:
-                        st.session_state.selected_packaging_type = packaging['name']
-                        st.session_state.selected_packaging_image = packaging['image_url']
-                        st.success(f"Selected: {packaging['name']}")
-                        # Small delay before navigation
-                        import time
-                        time.sleep(0.5)
-                        navigate_to_step(2)
-                        st.rerun()
-            
-            with col3:
-                if is_selected:
-                    st.success("✅ Selected")
-                else:
-                    st.write("")  # Empty space for alignment
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("---")
-        
 def display_packaging_grid():
     """Grid-style layout for packaging selection with consistent image sizes"""
     st.header("📦 Step 1: Select Packaging Type")
@@ -2249,8 +2132,8 @@ def display_packaging_grid():
         background-color: #fafafa;
     }
     .grid-image-container img {
-        max-width: 180px;
-        max-height: 180px;
+        max-width: 200px;
+        max-height: 200px;
         object-fit: contain;
     }
     </style>
@@ -2271,13 +2154,6 @@ def display_packaging_grid():
                         <img src="{packaging['image_url']}" alt="{packaging['name']}" />
                     </div>
                     """, unsafe_allow_html=True)
-                    
-                    # Alternative method using st.image with fixed dimensions
-                    # st.image(
-                    #     packaging["image_url"], 
-                    #     caption=packaging["name"],
-                    #     width=180  # Fixed width for consistency
-                    # )
                 except Exception as e:
                     # Better fallback with consistent sizing
                     st.markdown("""
@@ -2394,26 +2270,11 @@ def main():
     
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
-        # Layout selector with better styling
-        st.subheader("Choose Your Display Style")
-        layout_choice = st.radio(
-            "Layout Options:",
-            ["Grid Layout (3 columns)", "Card Layout (detailed rows)"],
-            horizontal=True,
-            help="Grid layout shows items in columns with consistent sizing, Card layout shows detailed rows with larger images"
-        )
+        # Display the grid layout directly
+        display_packaging_grid()  # Uses HTML/CSS for consistent sizing
+        # display_packaging_grid_alternative()  # Alternative: Uses st.image with fixed width
         
-        st.markdown("---")
-        
-        # Display the chosen layout
-        if "Grid Layout" in layout_choice:
-            # You can choose between display_packaging_grid() or display_packaging_grid_alternative()
-            display_packaging_grid()  # Uses HTML/CSS for consistent sizing
-            # display_packaging_grid_alternative()  # Uses st.image with fixed width
-        else:
-            display_packaging_cards()  # Now has larger images (250px width)
-        
-        # Show selected packaging details (common for both layouts)
+        # Show selected packaging details
         if st.session_state.get('selected_packaging_type'):
             st.markdown("### 📋 Selection Summary")
             with st.expander("✅ Selected Packaging Details", expanded=True):
@@ -3324,6 +3185,7 @@ def main():
                 if st.button("❌ Cancel"):
                     st.session_state.show_reset_confirmation = False
                     st.rerun()
-                    
+
+
 if __name__ == "__main__":
     main()
