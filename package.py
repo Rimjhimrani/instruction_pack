@@ -34,27 +34,30 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-if 'mapping_completed' not in st.session_state:
-    st.session_state.mapping_completed = False
-if 'auto_fill_started' not in st.session_state:
-    st.session_state.auto_fill_started = False
 # Initialize session state
 if 'current_step' not in st.session_state:
     st.session_state.current_step = 1
 if 'selected_packaging_type' not in st.session_state:
-    st.session_state.selected_packaging_type = ''
+    st.session_state.selected_packaging_type = None
 if 'template_file' not in st.session_state:
     st.session_state.template_file = None
 if 'data_file' not in st.session_state:
     st.session_state.data_file = None
-if 'mapped_data' not in st.session_state:
-    st.session_state.mapped_data = None
+if 'mapping_completed' not in st.session_state:
+    st.session_state.mapping_completed = False
 if 'image_option' not in st.session_state:
-    st.session_state.image_option = ''
+    st.session_state.image_option = None
 if 'uploaded_images' not in st.session_state:
     st.session_state.uploaded_images = {}
 if 'extracted_excel_images' not in st.session_state:
     st.session_state.extracted_excel_images = {}
+if 'all_row_data' not in st.session_state:
+    st.session_state.all_row_data = []
+
+def navigate_to_step(step):
+    st.session_state.current_step = step
+    st.rerun()
+
 
 class EnhancedImageExtractor:
     """Advanced image extraction and placement with smart positioning"""
@@ -667,10 +670,10 @@ class EnhancedImageExtractor:
                 else:
                     # Fallback to default positions with correct sizes
                     fallback_positions = {
-                        'current': 'T3',
+                        'current': 'W4',
                         'primary': 'A42',
-                        'secondary': 'F42',
-                        'label': 'K42'
+                        'secondary': 'G42',
+                        'label': 'M42'
                     }
                     position = fallback_positions.get(img_type, 'A1')
                     success = self._place_image_at_position(
@@ -740,10 +743,10 @@ class EnhancedImageExtractor:
         
             # Fixed positions for different image types
             positions = {
-                'current': 'T3',      # Current packaging at T3
+                'current': 'W4',      # Current packaging at T3
                 'primary': 'A42',     # Primary packaging at A42
-                'secondary': 'F42',   # Secondary packaging at F42
-                'label': 'K42'        # Label at K42
+                'secondary': 'G42',   # Secondary packaging at F42
+                'label': 'M42'        # Label at K42
             }
         
             for img_key, img_data in uploaded_images.items():
@@ -930,60 +933,55 @@ class EnhancedTemplateMapperWithImages:
                     'address': 'Vendor Location'
                 }
             },
-            # ENHANCED PROCEDURE INFORMATION SECTION
-            # ... existing code ...
-    
-        # *** FIXED PROCEDURE INFORMATION SECTION ***
-        'procedure_information': {
-            'section_keywords': [
-                'procedure information', 'procedure', 'packaging procedure', 'loading details',
-                'pallet information', 'pallet details', 'packaging details',
-                'loading instruction', 'packing procedure', 'palletization'
-            ],
-            'field_mappings': {
-                # *** CRITICAL FIX: Map to EXACT column names from your Excel ***
             
-                # x No. of Parts mapping (Column AH: "x No. of Parts")
-                'x no. of parts': 'x No. of Parts',        # Maps template field → Excel column
-                'x no of parts': 'x No. of Parts',
-                'x number of parts': 'x No. of Parts',
-                'no. of parts': 'x No. of Parts',
-                'no of parts': 'x No. of Parts',
-                'number of parts': 'x No. of Parts',
-                'parts': 'x No. of Parts',                 # Simple "Parts" maps to "x No. of Parts"
-            
-                # Layer mapping (Column AF: "Layer") 
-                'layer': 'Layer',                          # Maps template field → Excel column
-                'layers': 'Layer',
-                'max layer': 'Layer',
-                'maximum layer': 'Layer',
-                'pallet layer': 'Layer',
-                'boxes per layer': 'Layer',
-            
-                # Level mapping (Column AG: "Level")
-                'level': 'Level',                          # Maps template field → Excel column
-                'levels': 'Level',
-                'max level': 'Level',
-                'maximum level': 'Level',
-                'stacking level': 'Level',
-                'pallet level': 'Level',
-            
-                # Keep your existing inner/outer mappings...
-                'inner l': 'Inner L',
-                'inner w': 'Inner W', 
-                'inner h': 'Inner H',
-                'inner length': 'Inner L',
-                'inner width': 'Inner W',
-                'inner height': 'Inner H',
-                'outer l': 'Outer L',
-                'outer w': 'Outer W',
-                'outer h': 'Outer H',
-                'outer length': 'Outer L',
-                'outer width': 'Outer W',
-                'outer height': 'Outer H',
-                'inner qty/pack': 'Inner Qty/Pack',
-                'inner quantity': 'Inner Qty/Pack',
-                'inner qty': 'Inner Qty/Pack'
+            'procedure_information': {
+                'section_keywords': [
+                    'procedure information', 'procedure', 'packaging procedure', 'loading details',
+                    'pallet information', 'pallet details', 'packaging details',
+                    'loading instruction', 'packing procedure', 'palletization'
+                ],
+                'field_mappings': {
+                    # x No. of Parts mapping (Column AH: "x No. of Parts")
+                    'x no. of parts': 'x No. of Parts',
+                    'x no of parts': 'x No. of Parts',
+                    'x number of parts': 'x No. of Parts',
+                    'no. of parts': 'x No. of Parts',
+                    'no of parts': 'x No. of Parts',
+                    'number of parts': 'x No. of Parts',
+                    'parts': 'x No. of Parts',
+                
+                    # Layer mapping (Column AF: "Layer") 
+                    'layer': 'Layer',
+                    'layers': 'Layer',
+                    'max layer': 'Layer',
+                    'maximum layer': 'Layer',
+                    'pallet layer': 'Layer',
+                    'boxes per layer': 'Layer',
+                
+                    # Level mapping (Column AG: "Level")
+                    'level': 'Level',
+                    'levels': 'Level',
+                    'max level': 'Level',
+                    'maximum level': 'Level',
+                    'stacking level': 'Level',
+                    'pallet level': 'Level',
+                
+                    # Inner/Outer dimensions
+                    'inner l': 'Inner L',
+                    'inner w': 'Inner W', 
+                    'inner h': 'Inner H',
+                    'inner length': 'Inner L',
+                    'inner width': 'Inner W',
+                    'inner height': 'Inner H',
+                    'outer l': 'Outer L',
+                    'outer w': 'Outer W',
+                    'outer h': 'Outer H',
+                    'outer length': 'Outer L',
+                    'outer width': 'Outer W',
+                    'outer height': 'Outer H',
+                    'inner qty/pack': 'Inner Qty/Pack',
+                    'inner quantity': 'Inner Qty/Pack',
+                    'inner qty': 'Inner Qty/Pack'
                 }
             }
         }
@@ -1034,12 +1032,9 @@ class EnhancedTemplateMapperWithImages:
                 r'qty[/\s]*pack', r'quantity\b', r'weight\b', r'empty\s+weight',
                 r'\bcode\b', r'\bname\b', r'\bdescription\b', r'\blocation\b',
                 r'part\s+no\b', r'part\s+number\b',
-                # Basic fields
                 r'\bdate\b',
                 r'\brev(ision)?\s*no\.?\b',
-            
-                # *** CRITICAL FIXES FOR LEVEL AND X NO. OF PARTS ***
-                # More comprehensive patterns for "x No. of Parts"
+                # Procedure-specific patterns
                 r'\bx\s*no\.?\s*of\s*parts\b',
                 r'\bx\s*no\s*of\s*parts\b',
                 r'\bx\s*number\s*of\s*parts\b',
@@ -1048,24 +1043,18 @@ class EnhancedTemplateMapperWithImages:
                 r'\bparts\s*per\s*pack\b',
                 r'\bparts\s*quantity\b',
                 r'\bqty\s*of\s*parts\b',
-            
-                # More comprehensive patterns for Level/Layer
                 r'\blevel\b', r'\blevels\b',
                 r'\blayer\b', r'\blayers\b',
                 r'\bmax\s*level\b', r'\bmaximum\s*level\b',
                 r'\bmax\s*layer\b', r'\bmaximum\s*layer\b',
                 r'\bstacking\s*level\b', r'\bpallet\s*level\b',
-            
-                # Inner dimensions (CRITICAL FOR PROCEDURES)
                 r'\binner\s*l\b', r'\binner\s*length\b',
                 r'\binner\s*w\b', r'\binner\s*width\b', 
                 r'\binner\s*h\b', r'\binner\s*height\b',
                 r'\binner\s*qty[/\s]*pack\b',
-                # Outer dimensions (CRITICAL FOR PROCEDURES)
                 r'\bouter\s*l\b', r'\bouter\s*length\b',
                 r'\bouter\s*w\b', r'\bouter\s*width\b',
                 r'\bouter\s*h\b', r'\bouter\s*height\b',
-                # Pallet information
                 r'\bpallet\b', r'\bpalletiz\w*\b'
             ]
         
@@ -1088,9 +1077,8 @@ class EnhancedTemplateMapperWithImages:
         """Enhanced section identification with better pattern matching"""
         try:
             section_context = None
-            # Search in a wider area around the field
-            for search_row in range(max(1, row - max_search_rows), row + 5):  # Extended range
-                for search_col in range(max(1, col - 20), min(worksheet.max_column + 1, col + 20)):  # Extended range
+            for search_row in range(max(1, row - max_search_rows), row + 5):
+                for search_col in range(max(1, col - 20), min(worksheet.max_column + 1, col + 20)):
                     try:
                         cell = worksheet.cell(row=search_row, column=search_col)
                         if cell.value:
@@ -1106,7 +1094,6 @@ class EnhancedTemplateMapperWithImages:
                             
                                 # Enhanced context matching
                                 if section_name == 'procedure_information':
-                                    # *** CRITICAL: Better detection for procedure section ***
                                     procedure_indicators = [
                                         'procedure', 'loading', 'pallet', 'packaging procedure',
                                         'stacking', 'palletization', 'loading details', 
@@ -1131,8 +1118,6 @@ class EnhancedTemplateMapperWithImages:
                     except:
                         continue
     
-            # *** FALLBACK LOGIC FOR STANDALONE FIELDS ***
-            # If no section context found, try to infer from field name itself
             return self.infer_section_from_field_name(row, col)
     
         except Exception as e:
@@ -1142,15 +1127,9 @@ class EnhancedTemplateMapperWithImages:
     def infer_section_from_field_name(self, row, col):
         """Infer section context from field name when no explicit section header found"""
         try:
-            # Get the field name (you'll need to pass this in, or get it from the cell)
-            # This is a simplified version - you might need to adapt this
-        
-            # For now, return 'procedure_information' for common procedure fields
-            # This ensures Level and x No. of Parts get proper context
             return 'procedure_information'
-        
         except Exception as e:
-            return 'procedure_information'  # Default fallback
+            return 'procedure_information'
 
     def calculate_similarity(self, text1, text2):
         """Calculate similarity between two texts"""
@@ -1186,7 +1165,7 @@ class EnhancedTemplateMapperWithImages:
                         if cell.value is not None:
                             cell_value = str(cell.value).strip()
 
-                            # ✅ Force capture Date & Revision No anywhere in sheet
+                            # Force capture Date & Revision No anywhere in sheet
                             if cell_value.lower() in ['date', 'revision no.', 'revision no']:
                                 fields[cell.coordinate] = {
                                     'value': cell_value,
@@ -1196,7 +1175,7 @@ class EnhancedTemplateMapperWithImages:
                                     'section_context': 'general_information',
                                     'is_mappable': True
                                 }
-                                continue  # Skip normal check, already added
+                                continue
                         
                             if cell_value and self.is_mappable_field(cell_value):
                                 cell_coord = cell.coordinate
@@ -1290,7 +1269,327 @@ class EnhancedTemplateMapperWithImages:
             st.error(f"Error in find_data_cell_for_label: {e}")
             return None
 
-# *** ADDITIONAL FIX: Enhanced mapping logic to handle direct column matches ***
+    # *** NEW METHOD: Read procedure steps from Excel template ***
+    def read_procedure_steps_from_template(self, template_path, packaging_type=None):
+        """
+        Read procedure steps directly from the Excel template.
+        Args:
+            template_path: Path to the Excel templat
+            packaging_type: Optional packaging type to filter steps
+        Returns:
+            List of procedure steps with {placeholders}
+        """
+        try:
+            print(f"\n=== READING PROCEDURE STEPS FROM TEMPLATE ===")
+            st.write(f"📖 Reading procedure steps from template...")
+        
+            workbook = openpyxl.load_workbook(template_path)
+            worksheet = workbook.active
+        
+            procedure_steps = []
+            start_row = 28  # Based on your original code
+            target_cols = list(range(2, 19))  # Columns B to P (2 to 16)
+            max_search_rows = 50  # Search up to 50 rows
+            empty_count = 0       # track consecutive empty rows
+            
+            for row_num in range(start_row, start_row + max_search_rows):
+                try:
+                    row_has_content = False
+                    step_text = ""
+                    # Look for content in columns B to P
+                    for col_num in target_cols:
+                        try:
+                            cell = worksheet.cell(row=row_num, column=col_num)
+                            if cell.value and str(cell.value).strip():
+                                cell_text = str(cell.value).strip()
+                                if cell_text and not cell_text.isspace():
+                                    step_text = cell_text
+                                    row_has_content = True
+                                    break
+                        except:
+                            continue
+                    if row_has_content and step_text:
+                        # Clean and validate the step text
+                        step_text = step_text.strip()
+                    
+                        # Skip obviously non-procedure content
+                        skip_patterns = [
+                            r'^[0-9]+$',  # Just numbers
+                            r'^[A-Z]$',   # Single letters
+                            r'^[-_=]+$',  # Just separators
+                        ]
+                    
+                        should_skip = any(re.match(pattern, step_text) for pattern in skip_patterns)
+                    
+                        if not should_skip and len(step_text) > 5:  # Minimum length check
+                            procedure_steps.append(step_text)
+                            print(f"📝 Found step {len(procedure_steps)}: {step_text[:50]}...")
+                        empty_count = 0  # reset empty counter after a valid step
+                    else:
+                        empty_count += 1
+                        if empty_count >= 3:  # stop after 3 consecutive empty rows
+                            break
+                except Exception as e:
+                    print(f"⚠️ Error reading row {row_num}: {e}")
+                    continue
+            workbook.close()
+        
+            print(f"✅ Successfully read {len(procedure_steps)} procedure steps from template")
+            st.write(f"✅ Found {len(procedure_steps)} procedure steps in template")
+        
+            # Debug: Show found steps
+            for i, step in enumerate(procedure_steps, 1):
+                print(f"  Step {i}: {step[:100]}...")
+            return procedure_steps
+        except Exception as e:
+            print(f"❌ Error reading procedure steps from template: {e}")
+            st.error(f"Error reading procedure steps from template: {e}")
+            return []
+
+    def substitute_placeholders_in_steps(self, procedure_steps, data_dict):
+        """
+        Replace placeholders in procedure steps with actual data values.
+        
+        Args:
+            procedure_steps: List of steps with {placeholders}
+            data_dict: Dictionary containing mapped data values
+            
+        Returns:
+            List of procedure steps with placeholders replaced
+        """
+        try:
+            print(f"\n=== SUBSTITUTING PLACEHOLDERS IN STEPS ===")
+            st.write(f"🔄 Replacing placeholders with actual data...")
+            
+            # Debug: Print available data
+            print(f"Available data in data_dict:")
+            for key, value in data_dict.items():
+                print(f"  '{key}': '{value}'")
+            print("=" * 50)
+            
+            filled_steps = []
+            
+            for i, step in enumerate(procedure_steps, 1):
+                filled_step = step
+                
+                print(f"Processing step {i}: {step[:50]}...")
+                
+                # Enhanced mapping with multiple fallback options
+                replacements = {
+                    # *** CRITICAL: Enhanced quantity mappings - multiple fallbacks ***
+                    '{x No. of Parts}': (
+                        data_dict.get('x No. of Parts') or 
+                        data_dict.get('X No. of Parts') or
+                        data_dict.get('x no. of parts') or
+                        data_dict.get('X no. of parts') or
+                        data_dict.get('no. of parts') or
+                        data_dict.get('No. of Parts') or
+                        data_dict.get('number of parts') or
+                        data_dict.get('Number of Parts') or
+                        data_dict.get('parts per pack') or
+                        data_dict.get('Parts Per Pack') or
+                        data_dict.get('qty of parts') or
+                        data_dict.get('Qty of Parts') or
+                        '8'  # Default fallback
+                    ),
+                
+                    # *** CRITICAL: Enhanced Level mappings - multiple fallbacks ***
+                    '{Level}': (
+                        data_dict.get('Level') or
+                        data_dict.get('level') or
+                        data_dict.get('LEVEL') or
+                        data_dict.get('Levels') or
+                        data_dict.get('levels') or
+                        data_dict.get('max level') or
+                        data_dict.get('Max Level') or
+                        data_dict.get('maximum level') or
+                        data_dict.get('Maximum Level') or
+                        data_dict.get('stacking level') or
+                        data_dict.get('Stacking Level') or
+                        '5'  # Default fallback
+                    ),
+                
+                    # *** CRITICAL: Enhanced Layer mappings - multiple fallbacks ***
+                    '{Layer}': (
+                        data_dict.get('Layer') or
+                        data_dict.get('layer') or
+                        data_dict.get('LAYER') or
+                        data_dict.get('Layers') or
+                        data_dict.get('layers') or
+                        data_dict.get('max layer') or
+                        data_dict.get('Max Layer') or
+                        data_dict.get('maximum layer') or
+                        data_dict.get('Maximum Layer') or
+                        '4'  # Default fallback
+                    ),
+                    
+                    # Inner dimensions - try multiple key variations
+                    '{Inner L}': (
+                        data_dict.get('Inner L') or 
+                        data_dict.get('inner l') or
+                        data_dict.get('Inner l') or
+                        data_dict.get('INNER L') or
+                        data_dict.get('Inner Length') or
+                        data_dict.get('inner length') or
+                        'XXX'
+                    ),
+                    '{Inner W}': (
+                        data_dict.get('Inner W') or 
+                        data_dict.get('inner w') or
+                        data_dict.get('Inner w') or
+                        data_dict.get('INNER W') or
+                        data_dict.get('Inner Width') or
+                        data_dict.get('inner width') or
+                        'XXX'
+                    ),
+                    '{Inner H}': (
+                        data_dict.get('Inner H') or 
+                        data_dict.get('inner h') or
+                        data_dict.get('Inner h') or
+                        data_dict.get('INNER H') or
+                        data_dict.get('Inner Height') or
+                        data_dict.get('inner height') or
+                        'XXX'
+                    ),
+                    
+                    # Inner Qty/Pack - try multiple variations
+                    '{Inner Qty/Pack}': (
+                        data_dict.get('Inner Qty/Pack') or
+                        data_dict.get('inner qty/pack') or
+                        data_dict.get('Inner qty/pack') or
+                        data_dict.get('INNER QTY/PACK') or
+                        data_dict.get('Inner Quantity') or
+                        data_dict.get('inner quantity') or
+                        '1'
+                    ),
+                    
+                    # Outer dimensions - try multiple variations
+                    '{Outer L}': (
+                        data_dict.get('Outer L') or 
+                        data_dict.get('outer l') or
+                        data_dict.get('Outer l') or
+                        data_dict.get('OUTER L') or
+                        data_dict.get('Outer Length') or
+                        data_dict.get('outer length') or
+                        'XXX'
+                    ),
+                    '{Outer W}': (
+                        data_dict.get('Outer W') or 
+                        data_dict.get('outer w') or
+                        data_dict.get('Outer w') or
+                        data_dict.get('OUTER W') or
+                        data_dict.get('Outer Width') or
+                        data_dict.get('outer width') or
+                        'XXX'
+                    ),
+                    '{Outer H}': (
+                        data_dict.get('Outer H') or 
+                        data_dict.get('outer h') or
+                        data_dict.get('Outer h') or
+                        data_dict.get('OUTER H') or
+                        data_dict.get('Outer Height') or
+                        data_dict.get('outer height') or
+                        'XXX'
+                    ),
+                    
+                    # Primary Qty/Pack - try multiple variations
+                    '{Primary Qty/Pack}': (
+                        data_dict.get('Primary Qty/Pack') or
+                        data_dict.get('primary qty/pack') or
+                        data_dict.get('Primary qty/pack') or
+                        data_dict.get('PRIMARY QTY/PACK') or
+                        data_dict.get('Primary Quantity') or
+                        data_dict.get('primary quantity') or
+                        '1'
+                    ),
+                    
+                    # Generic Qty/Pack - try multiple variations
+                    '{Qty/Pack}': (
+                        data_dict.get('Qty/Pack') or
+                        data_dict.get('qty/pack') or
+                        data_dict.get('QTY/PACK') or
+                        data_dict.get('Quantity') or
+                        data_dict.get('quantity') or
+                        '1'
+                    ),
+                    '{Qty/Veh}': (
+                        data_dict.get('Qty/Veh') or
+                        data_dict.get('qty/veh') or
+                        data_dict.get('QTY/VEH') or
+                        data_dict.get('Qty/Pack') or
+                        data_dict.get('qty/pack') or
+                        '1'
+                    ),
+                    
+                    # Secondary dimensions
+                    '{Secondary L-mm}': (
+                        data_dict.get('Secondary L-mm') or
+                        data_dict.get('secondary l-mm') or
+                        data_dict.get('Secondary L') or
+                        data_dict.get('secondary l') or
+                        'XXX'
+                    ),
+                    '{Secondary W-mm}': (
+                        data_dict.get('Secondary W-mm') or
+                        data_dict.get('secondary w-mm') or
+                        data_dict.get('Secondary W') or
+                        data_dict.get('secondary w') or
+                        'XXX'
+                    ),
+                    '{Secondary H-mm}': (
+                        data_dict.get('Secondary H-mm') or
+                        data_dict.get('secondary h-mm') or
+                        data_dict.get('Secondary H') or
+                        data_dict.get('secondary h') or
+                        'XXX'
+                    ),
+                    
+                    # Primary dimensions
+                    '{Primary L-mm}': (
+                        data_dict.get('Primary L-mm') or
+                        data_dict.get('primary l-mm') or
+                        data_dict.get('Primary L') or
+                        data_dict.get('primary l') or
+                        'XXX'
+                    ),
+                    '{Primary W-mm}': (
+                        data_dict.get('Primary W-mm') or
+                        data_dict.get('primary w-mm') or
+                        data_dict.get('Primary W') or
+                        data_dict.get('primary w') or
+                        'XXX'
+                    ),
+                    '{Primary H-mm}': (
+                        data_dict.get('Primary H-mm') or
+                        data_dict.get('primary h-mm') or
+                        data_dict.get('Primary H') or
+                        data_dict.get('primary h') or
+                        'XXX'
+                    )
+                }
+                
+                # Debug: Show what replacements are being made
+                for placeholder, raw_value in replacements.items():
+                    if placeholder in filled_step:
+                        clean_value = self.clean_data_value(raw_value)
+                        if not clean_value or clean_value == "":
+                            clean_value = 'XXX'
+                        print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
+                        filled_step = filled_step.replace(placeholder, str(clean_value))
+                
+                filled_steps.append(filled_step)
+                print(f"  Final step {i}: {filled_step[:100]}...")
+                print("---")
+            
+            print(f"✅ Successfully processed {len(filled_steps)} procedure steps")
+            st.write(f"✅ Replaced placeholders in {len(filled_steps)} steps")
+            
+            return filled_steps
+            
+        except Exception as e:
+            print(f"❌ Error substituting placeholders: {e}")
+            st.error(f"Error substituting placeholders: {e}")
+            return procedure_steps  # Return original steps if substitution fails
 
     def map_data_with_section_context(self, template_fields, data_df):
         """Enhanced mapping with EXACT column name matching"""
@@ -1301,10 +1600,6 @@ class EnhancedTemplateMapperWithImages:
             data_columns = data_df.columns.tolist()
             print(f"DEBUG: Available data columns: {data_columns}")
         
-            # Print exact column names for debugging
-            for i, col in enumerate(data_columns):
-                print(f"  Column {i}: '{col}'")
-
             for coord, field in template_fields.items():
                 try:
                     best_match = None
@@ -1314,10 +1609,9 @@ class EnhancedTemplateMapperWithImages:
 
                     print(f"DEBUG: Mapping field '{field_value}' with section '{section_context}'")
 
-                    # *** CRITICAL FIX 1: Direct exact column name matching first ***
+                    # Direct exact column name matching first
                     field_lower = self.preprocess_text(field_value)
                 
-                    # Try direct column name matching first (highest priority)
                     for data_col in data_columns:
                         if data_col in used_columns:
                             continue
@@ -1331,7 +1625,7 @@ class EnhancedTemplateMapperWithImages:
                             print(f"DEBUG: DIRECT EXACT MATCH: '{field_value}' → '{data_col}'")
                             break
                     
-                        # Special case matches for your specific columns
+                        # Special case matches for specific columns
                         if field_lower == 'layer' and col_lower == 'layer':
                             best_match = data_col
                             best_score = 1.0
@@ -1362,14 +1656,14 @@ class EnhancedTemplateMapperWithImages:
                         print(f"DEBUG: DIRECT MATCH SUCCESS: {field_value} → {best_match}")
                         continue
 
-                    # *** CRITICAL FIX 2: Force procedure context for specific fields ***
+                    # Force procedure context for specific fields
                     if not section_context:
                         procedure_fields = ['layer', 'level', 'x no of parts', 'no. of parts', 'parts']
                         if any(proc_field in field_lower for proc_field in procedure_fields):
                             section_context = 'procedure_information'
                             print(f"DEBUG: FORCED procedure context for field '{field_value}'")
 
-                    # *** EXISTING SECTION MAPPING LOGIC (if direct match failed) ***
+                    # Section mapping logic
                     if section_context and section_context in self.section_mappings:
                         section_mappings = self.section_mappings[section_context]['field_mappings']
                         print(f"DEBUG: Section mappings: {section_mappings}")
@@ -1383,7 +1677,6 @@ class EnhancedTemplateMapperWithImages:
                             if normalized_field_value == normalized_template_key:
                                 # For procedure_information, don't add section prefix
                                 if section_context == "procedure_information":
-                                    # For procedure fields, DO NOT prefix — match exactly
                                     expected_column = data_column_pattern 
                                 else:
                                     section_prefix = section_context.split('_')[0].capitalize()
@@ -1451,10 +1744,8 @@ class EnhancedTemplateMapperWithImages:
         if pd.isna(value) or value is None:
             return ""
         
-        # Convert to string and strip whitespace
         str_value = str(value).strip()
         
-        # Handle common representations of empty/null values
         if str_value.lower() in ['nan', 'none', 'null', 'n/a', '#n/a', '']:
             return ""
             
@@ -1467,7 +1758,8 @@ class EnhancedTemplateMapperWithImages:
             data_df = pd.read_excel(data_path)
             data_df = data_df.fillna("")
             st.write(f"📊 Loaded data with {len(data_df)} rows and {len(data_df.columns)} columns")
-            # ✅ Step 1: Force direct capture of critical procedure columns if present in Excel
+            
+            # Force direct capture of critical procedure columns if present in Excel
             critical_cols = {
                 "Outer L": ["outer l", "outer length", "outer l-mm"],
                 "Outer W": ["outer w", "outer width", "outer w-mm"],
@@ -1475,11 +1767,12 @@ class EnhancedTemplateMapperWithImages:
                 "Inner L": ["inner l", "inner length", "inner l-mm"],
                 "Inner W": ["inner w", "inner width", "inner w-mm"],
                 "Inner H": ["inner h", "inner height", "inner h-mm"],
+                "Primary Qty/Pack": ["Primary qty/pack", "primary qty/pack", "PRIMARY QTY/PACK"],
                 "Layer":   ["layer", "layers"],
                 "Level":   ["level", "levels"],
                 "x No. of Parts": ["x no of parts", "x no. of parts", "x number of parts", "no. of parts", "number of parts"]
             }
-            # Build a map from Excel columns -> canonical keys
+            
             col_map = {}
             for canonical, variants in critical_cols.items():
                 for col in data_df.columns:
@@ -1488,12 +1781,19 @@ class EnhancedTemplateMapperWithImages:
                         col_map[col_norm] = canonical
                         print(f"DEBUG: Matched column '{col}' ({col_norm}) -> '{canonical}'")
                         break
+            
+            # *** NEW: Read procedure steps from template ONCE ***
+            template_procedure_steps = self.read_procedure_steps_from_template(template_path)
+            if not template_procedure_steps:
+                st.warning("⚠️ No procedure steps found in template. Will use empty steps.")
+            
             # Store all row data for multi-template generation
             st.session_state.all_row_data = []
     
             # Process each row
             for row_idx in range(len(data_df)):
                 st.write(f"🔄 Processing row {row_idx + 1}/{len(data_df)}")
+                
                 # Load fresh template for each row
                 workbook = openpyxl.load_workbook(template_path)
                 worksheet = workbook.active
@@ -1519,7 +1819,7 @@ class EnhancedTemplateMapperWithImages:
                             # Store in data_dict for procedure generation
                             data_dict[mapping['template_field']] = data_value
 
-                            # ✅ Step 2: Force map critical fields if the column matches
+                            # Force map critical fields if the column matches
                             normalized_col = self.preprocess_text(data_col)
                             if normalized_col in col_map:
                                 data_dict[col_map[normalized_col]] = data_value
@@ -1542,13 +1842,18 @@ class EnhancedTemplateMapperWithImages:
                                 mapping_count += 1
                         except Exception as e:
                             st.write(f"⚠️ Error processing row {row_idx + 1}, field '{mapping['template_field']}': {e}")
-                # Add procedure steps
-                if hasattr(st.session_state, 'selected_packaging_type') and st.session_state.selected_packaging_type:
-                    steps_written = self.write_procedure_steps_to_template(
-                        worksheet, 
-                        st.session_state.selected_packaging_type, 
-                        data_dict
-                    )
+                
+                # *** NEW: Process procedure steps from template instead of hardcoded ***
+                steps_written = 0
+                if template_procedure_steps:
+                    # Substitute placeholders with actual data
+                    filled_steps = self.substitute_placeholders_in_steps(template_procedure_steps, data_dict)
+                    
+                    # Write the filled steps back to template
+                    steps_written = self.write_filled_steps_to_template(worksheet, filled_steps)
+                else:
+                    st.write("⚠️ No procedure steps to process for this row")
+                
                 # Generate filename
                 vendor_code = filename_parts.get('vendor_code', 'Unknown')
                 part_no = filename_parts.get('part_no', 'Unknown') 
@@ -1572,15 +1877,20 @@ class EnhancedTemplateMapperWithImages:
                         'file_path': tmp_file.name,
                         'data_dict': data_dict,
                         'mapping_count': mapping_count,
+                        'steps_written': steps_written,
                         'vendor_code': vendor_code,
                         'part_no': part_no,
-                        'description': description
+                        'description': description,
+                        'procedure_steps': filled_steps if template_procedure_steps else []
                     }
                     st.session_state.all_row_data.append(row_data)
+                
                 workbook.close()
-                st.write(f"✅ Row {row_idx + 1} processed: {mapping_count} fields mapped -> {filename}")
+                st.write(f"✅ Row {row_idx + 1} processed: {mapping_count} fields mapped, {steps_written} steps written -> {filename}")
+            
             st.success(f"🎉 Successfully processed {len(data_df)} rows!")
             return True, st.session_state.all_row_data
+            
         except Exception as e:
             st.error(f"❌ Error mapping template: {e}")
             st.write("📋 Traceback:", traceback.format_exc())
@@ -1610,8 +1920,11 @@ class EnhancedTemplateMapperWithImages:
                             normalized_template_key = self.preprocess_text(template_field_key)
 
                             if normalized_field_value == normalized_template_key:
-                                section_prefix = section_context.split('_')[0].capitalize()
-                                expected_column = f"{section_prefix} {data_column_pattern}".strip()
+                                if section_context == "procedure_information":
+                                    expected_column = data_column_pattern 
+                                else:
+                                    section_prefix = section_context.split('_')[0].capitalize()
+                                    expected_column = f"{section_prefix} {data_column_pattern}".strip()
 
                                 for data_col in data_columns:
                                     if data_col in used_columns:
@@ -1662,222 +1975,45 @@ class EnhancedTemplateMapperWithImages:
 
         return mapping_results
     
-    # Keep your packaging procedure methods
-    def get_procedure_steps(self, packaging_type, data_dict=None):
-        """Get procedure steps with enhanced data substitution"""
-        procedures = PACKAGING_PROCEDURES.get(packaging_type, [""] * 11)
-        if not data_dict:
-            return procedures
-        filled_procedures = []
-    
-        # Debug: Print available data
-        print(f"\n=== DEBUG: Available data in data_dict ===")
-        for key, value in data_dict.items():
-            print(f"  '{key}': '{value}'")
-        print("=" * 50)
-    
-        for procedure in procedures:
-            filled_procedure = procedure
-            # Enhanced mapping with multiple fallback options
-            replacements = {
-                # *** CRITICAL: Enhanced quantity mappings - multiple fallbacks ***
-                '{x No. of Parts}': (
-                    data_dict.get('x No. of Parts') or 
-                    data_dict.get('X No. of Parts') or
-                    data_dict.get('x no. of parts') or
-                    data_dict.get('X no. of parts') or
-                    data_dict.get('no. of parts') or
-                    data_dict.get('No. of Parts') or
-                    data_dict.get('number of parts') or
-                    data_dict.get('Number of Parts') or
-                    data_dict.get('parts per pack') or
-                    data_dict.get('Parts Per Pack') or
-                    data_dict.get('qty of parts') or
-                    data_dict.get('Qty of Parts') or
-                    '8'  # Default fallback
-                ),
-            
-                # *** CRITICAL: Enhanced Level mappings - multiple fallbacks ***
-                '{Level}': (
-                    data_dict.get('Level') or
-                    data_dict.get('level') or
-                    data_dict.get('LEVEL') or
-                    data_dict.get('Levels') or
-                    data_dict.get('levels') or
-                    data_dict.get('max level') or
-                    data_dict.get('Max Level') or
-                    data_dict.get('maximum level') or
-                    data_dict.get('Maximum Level') or
-                    data_dict.get('stacking level') or
-                    data_dict.get('Stacking Level') or
-                    '5'  # Default fallback
-                ),
-            
-                # *** CRITICAL: Enhanced Layer mappings - multiple fallbacks ***
-                '{Layer}': (
-                    data_dict.get('Layer') or
-                    data_dict.get('layer') or
-                    data_dict.get('LAYER') or
-                    data_dict.get('Layers') or
-                    data_dict.get('layers') or
-                    data_dict.get('max layer') or
-                    data_dict.get('Max Layer') or
-                    data_dict.get('maximum layer') or
-                    data_dict.get('Maximum Layer') or
-                    '4'  # Default fallback
-                ),
-                # Inner dimensions - try multiple key variations
-                '{Inner L}': (
-                    data_dict.get('Inner L') or 
-                    data_dict.get('inner l') or
-                    data_dict.get('Inner l') or
-                    data_dict.get('INNER L') or
-                    'XXX'
-                ),
-                '{Inner W}': (
-                    data_dict.get('Inner W') or 
-                    data_dict.get('inner w') or
-                    data_dict.get('Inner w') or
-                    data_dict.get('INNER W') or
-                    'XXX'
-                ),
-                '{Inner H}': (
-                    data_dict.get('Inner H') or 
-                    data_dict.get('inner h') or
-                    data_dict.get('Inner h') or
-                    data_dict.get('INNER H') or
-                    'XXX'
-                ),
-                # Inner Qty/Pack - try multiple variations
-                '{Inner Qty/Pack}': (
-                    data_dict.get('Inner Qty/Pack') or
-                    data_dict.get('inner qty/pack') or
-                    data_dict.get('Inner qty/pack') or
-                    data_dict.get('INNER QTY/PACK') or
-                    '1'
-                ),
-                # Outer dimensions - try multiple variations
-                '{Outer L}': (
-                    data_dict.get('Outer L') or 
-                    data_dict.get('outer l') or
-                    data_dict.get('Outer l') or
-                    data_dict.get('OUTER L') or
-                    'XXX'
-                ),
-                '{Outer W}': (
-                    data_dict.get('Outer W') or 
-                    data_dict.get('outer w') or
-                    data_dict.get('Outer w') or
-                    data_dict.get('OUTER W') or
-                    'XXX'
-                ),
-                '{Outer H}': (
-                    data_dict.get('Outer H') or 
-                    data_dict.get('outer h') or
-                    data_dict.get('Outer h') or
-                    data_dict.get('OUTER H') or
-                    'XXX'
-                ),
-                # Primary Qty/Pack - try multiple variations
-                '{Primary Qty/Pack}': (
-                    data_dict.get('Primary Qty/Pack') or
-                    data_dict.get('primary qty/pack') or
-                    data_dict.get('Primary qty/pack') or
-                    data_dict.get('PRIMARY QTY/PACK') or
-                    '1'
-                ),
-                # Generic Qty/Pack - try multiple variations
-                '{Qty/Pack}': (
-                    data_dict.get('Qty/Pack') or
-                    data_dict.get('qty/pack') or
-                    data_dict.get('QTY/PACK') or
-                    data_dict.get('Quantity') or
-                    data_dict.get('quantity') or
-                    '1'
-                ),
-                '{Qty/Veh}': (
-                    data_dict.get('Qty/Veh') or
-                    data_dict.get('qty/veh') or
-                    data_dict.get('QTY/VEH') or
-                    data_dict.get('Qty/Pack') or
-                    data_dict.get('qty/pack') or
-                    '1'
-                )
-            
-                # Rest of your existing replacements...
-                # [Keep all other dimension mappings as they are]
-            }
-        
-            # Debug: Show what replacements are being made
-            for placeholder, raw_value in replacements.items():
-                if placeholder in filled_procedure:
-                    clean_value = self.clean_data_value(raw_value)
-                    if not clean_value or clean_value == "":
-                        clean_value = 'XXX'
-                    print(f"  Replacing {placeholder} with '{clean_value}' (from: {raw_value})")
-                    filled_procedure = filled_procedure.replace(placeholder, str(clean_value))
-            filled_procedures.append(filled_procedure)
-    
-        return filled_procedures
-
-    def write_procedure_steps_to_template(self, worksheet, packaging_type, data_dict=None):
-        """Write packaging procedure steps in merged cells B to P starting from Row 28"""
+    def write_filled_steps_to_template(self, worksheet, filled_steps):
+        """Write filled procedure steps to merged cells B to P starting from Row 28"""
         try:
             from openpyxl.cell import MergedCell
             from openpyxl.styles import Font, Alignment
 
-            print(f"\n=== WRITING PROCEDURE STEPS FOR {packaging_type} ===")
-            st.write(f"🔄 Processing procedure steps for: {packaging_type}")
-
-            # Get procedure steps with data substitution
-            steps = self.get_procedure_steps(packaging_type, data_dict)
-            if not steps:
-                print(f"❌ No procedure steps found for packaging type: {packaging_type}")
-                st.error(f"No procedure steps found for packaging type: {packaging_type}")
-                return 0
-
-            print(f"📋 Retrieved {len(steps)} procedure steps")
-            st.write(f"📋 Retrieved {len(steps)} procedure steps")
+            print(f"\n=== WRITING FILLED PROCEDURE STEPS ===")
+            st.write(f"🔄 Writing {len(filled_steps)} filled procedure steps to template")
 
             start_row = 28
             target_col = 2  # Column B
-            end_col = 16    # Column P
-
-            # Filter out empty steps
-            non_empty_steps = [step for step in steps if step and step.strip()]
-            steps_to_write = non_empty_steps
-
-            print(f"✏️  Will write {len(steps_to_write)} non-empty steps")
-            st.write(f"✏️ Writing {len(steps_to_write)} non-empty steps to template")
+            end_col = 18    # Column P
 
             steps_written = 0
 
-            for i, step in enumerate(steps_to_write):
+            for i, step in enumerate(filled_steps):
                 step_row = start_row + i
                 step_text = step.strip()
             
-                # Make sure we don't exceed template boundaries
-                if step_row > worksheet.max_row + 20:  # Safety check
+                # Safety check
+                if step_row > worksheet.max_row + 20:
                     st.warning(f"⚠️ Stopping at row {step_row} to avoid exceeding template boundaries")
                     break
             
                 try:
                     # Define the merge range for this row (B to P)
-                    merge_range = f"B{step_row}:P{step_row}"
+                    merge_range = f"B{step_row}:R{step_row}"
                     target_cell = worksheet.cell(row=step_row, column=target_col)
                 
-                    print(f"📝 Writing step {i + 1} to {merge_range}: {step_text[:50]}...")
+                    print(f"📝 Writing filled step {i + 1} to {merge_range}: {step_text[:50]}...")
                     st.write(f"📝 Step {i + 1} -> {merge_range}: {step_text[:50]}...")
 
-                    # First, check if this range is already merged and unmerge if necessary
+                    # Unmerge any existing ranges that might conflict
                     existing_merged_ranges = []
                     for merged_range in list(worksheet.merged_cells.ranges):
-                        # Check if any part of our target range overlaps with existing merged ranges
                         if (merged_range.min_row <= step_row <= merged_range.max_row and
                             merged_range.min_col <= end_col and merged_range.max_col >= target_col):
                             existing_merged_ranges.append(merged_range)
 
-                    # Unmerge overlapping ranges
                     for merged_range in existing_merged_ranges:
                         try:
                             worksheet.unmerge_cells(str(merged_range))
@@ -1899,14 +2035,12 @@ class EnhancedTemplateMapperWithImages:
                     try:
                         worksheet.merge_cells(merge_range)
                         print(f"✅ Merged range: {merge_range}")
-                        st.write(f"✅ Merged cells: {merge_range}")
                     except Exception as merge_error:
                         print(f"⚠️ Warning: Could not merge {merge_range}: {merge_error}")
                         st.warning(f"Could not merge {merge_range}: {merge_error}")
   
                     # Adjust row height based on text length
-                    # Calculate approximate number of lines needed
-                    chars_per_line = 120  # Approximate characters per line in merged B:P range
+                    chars_per_line = 120
                     num_lines = max(1, len(step_text) // chars_per_line + 1)
                     estimated_height = 15 + (num_lines - 1) * 15
                     worksheet.row_dimensions[step_row].height = estimated_height
@@ -1916,151 +2050,320 @@ class EnhancedTemplateMapperWithImages:
                 except Exception as step_error:
                     print(f"❌ Error writing step {i + 1}: {step_error}")
                     st.error(f"Error writing step {i + 1}: {step_error}")
-                    import traceback
-                    traceback.print_exc()
                     continue
 
-            print(f"\n✅ PROCEDURE STEPS COMPLETED")
+            print(f"\n✅ FILLED PROCEDURE STEPS COMPLETED")
             print(f"   Total steps written: {steps_written}")
-            print(f"   Location: Merged cells B:P, starting from Row 28")
         
-            st.success(f"✅ Successfully wrote {steps_written} procedure steps to template")
+            st.success(f"✅ Successfully wrote {steps_written} filled procedure steps to template")
 
             return steps_written
 
         except Exception as e:
-            print(f"💥 Critical error in write_procedure_steps_to_template: {e}")
-            st.error(f"Critical error writing procedure steps: {e}")
-            import traceback
-            traceback.print_exc()
-        return 0
+            print(f"💥 Critical error in write_filled_steps_to_template: {e}")
+            st.error(f"Critical error writing filled procedure steps: {e}")
+            return 0
 
 # Packaging types and procedures from reference code
 PACKAGING_TYPES = [
-    "BOX IN BOX SENSITIVE",
-    "BOX IN BOX", 
-    "CARTON BOX WITH SEPARATOR FOR ONE PART",
-    "INDIVIDUAL NOT SENSITIVE",
-    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE",
-    "INDIVIDUAL PROTECTION FOR EACH PART",
-    "INDIVIDUAL SENSITIVE",
-    "MANY IN ONE TYPE",
-    "SINGLE BOX"
+    {
+        "name": "BOX IN BOX SENSITIVE",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Box%20in%20Box%20sensitive.png",
+        "description": "Double protection for sensitive items"
+    },
+    {
+        "name": "BOX IN BOX",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Box%20in%20box.png",
+        "description": "Standard double boxing protection"
+    },
+    {
+        "name": "CARTON BOX WITH SEPARATOR FOR ONE PART",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Cardboard%20Box%20with%20Protective%20Packing.png",
+        "description": "Single item with internal separator"
+    },
+    {
+        "name": "INDIVIDUAL NOT SENSITIVE",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Individual%20not%20sensitive.png",
+        "description": "Individual packaging for standard items"
+    },
+    {
+        "name": "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Individual%20each%20part%20many%20types.png",
+        "description": "Different protection for various parts"
+    },
+    {
+        "name": "INDIVIDUAL PROTECTION FOR EACH PART",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Individual%20for%20each%20part.png",
+        "description": "Uniform protection for each part"
+    },
+    {
+        "name": "INDIVIDUAL SENSITIVE",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Individual%20Sensitive.png",
+        "description": "Individual packaging for sensitive items"
+    },
+    {
+        "name": "MANY IN ONE TYPE",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/2af9551cb1033072c5d79e029fe17448f8bbc096/Many%20in%20one.png",
+        "description": "Multiple items in single packaging"
+    },
+    {
+        "name": "SINGLE BOX",
+        "image_url": "https://raw.githubusercontent.com/Rimjhimrani/Pack/88ee0796f874244af8152c681df74d352cf5359a/Single%20Box.png",
+        "description": "Simple single box packaging"
+    }
 ]
 
-PACKAGING_PROCEDURES = {
-    "BOX IN BOX SENSITIVE": [
-        "Pick up {x No. of Parts} quantity of part and apply bubble wrapping over it",
-        "Apply tape and Put 1 such bubble wrapped part into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Seal carton box and put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "BOX IN BOX": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Seal the polybag and put it into a carton box [L-{Inner L} mm, W-{Inner W} mm, H-{Inner H} mm]",
-        "Put {Inner Qty/Pack} such carton boxes into another carton box [L-{Outer L} mm, W-{Outer W} mm, H-{Outer H} mm]",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "CARTON BOX WITH SEPARATOR FOR ONE PART": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL NOT SENSITIVE": [
-        "Pick up {x No. of Parts} part and put it into a polybag",
-        "Seal polybag and Put polybag into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- Maximum {Layer} boxes per layer & Maximum {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL PROTECTION FOR EACH PART MANY TYPE": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of primary pack quantity -- {Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL PROTECTION FOR EACH PART": [
-        "Pick up {x No. of Parts} parts and apply bubble wrapping over it (individually)",
-        "Apply tape and Put bubble wrapped part into a carton box. Apply part separator & filler material between two parts to arrest part movement during handling",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "INDIVIDUAL SENSITIVE": [
-        "Pick up {x No. of Parts} part and apply bubble wrapping over it",
-        "Apply tape and Put bubble wrapped part into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "MANY IN ONE TYPE": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Seal polybag and Put it into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way)",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ],
-    "SINGLE BOX": [
-        "Pick up {x No. of Parts} quantity of part and put it in a polybag",
-        "Put into a carton box",
-        "Seal carton box and put Traceability label as per PMSPL standard guideline",
-        "Prepare additional carton boxes in line with procurement schedule (multiple of pack quantity -- {Primary Qty/Pack})",
-        "If procurement schedule is for less no. of boxes, then load similar boxes of other parts on same wooden pallet",
-        "Load carton boxes on base wooden pallet -- {Layer} boxes per layer & max {Level} level",
-        "Put corner / edge protector and apply pet strap (2 times -- cross way) and stretch wrap it",
-        "Apply traceability label on complete pack",
-        "Attach packing list along with dispatch document and tag copy of same on pack (in case of multiple parts on same pallet)",
-        "Ensure Loading/Unloading of palletize load using Hand pallet / stacker / forklift only"
-    ]
-}
+def display_packaging_cards():
+    """Alternative card-style layout for packaging selection with consistent image sizes"""
+    st.header("📦 Step 1: Select Packaging Type")
+    
+    # Custom CSS for cards with consistent image sizing
+    st.markdown("""
+    <style>
+    .packaging-card {
+        border: 2px solid #ddd;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 15px 0;
+        transition: all 0.3s ease;
+        background-color: white;
+    }
+    .packaging-card:hover {
+        border-color: #ff6b6b;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .packaging-card.selected {
+        border-color: #4CAF50;
+        background-color: #f0f8f0;
+    }
+    .card-image-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 250px;
+        height: 250px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background-color: #fafafa;
+        margin: 0 auto;
+    }
+    .card-image-container img {
+        max-width: 230px;
+        max-height: 230px;
+        object-fit: contain;
+    }
+    .stButton > button {
+        width: 100%;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    for i, packaging in enumerate(PACKAGING_TYPES):
+        is_selected = st.session_state.get('selected_packaging_type') == packaging['name']
+        
+        # Create card container with custom styling
+        card_style = """
+        <div style="border: 2px solid {}; border-radius: 10px; padding: 20px; margin: 15px 0; 
+                    background-color: {}; transition: all 0.3s ease;">
+        """.format(
+            "#4CAF50" if is_selected else "#ddd",
+            "#f0f8f0" if is_selected else "white"
+        )
+        
+        st.markdown(card_style, unsafe_allow_html=True)
+        
+        with st.container():
+            col1, col2, col3 = st.columns([2, 3, 1])  # Adjusted column ratios for larger image space
+            
+            with col1:
+                try:
+                    # Use HTML container for consistent sizing (250x250px)
+                    st.markdown(f"""
+                    <div class="card-image-container">
+                        <img src="{packaging['image_url']}" alt="{packaging['name']}" />
+                    </div>
+                    <p style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #666;">Preview</p>
+                    """, unsafe_allow_html=True)
+                except Exception as e:
+                    # Consistent fallback with same dimensions
+                    st.markdown("""
+                    <div class="card-image-container">
+                        <div style="text-align: center; color: #666;">
+                            📦<br>Image loading...
+                        </div>
+                    </div>
+                    <p style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #666;">Preview</p>
+                    """, unsafe_allow_html=True)
+            
+            with col2:
+                st.subheader(packaging["name"])
+                st.write(packaging["description"])
+                
+                # Better button styling and functionality
+                button_text = "✅ Currently Selected" if is_selected else "Select This Type"
+                button_type = "primary" if not is_selected else "secondary"
+                
+                if st.button(
+                    button_text,
+                    key=f"card_{i}",
+                    type=button_type,
+                    disabled=is_selected,
+                    use_container_width=True
+                ):
+                    if not is_selected:
+                        st.session_state.selected_packaging_type = packaging['name']
+                        st.session_state.selected_packaging_image = packaging['image_url']
+                        st.success(f"Selected: {packaging['name']}")
+                        # Small delay before navigation
+                        import time
+                        time.sleep(0.5)
+                        navigate_to_step(2)
+                        st.rerun()
+            
+            with col3:
+                if is_selected:
+                    st.success("✅ Selected")
+                else:
+                    st.write("")  # Empty space for alignment
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+def display_packaging_grid():
+    """Grid-style layout for packaging selection with consistent image sizes"""
+    st.header("📦 Step 1: Select Packaging Type")
+    st.markdown("Choose the most appropriate packaging type for your needs:")
+    
+    # Custom CSS for consistent grid image sizing
+    st.markdown("""
+    <style>
+    .grid-image-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 200px;
+        margin-bottom: 10px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        background-color: #fafafa;
+    }
+    .grid-image-container img {
+        max-width: 180px;
+        max-height: 180px;
+        object-fit: contain;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Create a grid layout for packaging options
+    cols = st.columns(3)
+    
+    for i, packaging in enumerate(PACKAGING_TYPES):
+        with cols[i % 3]:
+            # Create a container for each packaging option
+            with st.container():
+                # Display image with consistent sizing
+                try:
+                    # Use HTML container for consistent sizing
+                    st.markdown(f"""
+                    <div class="grid-image-container">
+                        <img src="{packaging['image_url']}" alt="{packaging['name']}" />
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Alternative method using st.image with fixed dimensions
+                    # st.image(
+                    #     packaging["image_url"], 
+                    #     caption=packaging["name"],
+                    #     width=180  # Fixed width for consistency
+                    # )
+                except Exception as e:
+                    # Better fallback with consistent sizing
+                    st.markdown("""
+                    <div class="grid-image-container">
+                        <div style="text-align: center; color: #666;">
+                            📦<br>Image loading...
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Title and description
+                st.markdown(f"**{packaging['name']}**")
+                st.write(packaging["description"])
+                
+                # Selection button with improved styling
+                is_selected = st.session_state.get('selected_packaging_type') == packaging['name']
+                button_text = "✅ Selected" if is_selected else "Select"
+                
+                if st.button(
+                    button_text,
+                    key=f"pkg_{i}", 
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary",
+                    disabled=is_selected
+                ):
+                    if not is_selected:
+                        st.session_state.selected_packaging_type = packaging['name']
+                        st.session_state.selected_packaging_image = packaging['image_url']
+                        st.success(f"Selected: {packaging['name']}")
+                        navigate_to_step(2)
+                        st.rerun()
+            
+            # Add some spacing
+            st.markdown("---")
 
+# Alternative grid method using st.image with fixed parameters
+def display_packaging_grid_alternative():
+    """Alternative grid-style layout using st.image with fixed dimensions"""
+    st.header("📦 Step 1: Select Packaging Type")
+    st.markdown("Choose the most appropriate packaging type for your needs:")
+    
+    # Create a grid layout for packaging options
+    cols = st.columns(3)
+    
+    for i, packaging in enumerate(PACKAGING_TYPES):
+        with cols[i % 3]:
+            # Create a container for each packaging option
+            with st.container():
+                # Display image with fixed dimensions for consistency
+                try:
+                    st.image(
+                        packaging["image_url"], 
+                        caption=packaging["name"],
+                        width=180,  # Fixed width for all images
+                        use_container_width=False  # Don't use container width to maintain fixed size
+                    )
+                except Exception as e:
+                    # Consistent fallback
+                    st.info("📦 Image loading...")
+                    st.write(f"**{packaging['name']}**")
+                    st.caption("Image will load shortly...")
+                
+                # Description
+                st.write(packaging["description"])
+                
+                # Selection button with improved styling
+                is_selected = st.session_state.get('selected_packaging_type') == packaging['name']
+                button_text = "✅ Selected" if is_selected else "Select"
+                
+                if st.button(
+                    button_text,
+                    key=f"pkg_alt_{i}", 
+                    use_container_width=True,
+                    type="primary" if is_selected else "secondary",
+                    disabled=is_selected
+                ):
+                    if not is_selected:
+                        st.session_state.selected_packaging_type = packaging['name']
+                        st.session_state.selected_packaging_image = packaging['image_url']
+                        st.success(f"Selected: {packaging['name']}")
+                        navigate_to_step(2)
+                        st.rerun()
+            
+            # Add some spacing
+            st.markdown("---")
+            
 def main():
     # Header
     st.title("📦 AgiloPACK")
@@ -2075,7 +2378,7 @@ def main():
         "Choose Image Option",
         "Generate Final Document"
     ]
-    
+
     # Create progress bar
     progress_cols = st.columns(len(steps))
     for i, (col, step) in enumerate(zip(progress_cols, steps)):
@@ -2091,25 +2394,55 @@ def main():
     
     # Step 1: Select Packaging Type
     if st.session_state.current_step == 1:
-        st.header("📦 Step 1: Select Packaging Type")
+        # Layout selector with better styling
+        st.subheader("Choose Your Display Style")
+        layout_choice = st.radio(
+            "Layout Options:",
+            ["Grid Layout (3 columns)", "Card Layout (detailed rows)"],
+            horizontal=True,
+            help="Grid layout shows items in columns with consistent sizing, Card layout shows detailed rows with larger images"
+        )
         
-        # Create columns for packaging types
-        cols = st.columns(3)
-        for i, packaging_type in enumerate(PACKAGING_TYPES):
-            with cols[i % 3]:
-                if st.button(packaging_type, key=f"pkg_{i}", use_container_width=True):
-                    st.session_state.selected_packaging_type = packaging_type
-                    navigate_to_step(2)
+        st.markdown("---")
         
-        # Show selected packaging details
-        if st.session_state.selected_packaging_type:
-            st.success(f"Selected: {st.session_state.selected_packaging_type}")
-            
-            with st.expander("View Packaging Procedure"):
-                procedures = PACKAGING_PROCEDURES.get(st.session_state.selected_packaging_type, [])
-                for i, step in enumerate(procedures, 1):
-                    st.write(f"{i}. {step}")
-    
+        # Display the chosen layout
+        if "Grid Layout" in layout_choice:
+            # You can choose between display_packaging_grid() or display_packaging_grid_alternative()
+            display_packaging_grid()  # Uses HTML/CSS for consistent sizing
+            # display_packaging_grid_alternative()  # Uses st.image with fixed width
+        else:
+            display_packaging_cards()  # Now has larger images (250px width)
+        
+        # Show selected packaging details (common for both layouts)
+        if st.session_state.get('selected_packaging_type'):
+            st.markdown("### 📋 Selection Summary")
+            with st.expander("✅ Selected Packaging Details", expanded=True):
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    if st.session_state.get('selected_packaging_image'):
+                        try:
+                            st.image(st.session_state.selected_packaging_image, width=200)
+                        except:
+                            st.info("📦 Selected Package")
+                with col2:
+                    st.write(f"**Type:** {st.session_state.selected_packaging_type}")
+                    # Find description
+                    selected_pkg = next((pkg for pkg in PACKAGING_TYPES if pkg['name'] == st.session_state.selected_packaging_type), None)
+                    if selected_pkg:
+                        st.write(f"**Description:** {selected_pkg['description']}")
+                    
+                    # Action buttons
+                    col2a, col2b = st.columns(2)
+                    with col2a:
+                        if st.button("🔄 Change Selection", type="secondary"):
+                            st.session_state.selected_packaging_type = None
+                            st.session_state.selected_packaging_image = None
+                            st.rerun()
+                    with col2b:
+                        if st.button("Continue to Step 2 →", type="primary"):
+                            navigate_to_step(2)
+                            st.rerun()
+        
     # Step 2: Upload Template File
     elif st.session_state.current_step == 2:
         st.header("📄 Step 2: Upload Template File")
@@ -2129,6 +2462,52 @@ def main():
                 st.session_state.template_file = tmp_file.name
             
             st.success("✅ Template file uploaded successfully!")
+            
+            # NEW: Analyze template structure and show preview
+            with st.expander("📖 Template Analysis", expanded=True):
+                try:
+                    mapper = EnhancedTemplateMapperWithImages()
+                    
+                    # Read procedure steps from template
+                    template_procedure_steps = mapper.read_procedure_steps_from_template(
+                        st.session_state.template_file,
+                        st.session_state.selected_packaging_type
+                    )
+                    
+                    if template_procedure_steps:
+                        st.success(f"✅ Found {len(template_procedure_steps)} procedure steps in template")
+                        with st.expander("Preview Procedure Steps"):
+                            for i, step in enumerate(template_procedure_steps[:5], 1):  # Show first 5
+                                st.write(f"{i}. {step[:100]}..." if len(step) > 100 else f"{i}. {step}")
+                            if len(template_procedure_steps) > 5:
+                                st.write(f"... and {len(template_procedure_steps) - 5} more steps")
+                    else:
+                        st.warning("⚠️ No procedure steps found in template")
+                    
+                    # Find template fields
+                    template_fields, image_areas = mapper.find_template_fields_with_context_and_images(
+                        st.session_state.template_file
+                    )
+                    
+                    if template_fields:
+                        st.success(f"✅ Found {len(template_fields)} mappable fields in template")
+                        with st.expander("Preview Template Fields"):
+                            fields_by_section = {}
+                            for field_info in template_fields.values():
+                                section = field_info.get('section_context', 'unknown')
+                                if section not in fields_by_section:
+                                    fields_by_section[section] = []
+                                fields_by_section[section].append(field_info['value'])
+                            
+                            for section, fields in fields_by_section.items():
+                                st.write(f"**{section.replace('_', ' ').title()}**: {', '.join(fields[:5])}")
+                                if len(fields) > 5:
+                                    st.caption(f"... and {len(fields) - 5} more fields")
+                    else:
+                        st.warning("⚠️ No mappable fields found in template")
+                
+                except Exception as e:
+                    st.error(f"Error analyzing template: {e}")
             
             if st.button("Continue to Data Upload", key="continue_to_step3"):
                 navigate_to_step(3)
@@ -2159,6 +2538,32 @@ def main():
                 df = pd.read_excel(st.session_state.data_file)
                 st.write("Data Preview:")
                 st.dataframe(df.head())
+                
+                # NEW: Show column analysis for critical fields
+                with st.expander("📊 Data Column Analysis"):
+                    critical_fields = {
+                        "Procedure Fields": ["Layer", "Level", "x No. of Parts", "x No of Parts"],
+                        "Inner Dimensions": ["Inner L", "Inner W", "Inner H", "Inner Qty/Pack"],
+                        "Outer Dimensions": ["Outer L", "Outer W", "Outer H"],
+                        "Primary Packaging": ["Primary L-mm", "Primary W-mm", "Primary H-mm", "Primary Qty/Pack"],
+                        "Secondary Packaging": ["Secondary L-mm", "Secondary W-mm", "Secondary H-mm"],
+                        "Part Information": ["Part No", "Part Description", "Vendor Code", "Vendor Name"]
+                    }
+                    
+                    found_fields = {}
+                    for category, fields in critical_fields.items():
+                        found_fields[category] = []
+                        for field in fields:
+                            matching_cols = [col for col in df.columns if field.lower() in col.lower()]
+                            if matching_cols:
+                                found_fields[category].extend(matching_cols)
+                    
+                    for category, fields in found_fields.items():
+                        if fields:
+                            st.success(f"✅ **{category}**: {', '.join(fields)}")
+                        else:
+                            st.warning(f"⚠️ **{category}**: No matching columns found")
+                
             except Exception as e:
                 st.error(f"Error reading data file: {e}")
             
@@ -2169,65 +2574,147 @@ def main():
         if st.button("← Go Back", key="back_from_3"):
             navigate_to_step(2)
     
-    # Step 4: Auto-Fill Template
+    # Step 4: Auto-Fill Template (ENHANCED)
     elif st.session_state.current_step == 4:
-        st.header("🔄 Step 4: Auto-Fill Template")
+        st.header("🔄 Step 4: Auto-Fill Template with Enhanced Processing")
     
         if st.session_state.mapping_completed and hasattr(st.session_state, 'all_row_data'):
             st.success(f"✅ Template auto-filling completed for {len(st.session_state.all_row_data)} rows!")
         
-            # Show summary of processed rows
-            with st.expander("View Processed Rows Summary"):
+            # Show enhanced summary of processed rows
+            with st.expander("View Enhanced Processing Summary", expanded=True):
+                total_mappings = sum(row['mapping_count'] for row in st.session_state.all_row_data)
+                total_steps = sum(row['steps_written'] for row in st.session_state.all_row_data)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📄 Templates Generated", len(st.session_state.all_row_data))
+                with col2:
+                    st.metric("🔗 Total Field Mappings", total_mappings)
+                with col3:
+                    st.metric("📝 Procedure Steps Written", total_steps)
+                
+                # Detailed row information
                 for i, row_data in enumerate(st.session_state.all_row_data):
-                    st.write(f"**Row {i+1}**: {row_data['filename']} ({row_data['mapping_count']} fields mapped)")
+                    with st.container():
+                        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                        with col1:
+                            st.write(f"**Row {i+1}**: {row_data['filename']}")
+                        with col2:
+                            st.write(f"📊 {row_data['mapping_count']} mappings")
+                        with col3:
+                            st.write(f"📝 {row_data['steps_written']} steps")
+                        with col4:
+                            part_no = row_data.get('part_no', 'N/A')
+                            st.write(f"🔧 {part_no}")
         
             if st.button("Continue to Image Options", key="continue_to_images"):
                 navigate_to_step(5)
     
         else:
-            if st.button("Start Auto-Fill Process", key="start_autofill"):
-                with st.spinner("Processing template and data mapping for all rows..."):
-                    try:
-                        mapper = EnhancedTemplateMapperWithImages()
+            # Enhanced auto-fill process
+            st.info("🚀 Enhanced auto-fill will process templates with procedure steps from your template")
+            
+            # Show what will be processed
+            if st.session_state.template_file and st.session_state.data_file:
+                try:
+                    # Preview what will be processed
+                    df_preview = pd.read_excel(st.session_state.data_file)
+                    st.write(f"📊 Ready to process: {len(df_preview)} rows of data")
                     
+                    mapper = EnhancedTemplateMapperWithImages()
+                    
+                    # Show procedure steps that will be used
+                    template_steps = mapper.read_procedure_steps_from_template(st.session_state.template_file)
+                    if template_steps:
+                        st.info(f"📖 Will use {len(template_steps)} procedure steps from your template")
+                        with st.expander("Preview Procedure Steps Processing"):
+                            st.write("**Template contains these procedure steps with placeholders:**")
+                            for i, step in enumerate(template_steps[:3], 1):
+                                st.write(f"{i}. {step}")
+                            if len(template_steps) > 3:
+                                st.write(f"... and {len(template_steps) - 3} more steps")
+                            
+                            st.write("**These placeholders will be replaced with actual data:**")
+                            placeholders = ["{x No. of Parts}", "{Level}", "{Layer}", "{Inner L}", "{Inner W}", "{Inner H}", 
+                                          "{Outer L}", "{Outer W}", "{Outer H}", "{Primary Qty/Pack}", "{Secondary L-mm}"]
+                            st.write(", ".join(placeholders))
+                    else:
+                        st.warning("⚠️ No procedure steps found in template")
+                    
+                except Exception as e:
+                    st.error(f"Error previewing processing: {e}")
+            
+            if st.button("🚀 Start Enhanced Auto-Fill Process", key="start_enhanced_autofill", type="primary"):
+                with st.spinner("🔄 Processing templates with enhanced procedure step handling..."):
+                    try:
+                        # Create progress tracking
+                        progress_container = st.container()
+                        status_container = st.container()
+                        
+                        mapper = EnhancedTemplateMapperWithImages()
+                        
+                        # Enhanced mapping with procedure steps
                         success, all_row_data = mapper.map_template_with_data(
                             st.session_state.template_file,
                             st.session_state.data_file
                         )
-                    
+                        
                         if success and all_row_data:
                             st.session_state.mapping_completed = True
                             st.session_state.all_row_data = all_row_data
+                            
+                            # Show success summary
+                            with status_container:
+                                st.success("🎉 Enhanced auto-fill completed successfully!")
+                                
+                                # Enhanced metrics
+                                total_mappings = sum(row['mapping_count'] for row in all_row_data)
+                                total_steps = sum(row['steps_written'] for row in all_row_data)
+                                rows_with_steps = sum(1 for row in all_row_data if row['steps_written'] > 0)
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric("📄 Templates", len(all_row_data))
+                                with col2:
+                                    st.metric("🔗 Field Mappings", total_mappings)
+                                with col3:
+                                    st.metric("📝 Procedure Steps", total_steps)
+                                with col4:
+                                    st.metric("✅ Success Rate", f"{rows_with_steps}/{len(all_row_data)}")
+                            
                             st.rerun()
                         else:
-                            st.error("Failed to process template mapping")
+                            st.error("❌ Enhanced auto-fill process failed")
                         
                     except Exception as e:
-                        st.error(f"Error during auto-fill: {e}")
-                        st.write("Traceback:", traceback.format_exc())
+                        st.error(f"❌ Error during enhanced auto-fill: {e}")
+                        st.write("**Error Details:**")
+                        st.code(traceback.format_exc())
     
         if st.button("← Go Back", key="back_from_4"):
             navigate_to_step(3)
     
-    # Step 5: Choose Image Option
+    # Step 5: Choose Image Option (SAME AS BEFORE)
     elif st.session_state.current_step == 5:
         st.header("🖼️ Step 5: Choose Image Option")
-    
-        col1, col2 = st.columns(2)
-    
+
+        # Three column layout for three options
+        col1, col2, col3 = st.columns(3)
+
         with col1:
             if st.button("🔍 Smart Extract from Data File", use_container_width=True):
                 st.session_state.image_option = 'extract'
-            
+        
                 # Enhanced image extraction
                 with st.spinner("🧠 Analyzing and extracting images..."):
                     extractor = EnhancedImageExtractor()  # Use the new enhanced extractor
                     extracted_images = extractor.extract_images_from_excel(st.session_state.data_file)
-                
+            
                     if extracted_images and 'all_sheets' in extracted_images:
                         st.session_state.extracted_excel_images = extracted_images['all_sheets']
                         st.success(f"✅ Intelligently extracted {len(st.session_state.extracted_excel_images)} images!")
-                    
+                
                         # Enhanced preview with grouping
                         st.write("**📊 Extracted Images Analysis:**")
                         image_types = {}
@@ -2236,29 +2723,33 @@ def main():
                             if img_type not in image_types:
                                 image_types[img_type] = 0
                             image_types[img_type] += 1
-                    
+                
                         # Show type distribution
                         cols = st.columns(len(image_types))
                         for i, (img_type, count) in enumerate(image_types.items()):
                             with cols[i]:
                                 st.metric(f"{img_type.capitalize()}", count)
-                    
+                
                         # Show confidence levels
                         high_confidence = sum(1 for img in st.session_state.extracted_excel_images.values() 
                                               if img.get('confidence', 0) > 0.7)
                         st.info(f"🎯 {high_confidence} images classified with high confidence")
-                    
+                
                     else:
                         st.warning("No images found in the Excel file")
-    
+
         with col2:
             if st.button("📁 Upload New Images", use_container_width=True):
                 st.session_state.image_option = 'upload'
-    
+
+        with col3:
+            if st.button("📄 Generate Without Images", use_container_width=True):
+                st.session_state.image_option = 'no_images'
+
         # Handle upload new images option (Enhanced)
         if st.session_state.image_option == 'upload':
             st.subheader("📤 Upload Images by Type")
-        
+    
             image_types = ['current', 'primary', 'secondary', 'label']
             type_descriptions = {
                 'current': 'Current/Present packaging state',
@@ -2266,23 +2757,23 @@ def main():
                 'secondary': 'Outer/Secondary packaging', 
                 'label': 'Labels, barcodes, or identification'
             }
-        
+    
             uploaded_count = 0
             for img_type in image_types:
                 with st.expander(f"📋 {img_type.capitalize()} Packaging Image", expanded=False):
                     st.write(f"*{type_descriptions[img_type]}*")
-                
+            
                     uploaded_img = st.file_uploader(
                         f"Choose {img_type} image",
                         type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
                         key=f"img_upload_{img_type}"
                     )
-                
+            
                     if uploaded_img is not None:
                         # Convert to base64
                         img_bytes = uploaded_img.read()
                         img_b64 = base64.b64encode(img_bytes).decode()
-                    
+                
                         # Store in session state with enhanced metadata
                         st.session_state.uploaded_images[f"{img_type}_uploaded"] = {
                             'data': img_b64,
@@ -2292,9 +2783,9 @@ def main():
                             'confidence': 1.0,  # User uploaded = high confidence
                             'source': 'user_upload'
                         }
-                    
+                
                         uploaded_count += 1
-                    
+                
                         # Preview with analysis
                         col1, col2 = st.columns([1, 2])
                         with col1:
@@ -2303,11 +2794,47 @@ def main():
                             st.success(f"✅ {img_type.capitalize()} image uploaded")
                             st.write(f"**Size**: {len(img_bytes):,} bytes")
                             st.write(f"**Format**: {uploaded_img.type}")
-        
+    
             if uploaded_count > 0:
                 st.success(f"📁 {uploaded_count} images uploaded successfully!")
-    
-        # Auto-match option for extracted images
+
+        # Handle no images option
+        elif st.session_state.image_option == 'no_images':
+            st.subheader("📄 Text-Only Generation Mode")
+            st.info("""
+                **📝 Text-Only Mode Selected**
+                Your documents will be generated using only the data from your spreadsheet without any images. This mode:
+                ✅ **Faster Processing** - Quicker generation without image analysis  
+                ✅ **Smaller File Sizes** - Lighter documents for easier sharing  
+                ✅ **Focus on Content** - Emphasizes textual information and data  
+                ✅ **Universal Compatibility** - Works with all systems and formats  
+                **Note:** You can always regenerate with images later if needed.
+            """)
+        
+            # Optional: Allow users to add a note about why no images
+            image_note = st.text_area(
+                "📝 Optional: Add a note about image availability",
+                placeholder="e.g., 'Images to be provided separately' or 'Product images pending approval'",
+                help="This note will be included in generated documents to explain the absence of images"
+            )
+        
+            if image_note:
+                st.session_state.no_images_note = image_note
+        
+            # Show what will be included instead
+            with st.expander("📋 What will be included in text-only mode"):
+                st.write("""
+                    - ✅ All part numbers and specifications
+                    - ✅ Vendor information and codes  
+                    - ✅ Descriptions and technical details
+                    - ✅ Packaging requirements and notes
+                    - ✅ Regulatory and compliance information
+                    - ✅ Custom formatting and styling
+                    - ❌ Product images and visual references
+                    - ❌ Packaging photos and diagrams
+                """)
+
+        # Auto-match option for extracted images (only show if extract option is selected)
         if (st.session_state.image_option == 'extract' and st.session_state.extracted_excel_images and hasattr(st.session_state, 'all_row_data')):
             st.subheader("🎯 Auto-Match Images to Parts")
             if st.button("🤖 Auto-Match Images to Current Part Data"):
@@ -2328,7 +2855,7 @@ def main():
                             vendor_code,
                             current_row=idx + 2  # Assuming row 1 is header, so data starts from row 2
                         )
-                
+            
                         if part_images:
                             matched_results[row_data.get('filename', f'Part_{idx}')] = {
                                 'images': part_images,
@@ -2349,9 +2876,9 @@ def main():
                     # Show matching summary
                     total_matched = sum(result['count'] for result in matched_results.values())
                     parts_with_images = len([r for r in matched_results.values() if r['count'] > 0])
-            
+        
                     st.success(f"🎯 Matched {total_matched} images across {parts_with_images}/{len(matched_results)} parts")
-            
+        
                     # Detailed breakdown
                     with st.expander("📊 Matching Details"):
                         for filename, result in matched_results.items():
@@ -2366,25 +2893,37 @@ def main():
                                 st.caption(f"Types found: {type_summary}")
                             else:
                                 st.warning(f"**{result['part_no']}** ({result['vendor']}): No images")
-    
+
         # Continue button with enhanced validation
         can_continue = False
         if st.session_state.image_option == 'extract':
             can_continue = (st.session_state.extracted_excel_images or hasattr(st.session_state, 'matched_part_images'))
         elif st.session_state.image_option == 'upload':
             can_continue = len(st.session_state.uploaded_images) > 0
-    
+        elif st.session_state.image_option == 'no_images':
+            can_continue = True  # No images option always allows continuation
+
         if can_continue:
-            if st.button("🚀 Continue to Final Generation", key="continue_to_step6", type="primary"):
+            # Show different button text based on option
+            button_text = "🚀 Continue to Final Generation"
+            if st.session_state.image_option == 'no_images':
+                button_text = "📄 Continue to Text-Only Generation"
+        
+            if st.button(button_text, key="continue_to_step6", type="primary"):
                 navigate_to_step(6)
         else:
-            st.info("📋 Please extract or upload images before continuing")
+            if st.session_state.image_option == 'extract':
+                st.info("📋 Please extract images or match images to parts before continuing")
+            elif st.session_state.image_option == 'upload':
+                st.info("📋 Please upload at least one image before continuing")
+            else:
+                st.info("📋 Please select an image option to continue")
     
         # Back navigation
         if st.button("← Go Back", key="back_from_5"):
             navigate_to_step(4)
 
-    # Step 6: Generate Final Document (Enhanced)
+    # Step 6: Generate Final Document (SAME AS BEFORE - keeping your existing complex logic)
     elif st.session_state.current_step == 6:
         st.header("🎨 Step 6: Generate Final Documents with Smart Placement")
     
@@ -2490,6 +3029,10 @@ def main():
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         part_no_safe = re.sub(r'[^\w\-_.]', '_', str(row_data.get('part_no', 'Unknown')))
                         vendor_safe = re.sub(r'[^\w\-_.]', '_', str(row_data.get('vendor_code', 'Unknown')))
+                        
+                        # Add row index to ensure uniqueness - this prevents duplicate filenames
+                        row_index = str(i + 1).zfill(3)  # Zero-padded to 3 digits (001, 002, etc.)
+                        final_filename = f"{vendor_safe}_{part_no_safe}_R{row_index}_{timestamp}.xlsx"
                     
                         final_filename = f"{vendor_safe}_{part_no_safe}_{timestamp}.xlsx"
                     
@@ -2546,32 +3089,29 @@ def main():
                     tab1, tab2, tab3 = st.tabs(["📋 Individual Downloads", "📦 Bulk Download", "📊 Generation Report"])
                 
                     with tab1:
-                        for file_info in generated_files:
+                        for file_idx, file_info in enumerate(generated_files):
                             with st.container():
                                 col1, col2, col3 = st.columns([2, 1, 1])
-                            
                                 with col1:
                                     st.write(f"**{file_info['filename']}**")
                                     st.caption(f"Vendor: {file_info['row_info'].get('vendor_code', 'N/A')} | "
                                                f"Part: {file_info['row_info'].get('part_no', 'N/A')} | "
                                                f"Images: {file_info['images_count']}")
-                            
                                 with col2:
                                     st.write(f"📊 {file_info['generation_info']['placement_method']}")
                                     if file_info['images_count'] > 0:
                                         st.success(f"✅ {file_info['images_count']} images")
                                     else:
                                         st.warning("⚠️ No images")
-                            
                                 with col3:
+                                    # FIXED: Use file index to ensure unique keys
                                     st.download_button(
                                         label="📥 Download",
                                         data=file_info['data'],
                                         file_name=file_info['filename'],
                                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                        key=f"download_{file_info['filename']}"
+                                        key=f"download_file_{file_idx}_{timestamp}"  # Unique key using index and timestamp
                                     )
-                            
                                 st.divider()
                 
                     with tab2:
@@ -2719,14 +3259,33 @@ def main():
         if st.session_state.selected_packaging_type:
             st.write(f"**Packaging Type**: {st.session_state.selected_packaging_type}")
         
+        # Enhanced status display
+        if hasattr(st.session_state, 'all_row_data') and st.session_state.all_row_data:
+            st.subheader("📊 Processing Status")
+            total_templates = len(st.session_state.all_row_data)
+            total_mappings = sum(row['mapping_count'] for row in st.session_state.all_row_data)
+            total_steps = sum(row['steps_written'] for row in st.session_state.all_row_data)
+            
+            st.write(f"**Templates Ready**: {total_templates}")
+            st.write(f"**Field Mappings**: {total_mappings}")
+            st.write(f"**Procedure Steps**: {total_steps}")
+        
         st.subheader("Instructions")
         st.write("""
         1. **Select Packaging Type**: Choose from predefined packaging types
         2. **Upload Template**: Upload your Excel template file
         3. **Upload Data**: Upload Excel file with part data
-        4. **Auto-Fill**: Let AI map data to template fields
+        4. **Auto-Fill**: Enhanced AI mapping with procedure steps
         5. **Add Images**: Extract from Excel or upload new images
         6. **Generate**: Create final template with images
+        """)
+        
+        st.subheader("✨ Enhanced Features")
+        st.write("""
+        - **Smart Procedure Processing**: Reads steps directly from template
+        - **Placeholder Substitution**: Replaces {placeholders} with real data
+        - **Section-Based Mapping**: Intelligent field recognition
+        - **Multi-Row Processing**: Handles multiple parts automatically
         """)
         
         st.subheader("Supported Formats")
@@ -2734,13 +3293,37 @@ def main():
         st.write("**Data Files**: .xlsx, .xls")
         st.write("**Image Files**: .png, .jpg, .jpeg, .gif, .bmp")
         
-        # Reset button
+        # Enhanced reset with confirmation
         if st.button("🔄 Reset All", type="secondary"):
-            for key in list(st.session_state.keys()):
-                if key != 'current_step':
-                    del st.session_state[key]
-            st.session_state.current_step = 1
+            # Show confirmation in main area
+            st.session_state.show_reset_confirmation = True
             st.rerun()
-
+        
+        # Handle reset confirmation
+        if st.session_state.get('show_reset_confirmation', False):
+            st.warning("⚠️ This will clear all progress and uploaded files. Are you sure?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Yes, Reset", type="primary"):
+                    # Clean up temporary files
+                    if hasattr(st.session_state, 'all_row_data'):
+                        for row_data in st.session_state.all_row_data:
+                            try:
+                                if 'file_path' in row_data and os.path.exists(row_data['file_path']):
+                                    os.unlink(row_data['file_path'])
+                            except:
+                                pass
+                    
+                    # Reset session state
+                    for key in list(st.session_state.keys()):
+                        if key != 'current_step':
+                            del st.session_state[key]
+                    st.session_state.current_step = 1
+                    st.rerun()
+            with col2:
+                if st.button("❌ Cancel"):
+                    st.session_state.show_reset_confirmation = False
+                    st.rerun()
+                    
 if __name__ == "__main__":
     main()
